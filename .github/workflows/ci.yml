@@ -8,29 +8,19 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: -D warnings
+  # .config/nextest.toml: everything but the GPU tests, and every failure reported.
+  NEXTEST_PROFILE: ci
 
 jobs:
-  check:
-    name: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+  windows:
+    name: Windows
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
 
       # rust-toolchain.toml pins the channel and components; rustup installs it on first use.
       - name: Toolchain
         run: rustup show active-toolchain
-
-      - name: Native build tools (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake pkg-config \
-            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev \
-            libxcb1-dev libfontconfig-dev libfreetype-dev libvulkan-dev libasound2-dev
 
       - uses: Swatinem/rust-cache@v2
 
@@ -39,8 +29,28 @@ jobs:
           tool: nextest
 
       # The checks AGENTS.md lists, in its order: fmt, the five xtask checks, both clippy runs,
-      # nextest and the doc tests. The ci profile is in .config/nextest.toml.
+      # nextest and the doc tests.
       - name: Gates
         run: cargo xtask gates
-        env:
-          NEXTEST_PROFILE: ci
+
+  # The app is Windows only; the server ships as a Linux image, so it is checked there too.
+  server:
+    name: Server on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Toolchain
+        run: rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+
+      - name: Clippy
+        run: cargo clippy -p lobby-server -p lobby-protocol --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo nextest run -p lobby-server -p lobby-protocol
