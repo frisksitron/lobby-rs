@@ -8,18 +8,14 @@ use gpui_kit::{
     App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window,
     assets::IconName,
-    component::{
-        ActiveTheme as _, Icon, Sizable as _,
-        button::{Button, ButtonVariants as _},
-        tooltip::Tooltip,
-    },
+    component::{ActiveTheme as _, Icon, button::ButtonVariants as _, tooltip::Tooltip},
     div,
     prelude::FluentBuilder as _,
     relative,
 };
 use lobby_client::{copy, update::UpdateStatus};
 
-use super::{BAR_CONTROL_H, BarButton, ICON_SM};
+use super::{BAR_CONTROL_H, BarButton, ICON_SM, small_word_button};
 use crate::scale::u;
 
 /// Room for "100%", so the pill keeps its width as the number grows.
@@ -110,12 +106,9 @@ impl RenderOnce for UpdatePill {
                 } else {
                     copy::UPDATE_RESTART_SHORT
                 };
-                let button = Button::new("update-restart")
+                let button = small_word_button("update-restart")
                     .debug_selector(|| "update-restart".into())
                     .primary()
-                    .small()
-                    .h(u(BAR_CONTROL_H))
-                    .icon(Icon::new(IconName::RotateCw))
                     .label(label)
                     .tooltip(copy::update_ready(&version.to_string()))
                     .on_click(move |_, _, cx| on_restart(cx));

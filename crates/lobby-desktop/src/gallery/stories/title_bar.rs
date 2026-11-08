@@ -10,9 +10,10 @@ use lobby_client::{HttpPolicy, LobbyOrigin};
 
 use crate::components::{
     BarButton, ConnectionNotice, DecisionRow, LobbySwitcher, NotificationBell, SwitcherCurrent,
-    SwitcherEntry, mark_color,
+    SwitcherEntry, UpdatePill, mark_color,
 };
 use crate::gallery::{Gallery, Section};
+use lobby_client::update::{UpdateStatus, Version};
 
 use super::{bar, caption, label, wrap};
 
@@ -111,7 +112,27 @@ pub(super) fn bar_button(
                     cx,
                 ))
                 .child(label("While the window closes the Lobby (quitting, signing out), the mark and name stay put:", cx))
-                .child(bar([LobbySwitcher::still(Some(current())).into_any_element()], cx)),
+                .child(bar([LobbySwitcher::still(Some(current())).into_any_element()], cx))
+                .child(label("With an update ready to run:", cx))
+                .child(bar(
+                    [
+                        switcher().into_any_element(),
+                        div().flex_1().into_any_element(),
+                        UpdatePill::new(
+                            UpdateStatus::Ready {
+                                version: Version { major: 0, minor: 1, patch: 2 },
+                                file: "LobbySetup.exe".into(),
+                            },
+                            true,
+                            Rc::new(|_| {}),
+                            Rc::new(|_| {}),
+                        )
+                        .into_any_element(),
+                        bell(2, Vec::new(), None).into_any_element(),
+                        members_toggle(),
+                    ],
+                    cx,
+                )),
         ),
     ]
 }
