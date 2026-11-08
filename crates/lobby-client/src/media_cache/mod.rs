@@ -30,7 +30,9 @@ use tokio::{
 };
 use tracing::{debug, info, warn};
 
-use crate::{ApiError, ClientTask, LobbyOrigin, Paths, atomic, copy, drafts, files};
+use crate::{
+    ApiError, ClientTask, LobbyOrigin, Paths, api::read_body, atomic, copy, drafts, files,
+};
 
 pub const FETCHES_CONCURRENT: usize = 4;
 /// Decodes at once (each holds a full-size RGBA buffer).
@@ -40,6 +42,12 @@ pub const DECODED_BUDGET_BYTES: usize = 128 * 1024 * 1024;
 pub const DISK_EVICT_EVERY: Duration = Duration::from_secs(3600);
 /// A full image is shown in the preview dialog, never larger than this on its long edge.
 pub const FULL_MAX_EDGE: u32 = 2048;
+/// The most a preview, an avatar or a Lobby icon may weigh. The server makes them at most 480 px
+/// and 256 px wide, a few hundred KiB.
+const SMALL_IMAGE_MAX_BYTES: u64 = 2 * 1024 * 1024;
+/// The most the server lets one upload weigh (it refuses a `storage.upload_max_bytes` above
+/// this), so no honest blob is larger, whatever its `Attachment::size` claims.
+const UPLOAD_MAX_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MEDIA_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 /// A Retry-After beyond this is not waited out: the blob fails, and the next render asks again.
 pub const RETRY_AFTER_MAX: Duration = Duration::from_secs(60);
@@ -57,10 +65,26 @@ pub fn picture(attachment: &Attachment) -> Option<lobby_protocol::Preview> {
         .flatten()
 }
 
+/// What is fetched of a blob, which also decides the most bytes the fetch accepts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Variant {
+    /// The server's small picture of an attachment.
     Preview,
-    Full,
+    /// A Member's avatar or the Lobby's icon, stored at its small size.
+    Square,
+    /// The blob itself, of the size its `Attachment` says.
+    Full { size: u64 },
+}
+
+impl Variant {
+    /// A body past this is refused. A Full blob is held to the size it was announced with, and
+    /// to what the server lets any upload weigh.
+    fn max_bytes(self) -> u64 {
+        match self {
+            Variant::Preview | Variant::Square => SMALL_IMAGE_MAX_BYTES,
+            Variant::Full { size } => size.min(UPLOAD_MAX_BYTES),
+        }
+    }
 }
 
 /// BGRA8, the byte order GPUI's own image loader produces (RGBA with the first and third
@@ -84,6 +108,9 @@ pub enum MediaCacheError {
     NotFound,
     #[error("{}", copy::MEDIA_RATE_LIMITED)]
     RateLimited,
+    /// More bytes came than the caller said the blob weighs.
+    #[error("{}", copy::MEDIA_TOO_LARGE)]
+    TooLarge,
     #[error("{0}")]
     Api(ApiError),
     #[error("{}", copy::IMAGE_UNREADABLE)]
@@ -136,7 +163,7 @@ struct Ctx {
 impl Ctx {
     fn path(&self, blob: &BlobId, variant: Variant) -> PathBuf {
         match variant {
-            Variant::Full => self.dir.join(blob.as_str()),
+            Variant::Full { .. } | Variant::Square => self.dir.join(blob.as_str()),
             Variant::Preview => self.dir.join(format!("{}.preview", blob.as_str())),
         }
     }
@@ -156,7 +183,7 @@ impl Ctx {
 
     fn url(&self, blob: &BlobId, variant: Variant) -> String {
         match variant {
-            Variant::Full => self.origin.http_url(&routes::media(blob)),
+            Variant::Full { .. } | Variant::Square => self.origin.http_url(&routes::media(blob)),
             Variant::Preview => self.origin.http_url(&routes::media_preview(blob)),
         }
     }
@@ -209,7 +236,8 @@ impl MediaCache {
     }
 
     /// The blob's bytes on disk. A disk hit makes no request (and counts as a use for the disk
-    /// LRU); a miss joins the fetch already running for it or starts the one fetch.
+    /// LRU); a miss joins the fetch already running for it or starts the one fetch, which stops
+    /// with `TooLarge` at [`Variant::max_bytes`].
     pub fn file(&self, blob: &BlobId, variant: Variant) -> ClientTask<FetchResult> {
         let inner = self.inner.clone();
         let blob = blob.clone();
@@ -219,6 +247,7 @@ impl MediaCache {
         )
     }
 
+    /// The blob decoded, fetched as [`MediaCache::file`] does.
     pub fn image(
         &self,
         blob: &BlobId,
@@ -238,11 +267,14 @@ impl MediaCache {
         })
     }
 
-    pub fn save_as(&self, blob: &BlobId, dest: PathBuf) -> ClientTask<FetchResult> {
+    pub fn save_as(&self, attachment: &Attachment, dest: PathBuf) -> ClientTask<FetchResult> {
         let inner = self.inner.clone();
-        let blob = blob.clone();
+        let blob = attachment.id.clone();
+        let full = Variant::Full {
+            size: attachment.size,
+        };
         ClientTask::spawn(&self.inner.rt, async move {
-            let src = inner.file(blob, Variant::Full).await?;
+            let src = inner.file(blob, full).await?;
             copy_into(&src, &dest).await?;
             Ok(dest)
         })
@@ -273,7 +305,7 @@ impl MediaCache {
             {
                 return Ok(dest);
             }
-            let src = inner.file(blob, Variant::Full).await?;
+            let src = inner.file(blob, Variant::Full { size }).await?;
             copy_into(&src, &dest).await?;
             Ok(dest)
         })
@@ -347,7 +379,7 @@ async fn fetch(ctx: &Ctx, blob: &BlobId, variant: Variant, path: &Path) -> Fetch
         let status = res.status();
         match status {
             StatusCode::OK => {
-                write_through_tmp(res, path).await?;
+                write_through_tmp(res, variant.max_bytes(), path).await?;
                 return Ok(path.to_owned());
             }
             StatusCode::NOT_FOUND => return Err(MediaCacheError::NotFound),
@@ -363,10 +395,7 @@ async fn fetch(ctx: &Ctx, blob: &BlobId, variant: Variant, path: &Path) -> Fetch
                 tokio::time::sleep(wait).await;
             }
             other => {
-                let body = res
-                    .bytes()
-                    .await
-                    .map_err(|e| MediaCacheError::Api(ApiError::from_reqwest(&e)))?;
+                let body = read_body(res).await.map_err(MediaCacheError::Api)?;
                 return Err(MediaCacheError::Api(ApiError::from_error_response(
                     other, &body,
                 )));
@@ -382,7 +411,7 @@ async fn retry_after(res: reqwest::Response) -> Duration {
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.trim().parse::<u64>().ok())
         .map(Duration::from_secs);
-    let body = res.bytes().await.unwrap_or_default();
+    let body = read_body(res).await.unwrap_or_default();
     ApiError::from_error_response(StatusCode::TOO_MANY_REQUESTS, &body)
         .retry_after
         .or(header)
@@ -390,13 +419,24 @@ async fn retry_after(res: reqwest::Response) -> Duration {
 }
 
 /// The response body to `<path>.tmp-<random>`, then renamed onto `path`, so a crash leaves a
-/// temp file (swept later) and never a truncated blob.
-async fn write_through_tmp(res: reqwest::Response, path: &Path) -> Result<(), MediaCacheError> {
+/// temp file (swept later) and never a truncated blob. More than `max_bytes` of body is
+/// `TooLarge`, whatever the response's `Content-Length`, and removes the temp file.
+async fn write_through_tmp(
+    res: reqwest::Response,
+    max_bytes: u64,
+    path: &Path,
+) -> Result<(), MediaCacheError> {
     atomic::replace(path, async |tmp| {
         let mut file = tokio::fs::File::create(tmp).await?;
         let mut body = res.bytes_stream();
+        let mut written = 0u64;
         while let Some(chunk) = body.next().await {
             let chunk = chunk.map_err(|e| MediaCacheError::Api(ApiError::from_reqwest(&e)))?;
+            written += chunk.len() as u64;
+            if written > max_bytes {
+                warn!(max_bytes, "media body over the size limit");
+                return Err(MediaCacheError::TooLarge);
+            }
             file.write_all(&chunk).await?;
         }
         file.flush().await?;
@@ -438,8 +478,8 @@ async fn touch(path: PathBuf) {
     }
 }
 
-/// Decodes a cached file with the server's limits, applies EXIF orientation, fits a Full image
-/// into [`FULL_MAX_EDGE`] and converts to BGRA. Blocking: run it off the runtime.
+/// Decodes a cached file with the server's limits, applies EXIF orientation, fits anything but a
+/// preview into [`FULL_MAX_EDGE`] and converts to BGRA. Blocking: run it off the runtime.
 fn decode(path: &Path, variant: Variant) -> Result<DecodedImage, MediaCacheError> {
     let file = io::BufReader::new(std::fs::File::open(path)?);
     let mut reader = image::ImageReader::new(file)
@@ -458,7 +498,7 @@ fn decode(path: &Path, variant: Variant) -> Result<DecodedImage, MediaCacheError
     let mut img =
         image::DynamicImage::from_decoder(decoder).map_err(|_| MediaCacheError::Decode)?;
     // Scaled before it is turned, so a quarter turn copies the fitted image, not the decode.
-    if variant == Variant::Full && img.width().max(img.height()) > FULL_MAX_EDGE {
+    if variant != Variant::Preview && img.width().max(img.height()) > FULL_MAX_EDGE {
         img = img.resize(
             FULL_MAX_EDGE,
             FULL_MAX_EDGE,
@@ -547,7 +587,18 @@ mod tests {
         let cache = cache_for(&fake, dir.path());
         let blob = BlobId::random();
         let dest = dir.path().join("Downloads").join("x.png");
-        let saved = cache.save_as(&blob, dest.clone()).await.unwrap().unwrap();
+        let attachment = |name: &str, mime: &str| Attachment {
+            id: blob.clone(),
+            name: name.into(),
+            mime_type: mime.into(),
+            size: FakeLobby::media_png().len() as u64,
+            preview: None,
+        };
+        let saved = cache
+            .save_as(&attachment("x.png", "image/png"), dest.clone())
+            .await
+            .unwrap()
+            .unwrap();
         assert_eq!(saved, dest);
         assert_eq!(std::fs::read(&dest).unwrap(), FakeLobby::media_png());
         let downloads: Vec<String> = std::fs::read_dir(dest.parent().unwrap())
@@ -565,13 +616,6 @@ mod tests {
             );
         }
 
-        let attachment = |name: &str, mime: &str| Attachment {
-            id: blob.clone(),
-            name: name.into(),
-            mime_type: mime.into(),
-            size: FakeLobby::media_png().len() as u64,
-            preview: None,
-        };
         let opened = cache
             .open_copy(&attachment("..\\..\\cat.png", "image/png"))
             .await

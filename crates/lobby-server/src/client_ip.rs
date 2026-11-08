@@ -43,8 +43,8 @@ impl ClientIp {
         }
     }
 
-    /// What the Magic Code send caps count under. A free tunnel broker hands anyone an IPv6 /48,
-    /// 65536 /64s, so the /48 is one client: each client's caps bound its guesses at codes.
+    /// What the Magic Code send caps and the Ask to Join places count under. A free tunnel broker
+    /// hands anyone an IPv6 /48, 65536 /64s, so the /48 is one client.
     pub fn site_key(self) -> IpAddr {
         match self.0 {
             IpAddr::V6(v6) => IpAddr::V6(Ipv6Addr::from_bits(v6.to_bits() & (u128::MAX << 80))),

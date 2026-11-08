@@ -518,10 +518,7 @@ impl Connection<'_> {
                 ClientMsg::RtcRestart(restart) => VoiceCommand::Restart {
                     vsid: restart.voice_session_id,
                 },
-                ClientMsg::ScreenShareStart(s) => VoiceCommand::ShareStart {
-                    audio: s.audio,
-                    quality: s.quality,
-                },
+                ClientMsg::ScreenShareStart(s) => VoiceCommand::ShareStart(s),
                 ClientMsg::ScreenShareSource(s) => VoiceCommand::ShareSource(s.size),
                 ClientMsg::ScreenShareStop => VoiceCommand::ShareStop,
                 ClientMsg::ScreenShareWatch(w) => VoiceCommand::Watch {

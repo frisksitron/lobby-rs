@@ -20,10 +20,11 @@ use crate::{
     config::AuthConfig,
     db::{
         self, DbError,
-        admission::{self, WaitState},
+        admission::{self, PendingCounts, WaitState},
         owner, sessions,
         users::{self, Profile},
     },
+    limits::{CodeSend, Recipient},
 };
 
 const TICKET_TTL: Duration = Duration::from_secs(10 * 60);
@@ -34,6 +35,7 @@ const WAIT_TTL: Duration = Duration::from_secs(30 * 24 * 3600);
 /// A `POST /auth/join`, its session minted beforehand.
 pub struct Join {
     pub ticket_hash: Digest,
+    pub client: ClientIp,
     pub username: Username,
     pub minted: Minted,
 }
@@ -103,6 +105,19 @@ async fn standing(
 /// Asks to Join that may wait for a Vouch at once. Each one rings every Member's bell, so a
 /// stranger with many addresses cannot flood them.
 const MAX_PENDING_REQUESTS: i64 = 20;
+/// Of those, from one client site (IPv4 address or IPv6 /48), and for one mailbox (`+tag` aliases
+/// are one). Without them one stranger fills every place and no newcomer can ask. Five lets a
+/// household onboard together.
+pub const MAX_PENDING_PER_SITE: i64 = 5;
+const MAX_PENDING_PER_MAILBOX: i64 = 2;
+
+impl PendingCounts {
+    fn full(&self) -> bool {
+        self.total >= MAX_PENDING_REQUESTS
+            || self.from_site >= MAX_PENDING_PER_SITE
+            || self.for_mailbox >= MAX_PENDING_PER_MAILBOX
+    }
+}
 
 fn is_bootstrap(configured: &str, email: &Email) -> bool {
     Email::parse(configured).is_ok_and(|b| &b == email)
@@ -126,9 +141,9 @@ async fn new_wait(
 }
 
 impl Domain {
-    /// A new code for the request's challenge, mailed once it is stored, whatever the email's
-    /// standing. Over the client's send caps, for this email or any, nothing is stored and the
-    /// asker hears when to try again.
+    /// A new code for the request's challenge, mailed once it is stored unless
+    /// [`CodeSend::Withhold`]. Over the client's own send caps nothing is stored and the asker
+    /// hears when to try again.
     pub async fn issue_code(&self, r: CodeRequest) -> Result<(), WriteError> {
         self.run_at_front_door(move |w| {
             Box::pin(async move {
@@ -139,14 +154,25 @@ impl Domain {
                     label,
                 } = r;
                 let instant = Instant::now();
-                if let Err(retry_at) = w.code_sends.try_acquire(&email, client, instant) {
-                    info!(
-                        domain = email.domain(),
-                        "magic code not sent: send cap reached"
-                    );
-                    let wait = retry_at.saturating_duration_since(instant);
-                    return Err(WriteError::CodesCapped(wait));
-                }
+                let recipient = if users::active_by_email(&mut w.conn, &email).await?.is_some()
+                    || (is_bootstrap(&w.cfg.auth.bootstrap_email, &email)
+                        && !users::any_user(&mut w.conn).await?)
+                {
+                    Recipient::Member
+                } else {
+                    Recipient::Stranger
+                };
+                let send = match w.code_sends.try_acquire(&email, client, recipient, instant) {
+                    Ok(send) => send,
+                    Err(retry_at) => {
+                        info!(
+                            domain = email.domain(),
+                            "magic code not sent: send cap reached"
+                        );
+                        let wait = retry_at.saturating_duration_since(instant);
+                        return Err(WriteError::CodesCapped(wait));
+                    }
+                };
                 let now = UnixMs::now();
                 let code = new_code();
                 let hash = tokens::code_digest(&email, code.expose());
@@ -155,9 +181,17 @@ impl Domain {
                 admission::insert_code(&mut tx, &challenge_hash, &email, &hash, expires_at, now)
                     .await?;
                 tx.commit().await?;
-                // The mailer sends on its own task: the writer does not wait for SMTP.
-                w.mailer.send_code(&email, &code, &label);
-                info!(domain = email.domain(), "magic code issued");
+                match send {
+                    CodeSend::Mail => {
+                        // The mailer sends on its own task: the writer does not wait for SMTP.
+                        w.mailer.send_code(&email, &code, &label);
+                        info!(domain = email.domain(), "magic code issued");
+                    }
+                    CodeSend::Withhold => info!(
+                        domain = email.domain(),
+                        "magic code not mailed: a shared send cap is reached"
+                    ),
+                }
                 Ok(())
             })
         })
@@ -247,6 +281,7 @@ impl Domain {
             Box::pin(async move {
                 let Join {
                     ticket_hash,
+                    client,
                     username,
                     minted,
                 } = j;
@@ -281,7 +316,9 @@ impl Domain {
                     }
                     Standing::AskToJoin => {
                         name_free(&mut tx, &username, &email).await?;
-                        if admission::pending_count(&mut tx).await? >= MAX_PENDING_REQUESTS {
+                        let site = client.site_key().to_string();
+                        let waiting = admission::pending_counts(&mut tx, &site, &email).await?;
+                        if waiting.full() {
                             info!(
                                 domain = email.domain(),
                                 "join refused: too many requests wait"
@@ -289,7 +326,8 @@ impl Domain {
                             return Err(WriteError::TooManyRequests);
                         }
                         let request =
-                            admission::insert_request(&mut tx, &username, &email, now).await?;
+                            admission::insert_request(&mut tx, &username, &email, &site, now)
+                                .await?;
                         let wait_token = new_wait(&mut tx, &request.id, now).await?;
                         tx.commit().await?;
                         info!(request = %request.id.as_str(), domain = email.domain(),

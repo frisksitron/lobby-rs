@@ -23,6 +23,10 @@ use crate::{
 
 pub const DECLINED_RETENTION: Duration = Duration::from_secs(30 * 24 * 3600);
 
+/// How long an Ask to Join may wait for a Vouch. After that it is dropped, so a stranger who
+/// stops asking cannot hold a place forever; the asker can ask again.
+pub const PENDING_MAX_AGE: Duration = Duration::from_secs(7 * 24 * 3600);
+
 /// A file must be older than this to be an orphan: well past the 120 s upload timeout, so one
 /// persisted just before its row commits is never swept.
 pub const ORPHAN_MIN_AGE: Duration = Duration::from_secs(3600);
@@ -88,6 +92,7 @@ pub struct CleanupReport {
     pub join_waits: u64,
     pub sessions: u64,
     pub declined_requests: u64,
+    pub stale_requests: u64,
     pub expired_blobs: u64,
     pub orphans: u64,
     pub limit_windows: usize,
@@ -172,12 +177,14 @@ pub(crate) async fn run_cleanup(
 ) -> Result<CleanupReport, WriteError> {
     let domain = &jobs.domain;
     let declined_before = UnixMs(now.0 - DECLINED_RETENTION.as_millis() as i64);
+    let stale_before = UnixMs(now.0 - PENDING_MAX_AGE.as_millis() as i64);
     let report = CleanupReport {
         magic_codes: drain(domain, stop, Batch::MagicCodes, now).await?,
         join_tickets: drain(domain, stop, Batch::JoinTickets, now).await?,
         join_waits: drain(domain, stop, Batch::JoinWaits, now).await?,
         sessions: drain(domain, stop, Batch::Sessions, now).await?,
         declined_requests: drain(domain, stop, Batch::Declined(declined_before), now).await?,
+        stale_requests: drain(domain, stop, Batch::StalePending(stale_before), now).await?,
         expired_blobs: drain_expired_blobs(jobs, stop, now).await?,
         orphans: sweep_orphans(jobs, stop, now).await?,
         limit_windows: jobs.limits.prune(instant),
@@ -221,7 +228,7 @@ mod tests {
             CancellationToken::new(),
         )
         .unwrap();
-        let code_sends = Arc::new(CodeSends::new(3, 10, 50));
+        let code_sends = Arc::new(CodeSends::new(cfg.auth.magic_code_sends));
         let writer = crate::domain::Writer {
             conn,
             lock,

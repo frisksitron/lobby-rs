@@ -2,16 +2,16 @@
 
 use std::time::Instant;
 
-use lobby_protocol::{
-    Quality, RtcTrack, SPEAKING_HANGOVER, SourceSize, TrackPurpose, UserId, VoiceSessionId,
-};
+use lobby_protocol::{Quality, RtcTrack, SourceSize, TrackPurpose, UserId, VoiceSessionId};
 use str0m::{Rtc, change::SdpPendingOffer, media::Mid};
 use tracing::info;
 
 use super::{
     MediaPath,
     bitrate::AudioRate,
+    ingress::AudioBudget,
     restart::{DeadPeer, IceRestart},
+    speech::Speech,
     timeline::Timeline,
 };
 
@@ -196,8 +196,8 @@ pub(super) struct Peer {
     /// new stream in the old one's slot. An old peer may be reaped before anyone looks.
     pub(super) rejoined: bool,
     pub(super) muted: bool,
-    /// Set while the Member speaks: the server's one verdict, which the Lobby broadcasts.
-    pub(super) speaking_until: Option<Instant>,
+    /// The server's one verdict on whether the Member speaks, which the Lobby broadcasts.
+    pub(super) speech: Speech,
     pub(super) closing: bool,
     pub(super) uplink: Mid,
     pub(super) downlinks: Vec<Downlink>,
@@ -220,6 +220,9 @@ pub(super) struct Peer {
     pub(super) received: u64,
     pub(super) forwarded: u64,
     pub(super) muted_dropped: u64,
+    /// What the voice uplink may still send before it is cut to its budget.
+    pub(super) audio_in: AudioBudget,
+    pub(super) over_budget_dropped: u64,
     pub(super) video_received: u64,
     pub(super) video_forwarded: u64,
     pub(super) keyframe_requests: u64,
@@ -241,23 +244,6 @@ impl Peer {
             return None;
         }
         Some(self.last_heard? + self.restart.dead_after(limits))
-    }
-
-    /// A voice packet's V flag: a voiced one holds speaking for the hangover, an unvoiced one
-    /// ends it. Returns the change, if any.
-    pub(super) fn heard(&mut self, voiced: bool, now: Instant) -> Option<bool> {
-        let was = self.speaking_until.is_some();
-        self.speaking_until = voiced.then(|| now + SPEAKING_HANGOVER);
-        (was != voiced).then_some(voiced)
-    }
-
-    /// Whether the hangover after the last voiced packet ran out with nothing heard since.
-    pub(super) fn speech_expired(&mut self, now: Instant) -> bool {
-        let expired = self.speaking_until.is_some_and(|t| t <= now);
-        if expired {
-            self.speaking_until = None;
-        }
-        expired
     }
 
     pub(super) fn restart_wanted(&self, why: &str) {

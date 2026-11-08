@@ -85,7 +85,7 @@ impl AttachmentDialog {
         let suggested = sanitize_file_name(&self.attachment.name);
         let pick = files::save_path(&suggested, cx);
         let media = self.images.read(cx).media().clone();
-        let blob = self.attachment.id.clone();
+        let attachment = self.attachment.clone();
         self.busy = Some(cx.spawn_in(window, async move |this, cx| {
             let Ok(Some(dest)) = pick.await else {
                 let _ = this.update(cx, |d, cx| {
@@ -94,7 +94,7 @@ impl AttachmentDialog {
                 });
                 return;
             };
-            let saved = media.save_as(&blob, dest).await;
+            let saved = media.save_as(&attachment, dest).await;
             let _ = this.update_in(cx, |d, window, cx| {
                 d.busy = None;
                 match saved.unwrap_or(Err(MediaCacheError::Decode)) {
@@ -198,8 +198,9 @@ impl AttachmentDialog {
     fn picture(&mut self, room: (f32, f32), cx: &mut Context<Self>) -> Option<AnyElement> {
         let preview = picture(&self.attachment)?;
         let id = self.attachment.id.clone();
+        let size = self.attachment.size;
         let (full, stand_in) = self.images.update(cx, |m, cx| {
-            let full = m.slot(&id, Variant::Full, cx);
+            let full = m.slot(&id, Variant::Full { size }, cx);
             let stand_in = match full {
                 Slot::Ready(_) => None,
                 _ => Some(m.slot(&id, Variant::Preview, cx)),

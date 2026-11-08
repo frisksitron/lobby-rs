@@ -35,6 +35,23 @@ fn bytes_file(dir: &Path, name: &str, size: u64) -> PathBuf {
     path
 }
 
+fn files_under(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .flat_map(|e| {
+            let path = e.path();
+            if path.is_dir() {
+                files_under(&path)
+            } else {
+                vec![path]
+            }
+        })
+        .collect()
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn an_upload_is_sent_and_the_other_member_sees_the_preview() {
     let server = TestServer::start_with_members(&["alice", "bob"], |_| {}).await;
@@ -106,13 +123,28 @@ async fn an_upload_is_sent_and_the_other_member_sees_the_preview() {
     );
     // Attachments are read in upload order, and two uploads run concurrently.
     let by_name = |name: &str| seen.attachments.iter().find(|x| x.name == name).unwrap();
-    let blob = &by_name("cat.png").id;
+    let notes = by_name("notes.bin");
+    assert_eq!(
+        media
+            .file(&notes.id, Variant::Full { size: MIB })
+            .await
+            .unwrap(),
+        Err(MediaCacheError::TooLarge),
+        "a body past the size the caller expects is refused"
+    );
+    assert_eq!(files_under(cache_dir.path()), Vec::<PathBuf>::new());
+    let cat = by_name("cat.png");
+    let blob = &cat.id;
     let small = media.image(blob, Variant::Preview).await.unwrap().unwrap();
     assert_eq!((small.width, small.height), (480, 360));
-    let full = media.image(blob, Variant::Full).await.unwrap().unwrap();
+    let full = media
+        .image(blob, Variant::Full { size: cat.size })
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!((full.width, full.height), (640, 480));
     let saved = media
-        .save_as(blob, cache_dir.path().join("saved").join("cat.png"))
+        .save_as(cat, cache_dir.path().join("saved").join("cat.png"))
         .await
         .unwrap()
         .unwrap();

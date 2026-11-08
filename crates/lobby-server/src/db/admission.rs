@@ -218,12 +218,29 @@ async fn request_for_email(
         .transpose()
 }
 
-pub async fn pending_count(conn: &mut SqliteConnection) -> Result<i64, DbError> {
-    Ok(
-        sqlx::query_scalar("SELECT COUNT(*) FROM access_requests WHERE status = 'pending'")
-            .fetch_one(conn)
-            .await?,
+/// How many requests wait for a Vouch: in all, from one client site, and for one mailbox.
+#[derive(Debug, FromRow)]
+pub struct PendingCounts {
+    pub total: i64,
+    pub from_site: i64,
+    pub for_mailbox: i64,
+}
+
+pub async fn pending_counts(
+    conn: &mut SqliteConnection,
+    site: &str,
+    email: &Email,
+) -> Result<PendingCounts, DbError> {
+    Ok(sqlx::query_as(
+        "SELECT COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE site = ?1) AS from_site,
+                COUNT(*) FILTER (WHERE mailbox = ?2) AS for_mailbox
+         FROM access_requests WHERE status = 'pending'",
     )
+    .bind(site)
+    .bind(email.without_tag().as_str())
+    .fetch_one(conn)
+    .await?)
 }
 
 pub async fn insert_wait(
@@ -309,16 +326,20 @@ pub async fn insert_request(
     conn: &mut SqliteConnection,
     username: &Username,
     email: &Email,
+    site: &str,
     now: UnixMs,
 ) -> Result<AccessRequest, DbError> {
     let id = AccessRequestId::random();
     sqlx::query(
-        "INSERT INTO access_requests (id, username, email, status, created_at, updated_at)
-         VALUES (?1, ?2, ?3, 'pending', ?4, ?4)",
+        "INSERT INTO access_requests
+           (id, username, email, site, mailbox, status, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'pending', ?6, ?6)",
     )
     .bind(id.as_str())
     .bind(username.as_str())
     .bind(email.as_str())
+    .bind(site)
+    .bind(email.without_tag().as_str())
     .bind(now.0)
     .execute(conn)
     .await?;
@@ -449,6 +470,27 @@ pub async fn delete_expired_waits(
     .execute(conn)
     .await?
     .rows_affected())
+}
+
+/// Deletes up to one batch of requests that have waited since before `before`, and answers their
+/// ids. Their wait tokens go with them.
+pub async fn delete_stale_pending(
+    conn: &mut SqliteConnection,
+    before: UnixMs,
+) -> Result<Vec<AccessRequestId>, DbError> {
+    let ids: Vec<String> = sqlx::query_scalar(
+        "DELETE FROM access_requests WHERE id IN
+           (SELECT id FROM access_requests
+            WHERE status = 'pending' AND created_at < ?1 LIMIT ?2)
+         RETURNING id",
+    )
+    .bind(before.0)
+    .bind(CLEANUP_BATCH)
+    .fetch_all(conn)
+    .await?;
+    ids.iter()
+        .map(|id| AccessRequestId::from_str(id).map_err(corrupt))
+        .collect()
 }
 
 pub async fn delete_old_declined(

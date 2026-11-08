@@ -94,6 +94,16 @@ impl Email {
         &self.0
     }
 
+    /// The mailbox behind a `+tag` alias: `a+b@x.com` is `a@x.com`. A local part that is only a
+    /// tag stays as it is.
+    pub fn without_tag(&self) -> Self {
+        let (local, domain) = self.0.split_once('@').expect("validated Email contains @");
+        match local.split_once('+') {
+            Some((base, _)) if !base.is_empty() => Self(format!("{base}@{domain}").into()),
+            _ => self.clone(),
+        }
+    }
+
     /// Logs carry the domain only.
     pub fn domain(&self) -> &str {
         self.0

@@ -46,11 +46,11 @@ pub async fn verify(env: &TestServer, asked: &Asked, code: &str) -> HttpResponse
 }
 
 /// A device behind the trusted local proxy, which forwards its address.
-pub struct Device {
-    pub ip: &'static str,
+pub struct Device<'a> {
+    pub ip: &'a str,
 }
 
-impl Device {
+impl Device<'_> {
     async fn post(&self, env: &TestServer, path: &str, body: Value) -> HttpResponse {
         http(
             env.addr,
@@ -65,11 +65,18 @@ impl Device {
         .await
     }
 
+    pub async fn request_code(&self, env: &TestServer, email: &str) -> HttpResponse {
+        self.post(env, "/api/v1/auth/magic-code", json!({"email": email}))
+            .await
+    }
+
     pub async fn ask(&self, env: &TestServer, email: &str) -> Asked {
-        let res = self
-            .post(env, "/api/v1/auth/magic-code", json!({"email": email}))
-            .await;
-        asked(&res)
+        asked(&self.request_code(env, email).await)
+    }
+
+    pub async fn join(&self, env: &TestServer, ticket: &str, username: &str) -> HttpResponse {
+        let body = json!({"ticket": ticket, "username": username});
+        self.post(env, "/api/v1/auth/join", body).await
     }
 
     pub async fn verify(&self, env: &TestServer, asked: &Asked, code: &str) -> HttpResponse {
@@ -139,13 +146,36 @@ pub fn wait_token(outcome: &Value) -> String {
 /// An Ask to Join for `name` (email `<name>@lobby.test`); returns the pending request's id as
 /// the given Member's socket sees it, and the asker's wait token.
 pub async fn ask_to_join(env: &TestServer, name: &str, watcher: &mut Ws) -> (String, String) {
-    let ticket = ticket(env, &email_of(name), "ask_to_join").await;
+    let email = email_of(name);
+    let ticket = ticket(env, &email, "ask_to_join").await;
     let res = join(env, &ticket, name).await;
+    request_seen(&res, &email, name, watcher).await
+}
+
+/// [`ask_to_join`] for `email`, from `device`.
+pub async fn ask_to_join_from(
+    env: &TestServer,
+    device: &Device<'_>,
+    email: &str,
+    name: &str,
+    watcher: &mut Ws,
+) -> (String, String) {
+    let ticket = ticket(env, email, "ask_to_join").await;
+    let res = device.join(env, &ticket, name).await;
+    request_seen(&res, email, name, watcher).await
+}
+
+async fn request_seen(
+    res: &HttpResponse,
+    email: &str,
+    name: &str,
+    watcher: &mut Ws,
+) -> (String, String) {
     assert_eq!(res.status, 200, "{}", res.body);
     let wait = wait_token(&res.json());
     let upsert = next_of(watcher, "ACCESS_REQUEST_UPSERT").await;
     assert_eq!(upsert["request"]["username"], name);
-    assert_eq!(upsert["request"]["requesterLabel"], email_of(name));
+    assert_eq!(upsert["request"]["requesterLabel"], email);
     (upsert["request"]["id"].as_str().unwrap().to_owned(), wait)
 }
 

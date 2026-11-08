@@ -1,6 +1,7 @@
 use futures_util::FutureExt as _;
 use lobby_protocol::{
-    AuthorRef, InkBatch, InkPoint, MessageId, Quality, StrokeId, UnixMs, Username, VoiceSessionId,
+    AuthorRef, InkBatch, InkPoint, MessageId, Quality, ShareStart, StrokeId, UnixMs, Username,
+    VoiceSessionId,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -212,10 +213,10 @@ fn share_screen(
     sfu: &mut SfuInbox,
 ) {
     let quality = Quality::UpTo1440;
-    let start = VoiceCommand::ShareStart {
+    let start = VoiceCommand::ShareStart(ShareStart {
         audio: false,
         quality,
-    };
+    });
     lobby.voice(user, conn.id, None, start, Instant::now());
     let cmd = sfu.try_recv();
     assert!(

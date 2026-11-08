@@ -12,12 +12,14 @@ use std::{
 
 use lobby_protocol::{
     Attachment, BlobId,
-    limits::{self, IMAGE_MAX_ALLOC, IMAGE_MAX_EDGE},
+    limits::{self, IMAGE_MAX_EDGE},
 };
 
 use crate::{ApiError, copy};
 
 const UPLOADS_CONCURRENT: usize = 3;
+/// The most one image decode may allocate, for a pasted picture and for one the cache shows.
+const IMAGE_MAX_ALLOC: u64 = 256 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DraftId(u64);

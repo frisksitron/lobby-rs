@@ -47,8 +47,14 @@ impl Sfu {
             from.muted_dropped += 1;
             return;
         }
+        let now = Instant::now();
+        let budget_now = tokio::time::Instant::from_std(now);
+        if !from.audio_in.admit(data.data.len(), budget_now) {
+            from.over_budget_dropped += 1;
+            return;
+        }
         let voiced = data.ext_vals.voice_activity == Some(true);
-        if let Some(speaking) = from.heard(voiced, Instant::now()) {
+        if let Some(speaking) = from.speech.heard(voiced, now) {
             self.events.push(SfuEvent {
                 user: from.user.clone(),
                 vsid: from.vsid,

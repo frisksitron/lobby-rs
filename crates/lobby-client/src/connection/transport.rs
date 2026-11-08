@@ -10,10 +10,12 @@ use tokio_tungstenite::{
     MaybeTlsStream, WebSocketStream,
     tungstenite::{
         Message,
-        protocol::{CloseFrame, frame::coding::CloseCode},
+        protocol::{CloseFrame, WebSocketConfig, frame::coding::CloseCode},
     },
 };
 use tracing::{debug, info, warn};
+
+use crate::api::RESPONSE_MAX_BYTES;
 
 /// A graceful close that takes longer is cut short: the socket is just dropped.
 pub(super) const CLOSE_BUDGET: Duration = Duration::from_millis(150);
@@ -92,7 +94,10 @@ pub(super) async fn dial(url: &str) -> Result<Socket, DialError> {
         .await
         .map_err(|e| DialError::io(&e))?;
     let _ = stream.set_nodelay(true);
-    tokio_tungstenite::client_async_tls(url, stream)
+    let config = WebSocketConfig::default()
+        .max_message_size(Some(RESPONSE_MAX_BYTES))
+        .max_frame_size(Some(RESPONSE_MAX_BYTES));
+    tokio_tungstenite::client_async_tls_with_config(url, stream, Some(config), None)
         .await
         .map(|(ws, _response)| ws)
         .map_err(DialError::other)

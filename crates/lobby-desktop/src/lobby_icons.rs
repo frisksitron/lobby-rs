@@ -46,7 +46,7 @@ impl LobbyIcons {
     pub fn shown(&self, origin: &LobbyOrigin, icon: &BlobId, cx: &App) -> bool {
         self.by_origin
             .get(origin)
-            .is_some_and(|images| images.read(cx).shown(icon, Variant::Full))
+            .is_some_and(|images| images.read(cx).shown(icon, Variant::Square))
     }
 }
 

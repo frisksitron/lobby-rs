@@ -1,19 +1,25 @@
 //! Chat previews and Member avatars and Lobby icons. Pure CPU work: callers run it under
 //! `cpu::on_cpu`.
 
-use std::io::{BufRead, Seek};
+use std::io::{self, BufRead, Read, Seek, SeekFrom};
 
 use ::image::{
-    DynamicImage, ExtendedColorType, ImageDecoder as _, ImageEncoder as _, ImageReader, Limits,
-    Rgb, RgbImage, codecs::jpeg::JpegEncoder, codecs::png::PngEncoder, imageops::FilterType,
+    DynamicImage, ExtendedColorType, ImageDecoder as _, ImageEncoder as _, ImageFormat,
+    ImageReader, Limits, Rgb, RgbImage, codecs::jpeg::JpegEncoder, codecs::png::PngEncoder,
     metadata::Orientation,
 };
-use lobby_protocol::{
-    Preview,
-    limits::{IMAGE_MAX_ALLOC as DECODE_MAX_ALLOC, IMAGE_MAX_EDGE as DECODE_MAX_SIDE},
-};
+use lobby_protocol::{Preview, limits::IMAGE_MAX_EDGE as DECODE_MAX_SIDE};
 
 use super::sniff::Sniffed;
+
+/// Bytes one decode may hold at its peak, counted as [`decode`] does. Decodes run one at a time
+/// (`cpu::CPU_PERMITS`), so this plus the server's own use stays well under its 512 MiB
+/// container. It takes a baseline JPEG of about 80 MP, its file included, and an 8K PNG.
+const DECODE_MAX_ALLOC: u64 = 256 * 1024 * 1024;
+/// What a progressive JPEG's coefficients hold besides the output, in thirds of the output.
+const PROGRESSIVE_EXTRA_THIRDS: u64 = 6;
+/// What a lossless WebP's RGBA decode holds besides an RGB output, in thirds of the output.
+const WEBP_EXTRA_THIRDS: u64 = 4;
 
 pub const PREVIEW_MAX_EDGE: u32 = 480;
 pub const PREVIEW_JPEG_QUALITY: u8 = 80;
@@ -25,7 +31,7 @@ pub enum PreviewError {
     #[error("decode: {0}")]
     Decode(#[from] ::image::ImageError),
     #[error("read: {0}")]
-    Read(#[from] std::io::Error),
+    Read(#[from] io::Error),
 }
 
 fn limits() -> Limits {
@@ -64,36 +70,72 @@ fn flatten(img: &DynamicImage) -> RgbImage {
     out
 }
 
-/// The picture inside the decode limits, and which way up it is meant to be seen.
-fn decode(input: impl BufRead + Seek) -> Result<(DynamicImage, Orientation), PreviewError> {
-    let mut reader = ImageReader::new(input).with_guessed_format()?;
+/// The picture inside the decode limits, and which way up it is meant to be seen. The limits
+/// count what the decoder holds besides its output: the JPEG decoder reads the whole file first,
+/// a progressive JPEG keeps a 16-bit coefficient per sample until its last scan (twice the
+/// output), and a lossless WebP without alpha decodes into RGBA before it drops the alpha.
+fn decode(mut input: impl BufRead + Seek) -> Result<(DynamicImage, Orientation), PreviewError> {
     let mut limits = limits();
+    let format = ImageReader::new(&mut input).with_guessed_format()?.format();
+    let extra_thirds = match format {
+        Some(ImageFormat::Jpeg) => jpeg_extra_thirds(&mut input, &mut limits)?,
+        Some(ImageFormat::WebP) => WEBP_EXTRA_THIRDS,
+        _ => 0,
+    };
+    let mut reader = ImageReader::new(input).with_guessed_format()?;
     reader.limits(limits.clone());
     let mut decoder = reader.into_decoder()?;
     let orientation = decoder.orientation()?;
-    limits.reserve(decoder.total_bytes())?;
+    let output = decoder.total_bytes();
+    limits.reserve(output)?;
+    limits.reserve(output.saturating_mul(extra_thirds) / 3)?;
     Ok((DynamicImage::from_decoder(decoder)?, orientation))
+}
+
+/// Reserves the file, which the JPEG decoder reads whole, and returns what the frame adds. A
+/// progressive frame is any `FF C2` in the file: the decoder acts on a marker wherever it finds
+/// one, and a baseline scan stuffs its `FF`s, so only metadata can match by chance.
+fn jpeg_extra_thirds(
+    input: &mut (impl Read + Seek),
+    limits: &mut Limits,
+) -> Result<u64, PreviewError> {
+    let start = input.stream_position()?;
+    limits.reserve(input.seek(SeekFrom::End(0))? - start)?;
+    input.seek(SeekFrom::Start(start))?;
+    let mut file = Vec::new();
+    input.read_to_end(&mut file)?;
+    input.seek(SeekFrom::Start(start))?;
+    let progressive = file.windows(2).any(|pair| pair == [0xFF, 0xC2]);
+    Ok(if progressive {
+        PROGRESSIVE_EXTRA_THIRDS
+    } else {
+        0
+    })
+}
+
+/// The middle square, at most [`SQUARE_MAX_EDGE`] wide: scaled first, then cropped, so the
+/// full-size picture is never copied.
+fn middle_square(img: &DynamicImage) -> DynamicImage {
+    let (width, height) = (u64::from(img.width()), u64::from(img.height()));
+    let side = width.min(height);
+    let edge = side.min(u64::from(SQUARE_MAX_EDGE));
+    let (w, h) = ((width * edge / side) as u32, (height * edge / side) as u32);
+    let edge = edge as u32;
+    img.thumbnail_exact(w, h)
+        .crop_imm((w - edge) / 2, (h - edge) / 2, edge, edge)
 }
 
 /// An avatar or icon: the middle square of the picture, at most [`SQUARE_MAX_EDGE`] wide, upright.
 /// JPEG when nothing in it is see-through, PNG otherwise.
 pub fn square(input: impl BufRead + Seek) -> Result<(Vec<u8>, Sniffed), PreviewError> {
-    let (img, orientation) = decode(input)?;
-    let side = img.width().min(img.height());
-    let mut img = img.crop_imm(
-        (img.width() - side) / 2,
-        (img.height() - side) / 2,
-        side,
-        side,
-    );
-    if side > SQUARE_MAX_EDGE {
-        img = img.resize_exact(SQUARE_MAX_EDGE, SQUARE_MAX_EDGE, FilterType::CatmullRom);
-    }
+    let (decoded, orientation) = decode(input)?;
+    let mut img = middle_square(&decoded);
+    drop(decoded);
     img.apply_orientation(orientation);
     let mut out = Vec::new();
-    let see_through = img.color().has_alpha() && img.to_rgba8().pixels().any(|p| p[3] < u8::MAX);
+    let rgba = img.to_rgba8();
+    let see_through = rgba.pixels().any(|p| p[3] < u8::MAX);
     if see_through {
-        let rgba = img.to_rgba8();
         PngEncoder::new(&mut out).write_image(
             rgba.as_raw(),
             rgba.width(),
@@ -174,13 +216,20 @@ mod tests {
         !crc
     }
 
+    /// An RGB PNG of `width` x `height` whose image data is empty: the decoder reads its headers
+    /// and sizes its output before it finds the data missing.
     fn png_header_only(width: u32, height: u32) -> Vec<u8> {
         let mut ihdr = Vec::new();
         ihdr.extend_from_slice(&width.to_be_bytes());
         ihdr.extend_from_slice(&height.to_be_bytes());
         ihdr.extend_from_slice(&[8, 2, 0, 0, 0]);
         let mut png = b"\x89PNG\r\n\x1a\n".to_vec();
-        for (kind, data) in [(&b"IHDR"[..], ihdr), (b"IEND", Vec::new())] {
+        let chunks = [
+            (&b"IHDR"[..], ihdr),
+            (b"IDAT", Vec::new()),
+            (b"IEND", Vec::new()),
+        ];
+        for (kind, data) in chunks {
             png.extend_from_slice(&(data.len() as u32).to_be_bytes());
             let mut body = kind.to_vec();
             body.extend_from_slice(&data);
@@ -190,20 +239,64 @@ mod tests {
         png
     }
 
+    /// A JPEG of `width` x `height` RGB with headers and no data, baseline or progressive.
+    fn jpeg_header_only(width: u16, height: u16, progressive: bool) -> Vec<u8> {
+        let mut jpeg = vec![
+            0xFF,
+            0xD8,
+            0xFF,
+            if progressive { 0xC2 } else { 0xC0 },
+            0,
+            17,
+            8,
+        ];
+        jpeg.extend_from_slice(&height.to_be_bytes());
+        jpeg.extend_from_slice(&width.to_be_bytes());
+        jpeg.extend_from_slice(&[3, 1, 0x11, 0, 2, 0x11, 0, 3, 0x11, 0]);
+        let spectral_end = if progressive { 0 } else { 63 };
+        jpeg.extend_from_slice(&[0xFF, 0xDA, 0, 12, 3, 1, 0, 2, 0, 3, 0, 0, spectral_end, 0]);
+        jpeg
+    }
+
+    fn over_the_limits(result: Result<(Vec<u8>, Preview), PreviewError>) -> bool {
+        matches!(
+            result,
+            Err(PreviewError::Decode(::image::ImageError::Limits(_)))
+        )
+    }
+
     #[test]
     fn bombs_and_garbage_are_refused_without_a_panic() {
         {
             let too_wide =
                 DynamicImage::ImageLuma8(::image::GrayImage::new(DECODE_MAX_SIDE + 1, 1));
-            assert!(preview(&encode(&too_wide, ImageFormat::Png)).is_err());
+            assert!(over_the_limits(preview(&encode(
+                &too_wide,
+                ImageFormat::Png
+            ))));
             // Each side is inside the limit, but 16384 x 16384 RGB is 768 MiB of pixels.
-            assert!(preview(&png_header_only(DECODE_MAX_SIDE, DECODE_MAX_SIDE)).is_err());
-            // The same header with a harmless size passes the limits (and fails only for lack of
-            // data).
-            assert!(matches!(
-                preview(&png_header_only(8, 8)),
-                Err(PreviewError::Decode(e)) if !matches!(e, ::image::ImageError::Limits(_))
-            ));
+            let square = png_header_only(DECODE_MAX_SIDE, DECODE_MAX_SIDE);
+            assert!(over_the_limits(preview(&square)));
+            // 10000 x 10000 RGB is 286 MiB.
+            assert!(over_the_limits(preview(&png_header_only(10_000, 10_000))));
+            // Headers with a size the budget takes pass the limits, and fail only for lack of
+            // data: an 8K screenshot, and an 85 MP photo.
+            assert!(!over_the_limits(preview(&png_header_only(7680, 4320))));
+            assert!(!over_the_limits(preview(&jpeg_header_only(
+                9216, 9216, false
+            ))));
+            // A progressive JPEG holds three times its pixels, so 48 MP is too many.
+            assert!(over_the_limits(preview(&jpeg_header_only(
+                8000, 6000, true
+            ))));
+            assert!(!over_the_limits(preview(&jpeg_header_only(
+                8000, 6000, false
+            ))));
+            // The decoder skips fill bytes before a marker, so a progressive frame can hide
+            // behind one.
+            let mut filled = jpeg_header_only(8000, 6000, true);
+            filled.insert(2, 0xFF);
+            assert!(over_the_limits(preview(&filled)));
         }
         {
             assert!(preview(b"not an image at all").is_err());
@@ -245,5 +338,18 @@ mod tests {
         let turned = ::image::load_from_memory(&turned).unwrap().to_rgb8();
         assert_eq!(turned.dimensions(), (20, 20));
         assert!(turned.get_pixel(10, 2)[0] > 200 && turned.get_pixel(10, 17)[2] > 200);
+
+        // A picture wider than the avatar edge is scaled down from its middle.
+        let big = DynamicImage::ImageRgb8(RgbImage::from_fn(900, 600, |x, _| {
+            if x < 450 {
+                Rgb([255, 0, 0])
+            } else {
+                Rgb([0, 0, 255])
+            }
+        }));
+        let (scaled, _) = square(Cursor::new(encode(&big, ImageFormat::Png))).unwrap();
+        let scaled = ::image::load_from_memory(&scaled).unwrap().to_rgb8();
+        assert_eq!(scaled.dimensions(), (SQUARE_MAX_EDGE, SQUARE_MAX_EDGE));
+        assert!(scaled.get_pixel(10, 128)[0] > 200 && scaled.get_pixel(245, 128)[2] > 200);
     }
 }

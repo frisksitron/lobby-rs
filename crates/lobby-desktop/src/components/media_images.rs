@@ -36,7 +36,7 @@ pub fn picture(
     cx: &mut App,
 ) -> Option<ImageSource> {
     let blob = blob?;
-    match images.update(cx, |m, cx| m.slot(blob, Variant::Full, cx)) {
+    match images.update(cx, |m, cx| m.slot(blob, Variant::Square, cx)) {
         Slot::Ready(image) => Some(ImageSource::Render(image)),
         Slot::Loading | Slot::Failed => None,
     }

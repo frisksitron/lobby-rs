@@ -1,4 +1,4 @@
-//! The CPU semaphore's work: image decoding takes `App.cpu`, 2 permits, acquired within 5 s.
+//! The CPU semaphore's work: image decoding takes `App.cpu`, 1 permit, acquired within 5 s.
 //! Always run before the write is handed to `crate::domain`.
 
 use std::{sync::Arc, time::Duration};
@@ -7,7 +7,8 @@ use tokio::sync::Semaphore;
 
 /// `App.cpu` acquire budget; beyond it the request gets 503 `UNAVAILABLE`.
 pub const CPU_ACQUIRE: Duration = Duration::from_secs(5);
-pub const CPU_PERMITS: usize = 2;
+/// One decode at a time: its peak (`blobs::image`) is half the 512 MiB container.
+pub const CPU_PERMITS: usize = 1;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 #[error("Server is busy. Try again in a moment.")]

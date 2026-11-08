@@ -225,7 +225,7 @@ fn lobby(origin: String, view: &Entity<LobbyView>, window: &Window, cx: &App) ->
                 json!({
                     "section": section,
                     "avatar": r.avatar.as_ref().map(ToString::to_string),
-                    "avatar_shown": r.avatar.as_ref().is_some_and(|a| pictures.shown(a, Variant::Full)),
+                    "avatar_shown": r.avatar.as_ref().is_some_and(|a| pictures.shown(a, Variant::Square)),
                     "presence": r.presence,
                     "me": r.is_me,
                     "in_voice": r.voice.is_some(),
@@ -487,7 +487,7 @@ fn chat(v: &LobbyView, state: &lobby_client::LobbyState, cx: &App) -> Value {
                 "key": m.key.as_ref(),
                 "author": m.author.as_ref(),
                 "avatar": m.avatar.as_ref().map(ToString::to_string),
-                "avatar_shown": m.avatar.as_ref().is_some_and(|a| images.shown(a, Variant::Full)),
+                "avatar_shown": m.avatar.as_ref().is_some_and(|a| images.shown(a, Variant::Square)),
                 "deactivated": m.deactivated,
                 "first": m.first,
                 "time": m.time.as_ref(),

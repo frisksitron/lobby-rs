@@ -150,7 +150,7 @@ async fn signing_out_while_a_token_save_still_runs_ends_signed_out() {
 async fn a_new_code_waits_then_is_ready_then_is_capped() {
     const CAP: u32 = 3;
     let env = TestServer::start_with_members(&["alice"], |c| {
-        c.auth.magic_code_sends_per_10m = CAP;
+        c.auth.magic_code_sends.per_email_per_10m = CAP;
     })
     .await;
     let clock = ManualClock::new();
@@ -205,7 +205,7 @@ async fn a_new_code_waits_then_is_ready_then_is_capped() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_codes_asked_of_one_lobby_do_not_count_at_the_next() {
     const CAP: u32 = 3;
-    let cap = |c: &mut lobby_server::Config| c.auth.magic_code_sends_per_10m = CAP;
+    let cap = |c: &mut lobby_server::Config| c.auth.magic_code_sends.per_email_per_10m = CAP;
     let a = TestServer::start_with_members(&["alice"], cap).await;
     let b = TestServer::start_with_members(&["alice"], cap).await;
     let clock = ManualClock::new();

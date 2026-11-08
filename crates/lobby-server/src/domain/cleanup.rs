@@ -16,6 +16,8 @@ pub enum Batch {
     Sessions,
     /// Declined requests decided before this.
     Declined(UnixMs),
+    /// Requests still waiting for a Vouch that were made before this.
+    StalePending(UnixMs),
 }
 
 impl Domain {
@@ -30,6 +32,11 @@ impl Domain {
                     Batch::JoinWaits => admission::delete_expired_waits(conn, now).await?,
                     Batch::Sessions => sessions::delete_expired(conn, now).await?,
                     Batch::Declined(before) => admission::delete_old_declined(conn, before).await?,
+                    Batch::StalePending(before) => {
+                        let gone = admission::delete_stale_pending(conn, before).await?;
+                        w.lobby.access_requests_expired(&gone, now);
+                        gone.len() as u64
+                    }
                 })
             })
         })

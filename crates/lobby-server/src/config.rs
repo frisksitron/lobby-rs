@@ -110,15 +110,34 @@ pub struct AuthConfig {
     pub refresh_ttl: Duration,
     #[serde(with = "humantime_serde")]
     pub magic_code_ttl: Duration,
-    /// Codes mailed per email and client (IPv4 address or IPv6 /48) in 10 minutes and in 24 hours.
-    pub magic_code_sends_per_10m: u32,
-    pub magic_code_sends_per_24h: u32,
-    /// Codes mailed per client in 24 hours, to any emails: without it one client could mail
-    /// thousands of made-up addresses a day from the Lobby's SMTP account.
-    pub magic_code_sends_per_client_per_24h: u32,
+    /// Its keys sit in `[auth]` itself, where 0.1.0's `lobby.toml` has the first three.
+    #[serde(flatten)]
+    pub magic_code_sends: MagicCodeSends,
     /// The only email that may create the first User. Empty = nobody can bootstrap.
     pub bootstrap_email: String,
     pub join_requests_enabled: bool,
+}
+
+/// The caps on Magic Codes mailed, for `limits::CodeSends`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct MagicCodeSends {
+    /// Codes mailed per email and client (IPv4 address or IPv6 /48) in 10 minutes and in 24 hours.
+    #[serde(rename = "magic_code_sends_per_10m")]
+    pub per_email_per_10m: u32,
+    #[serde(rename = "magic_code_sends_per_24h")]
+    pub per_email_per_24h: u32,
+    /// Codes mailed per client in 24 hours, to any emails: without it one client could mail
+    /// thousands of made-up addresses a day from the Lobby's SMTP account.
+    #[serde(rename = "magic_code_sends_per_client_per_24h")]
+    pub per_client_per_24h: u32,
+    /// Codes mailed per mailbox in 24 hours, from all clients together. `+tag` aliases count as
+    /// one mailbox, so many clients cannot bomb one inbox. A Member's own codes still go out.
+    #[serde(rename = "magic_code_sends_per_mailbox_per_24h")]
+    pub per_mailbox_per_24h: u32,
+    /// Codes mailed in 24 hours in all, so many clients together cannot use up the mail
+    /// provider's quota. A Member's own codes still go out, so keep it below that quota.
+    #[serde(rename = "magic_code_sends_per_lobby_per_24h")]
+    pub per_lobby_per_24h: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -216,11 +235,17 @@ impl Default for Config {
                 access_ttl: Duration::from_secs(15 * 60),
                 refresh_ttl: Duration::from_secs(30 * 24 * 3600),
                 magic_code_ttl: Duration::from_secs(10 * 60),
-                magic_code_sends_per_10m: 3,
-                magic_code_sends_per_24h: 10,
-                // A friend group behind one NAT signing in on a fresh server: a dozen friends on
-                // three devices need 36 codes, with room for a few resends.
-                magic_code_sends_per_client_per_24h: 50,
+                magic_code_sends: MagicCodeSends {
+                    per_email_per_10m: 3,
+                    per_email_per_24h: 10,
+                    // A friend group behind one NAT signing in on a fresh server: a dozen friends
+                    // on three devices need 36 codes, with room for a few resends.
+                    per_client_per_24h: 50,
+                    per_mailbox_per_24h: 20,
+                    // The first day of a dozen friends on three devices is 36 codes. Keep this
+                    // below the mail provider's daily quota (a free plan may allow 100).
+                    per_lobby_per_24h: 80,
+                },
                 bootstrap_email: String::new(),
                 join_requests_enabled: true,
             },
@@ -378,18 +403,21 @@ impl Config {
             self.sfu.tcp_advertise_port != Some(0),
             "sfu.tcp_advertise_port must not be 0",
         );
+        let sends = self.auth.magic_code_sends;
         for (name, cap) in [
-            (
-                "auth.magic_code_sends_per_10m",
-                self.auth.magic_code_sends_per_10m,
-            ),
-            (
-                "auth.magic_code_sends_per_24h",
-                self.auth.magic_code_sends_per_24h,
-            ),
+            ("auth.magic_code_sends_per_10m", sends.per_email_per_10m),
+            ("auth.magic_code_sends_per_24h", sends.per_email_per_24h),
             (
                 "auth.magic_code_sends_per_client_per_24h",
-                self.auth.magic_code_sends_per_client_per_24h,
+                sends.per_client_per_24h,
+            ),
+            (
+                "auth.magic_code_sends_per_mailbox_per_24h",
+                sends.per_mailbox_per_24h,
+            ),
+            (
+                "auth.magic_code_sends_per_lobby_per_24h",
+                sends.per_lobby_per_24h,
             ),
         ] {
             check(cap > 0, &format!("{name} must be greater than 0"));
@@ -544,6 +572,19 @@ mod tests {
             Ok(())
         });
         Jail::expect_with(|jail| {
+            // The Magic Code caps are flattened into `[auth]`, which still rejects a typo.
+            jail.set_env("LOBBY_AUTH__MAGIC_CODE_SENDS_PER_10M", "5");
+            let cfg = load_file(jail, VALID).unwrap();
+            assert_eq!(cfg.auth.magic_code_sends.per_email_per_10m, 5);
+            jail.set_env("LOBBY_AUTH__MAGIC_CODE_SENDS_PER_1OM", "5");
+            let err = load_file(jail, VALID).unwrap_err();
+            assert!(
+                err.to_string().contains("magic_code_sends_per_1om"),
+                "{err}"
+            );
+            Ok(())
+        });
+        Jail::expect_with(|jail| {
             jail.create_file("lobby.toml", VALID)?;
             let err = Config::load(&ConfigSource::File("lobby.toml".into()));
             assert!(err.is_ok(), "{err:?}");
@@ -575,6 +616,8 @@ mod tests {
                 magic_code_sends_per_10m = 0
                 magic_code_sends_per_24h = 0
                 magic_code_sends_per_client_per_24h = 0
+                magic_code_sends_per_mailbox_per_24h = 0
+                magic_code_sends_per_lobby_per_24h = 0
                 bootstrap_email = "not-an-email"
                 [sfu]
                 advertise_port = 0
@@ -592,6 +635,8 @@ mod tests {
                 "auth.magic_code_sends_per_10m must be greater than 0",
                 "auth.magic_code_sends_per_24h must be greater than 0",
                 "auth.magic_code_sends_per_client_per_24h must be greater than 0",
+                "auth.magic_code_sends_per_mailbox_per_24h must be greater than 0",
+                "auth.magic_code_sends_per_lobby_per_24h must be greater than 0",
                 "auth.access_ttl must be greater than 0",
                 "auth.refresh_ttl must be greater than 0",
                 "auth.magic_code_ttl must be greater than 0",

@@ -4,15 +4,16 @@
 //!
 //! Sessions go NotInVoice → Joining → Active → NotInVoice, with generations (`VoiceSessionId`), a
 //! 12 s join watchdog, a participant cap and mute. An Active session may share its screen (Pending
-//! until its video reaches the SFU, then Streaming and public) and watch one share. The join and
-//! unmute cooldowns are per Member and outlive a session and a reconnect.
+//! until its video reaches the SFU, then Streaming and public; a share Pending for 30 s ends the
+//! session) and watch one share. The join and unmute cooldowns are per Member and outlive a
+//! session and a reconnect.
 
 use std::{collections::HashMap, time::Duration};
 
 use lobby_protocol::{
     Ack, DrawingEpoch, InkBatch, InkRelay, Quality, Rid, RtcOffer, ScreenShare, Sdp, ServerMsg,
-    ShareId, SourceSize, UserId, VoiceEndReason, VoiceEnded, VoiceSessionId, VoiceState,
-    WatchDropped,
+    ShareId, ShareStart, SourceSize, UserId, VoiceEndReason, VoiceEnded, VoiceSessionId,
+    VoiceState, WatchDropped,
 };
 use tokio::time::Instant;
 
@@ -25,6 +26,9 @@ use crate::{
 
 /// A session still Joining this long after `VOICE_JOIN` is ended.
 pub const JOIN_WATCHDOG: Duration = Duration::from_secs(12);
+/// A Screen Share still Pending this long after `SCREEN_SHARE_START`, with no video at the SFU,
+/// ends the session the way a Joining one does. It holds one of the few sharer slots unseen.
+pub const SHARE_WATCHDOG: Duration = Duration::from_secs(30);
 /// The 5th real unmute or undeafen within 5 s is refused and starts a 10 s cooldown. Muting is
 /// never limited.
 pub const UNMUTE_LIMIT: usize = 5;
@@ -52,6 +56,8 @@ pub(crate) enum VoiceRefusal {
     JoinFailed,
     #[error("The connection timed out. Try joining again.")]
     Timeout,
+    #[error("Your Screen Share never started.")]
+    ShareTimeout,
     #[error("Not connected yet. Try again in a moment.")]
     NotConnected,
     #[error("Too many unmutes. Try again shortly.")]
@@ -82,6 +88,15 @@ impl VoiceRefusal {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ShareStage {
+    /// No video has reached the SFU yet. The session is ended at `deadline`.
+    Pending {
+        deadline: Instant,
+    },
+    Streaming,
+}
+
 /// A session's Screen Share. Pending until the SFU reports its first video frame, then
 /// Streaming: only a Streaming share shows in snapshots and can be watched. Every start gets a
 /// fresh `id`, a restart after a stop included.
@@ -90,7 +105,7 @@ struct Share {
     id: ShareId,
     audio: bool,
     source: Option<SourceSize>,
-    streaming: bool,
+    stage: ShareStage,
     /// "Let viewers draw". `epoch` moves with every change of it and of `source`, so ink drawn
     /// against an older state is stale; it is kept while drawing is off.
     drawing: bool,
@@ -99,13 +114,17 @@ struct Share {
 }
 
 impl Share {
+    fn streaming(&self) -> bool {
+        self.stage == ShareStage::Streaming
+    }
+
     fn advance_epoch(&mut self) {
         self.epoch = DrawingEpoch(self.epoch.0.wrapping_add(1));
     }
 
     /// Whether a batch drawn against `id` and `epoch` is current.
     fn takes_ink(&self, id: ShareId, epoch: DrawingEpoch) -> bool {
-        self.streaming && self.drawing && self.id == id && self.epoch == epoch
+        self.streaming() && self.drawing && self.id == id && self.epoch == epoch
     }
 }
 
@@ -128,6 +147,20 @@ struct Session {
     watching: Option<UserId>,
 }
 
+impl Session {
+    /// When the watchdog ends this session and what it tells the Member, if it is Joining or its
+    /// share is Pending.
+    fn watchdog(&self) -> Option<(Instant, VoiceRefusal)> {
+        match (self.phase, self.share.map(|share| share.stage)) {
+            (Phase::Joining { deadline }, _) => Some((deadline, VoiceRefusal::Timeout)),
+            (Phase::Active, Some(ShareStage::Pending { deadline })) => {
+                Some((deadline, VoiceRefusal::ShareTimeout))
+            }
+            (Phase::Active, _) => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum VoiceCommand {
     Join {
@@ -148,10 +181,7 @@ pub(crate) enum VoiceCommand {
     Restart {
         vsid: VoiceSessionId,
     },
-    ShareStart {
-        audio: bool,
-        quality: Quality,
-    },
+    ShareStart(ShareStart),
     /// `SCREEN_SHARE_SOURCE`: applies to the sender's current share.
     ShareSource(SourceSize),
     ShareStop,
@@ -265,7 +295,7 @@ impl VoiceMachine {
             muted: s.muted,
             deafened: s.deafened,
             speaking: s.speaking,
-            screen_share: s.share.filter(|sh| sh.streaming).map(|sh| ScreenShare {
+            screen_share: s.share.filter(Share::streaming).map(|sh| ScreenShare {
                 share_id: sh.id,
                 audio: sh.audio,
                 source: sh.source,
@@ -285,13 +315,8 @@ impl VoiceMachine {
     }
 
     pub fn next_deadline(&self) -> Option<Instant> {
-        self.sessions
-            .values()
-            .filter_map(|s| match s.phase {
-                Phase::Joining { deadline } => Some(deadline),
-                Phase::Active => None,
-            })
-            .min()
+        let deadlines = self.sessions.values().filter_map(Session::watchdog);
+        deadlines.map(|(deadline, _)| deadline).min()
     }
 
     #[cfg(any(test, feature = "test-support"))]
@@ -338,17 +363,16 @@ impl VoiceMachine {
                 self.end(&user, Some(VoiceEndReason::Failed), &mut fx);
             }
             VoiceInput::Tick => {
-                let expired: Vec<UserId> = self
+                let expired: Vec<(UserId, ConnId, VoiceRefusal)> = self
                     .sessions
                     .iter()
-                    .filter(
-                        |(_, s)| matches!(s.phase, Phase::Joining { deadline } if deadline <= now),
-                    )
-                    .map(|(user, _)| user.clone())
+                    .filter_map(|(user, s)| {
+                        let (deadline, refusal) = s.watchdog()?;
+                        (deadline <= now).then(|| (user.clone(), s.conn, refusal))
+                    })
                     .collect();
-                for user in expired {
-                    let conn = self.sessions[&user].conn;
-                    refuse(&mut fx, &user, conn, None, VoiceRefusal::Timeout);
+                for (user, conn, refusal) in expired {
+                    refuse(&mut fx, &user, conn, None, refusal);
                     self.end(&user, Some(VoiceEndReason::Timeout), &mut fx);
                 }
             }
@@ -480,9 +504,7 @@ impl VoiceMachine {
                 sfu(fx, &user, vsid, SfuOp::Restart);
                 ack(fx, &user, conn, rid);
             }
-            VoiceCommand::ShareStart { audio, quality } => {
-                self.share_start(user, conn, rid, audio, quality, fx)?;
-            }
+            VoiceCommand::ShareStart(start) => self.share_start(user, conn, rid, start, now, fx)?,
             VoiceCommand::ShareSource(size) => {
                 if let Some(s) = self.owned(&user, conn)
                     && let Some(share) = s.share.as_mut()
@@ -490,7 +512,7 @@ impl VoiceMachine {
                 {
                     share.source = Some(size);
                     share.advance_epoch();
-                    if share.streaming {
+                    if share.streaming() {
                         fx.push(VoiceEffect::MemberChanged(user.clone()));
                     }
                     let vsid = s.id;
@@ -504,7 +526,7 @@ impl VoiceMachine {
                 {
                     let vsid = s.id;
                     self.stop_watchers(&user);
-                    if share.streaming {
+                    if share.streaming() {
                         fx.push(VoiceEffect::MemberChanged(user.clone()));
                     }
                     sfu(fx, &user, vsid, SfuOp::StopShare);
@@ -527,7 +549,7 @@ impl VoiceMachine {
                 if share.drawing != enabled {
                     share.drawing = enabled;
                     share.advance_epoch();
-                    if share.streaming {
+                    if share.streaming() {
                         fx.push(VoiceEffect::MemberChanged(user.clone()));
                     }
                 }
@@ -590,8 +612,8 @@ impl VoiceMachine {
         user: UserId,
         conn: ConnId,
         rid: Option<Rid>,
-        audio: bool,
-        quality: Quality,
+        ShareStart { audio, quality }: ShareStart,
+        now: Instant,
         fx: &mut Vec<VoiceEffect>,
     ) -> Result<(), VoiceRefusal> {
         let sharers = self.sharers();
@@ -601,7 +623,7 @@ impl VoiceMachine {
         if let Some(share) = s.share.as_mut() {
             let changed = share.audio != audio;
             share.audio = audio;
-            if changed && share.streaming {
+            if changed && share.streaming() {
                 fx.push(VoiceEffect::MemberChanged(user.clone()));
             }
             ack(fx, &user, conn, rid);
@@ -614,7 +636,9 @@ impl VoiceMachine {
             id: fresh,
             audio,
             source: None,
-            streaming: false,
+            stage: ShareStage::Pending {
+                deadline: now + SHARE_WATCHDOG,
+            },
             drawing: false,
             epoch: DrawingEpoch(0),
             quality,
@@ -639,7 +663,7 @@ impl VoiceMachine {
         let streaming = self
             .sessions
             .get(&sharer)
-            .is_some_and(|s| s.share.is_some_and(|sh| sh.streaming));
+            .is_some_and(|s| s.share.is_some_and(|sh| sh.streaming()));
         let s = self.active(&user, conn).ok_or(VoiceRefusal::NotInVoice)?;
         if sharer == user {
             return Err(VoiceRefusal::WatchSelf);
@@ -716,9 +740,9 @@ impl VoiceMachine {
             SfuEventKind::Lost => self.end(&user, Some(VoiceEndReason::ConnectionLost), fx),
             SfuEventKind::ShareVideoStarted => {
                 if let Some(share) = s.share.as_mut()
-                    && !share.streaming
+                    && !share.streaming()
                 {
-                    share.streaming = true;
+                    share.stage = ShareStage::Streaming;
                     fx.push(VoiceEffect::MemberChanged(user));
                 }
             }

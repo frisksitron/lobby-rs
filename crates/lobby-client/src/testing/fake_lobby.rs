@@ -38,7 +38,13 @@ use crate::{HttpPolicy, LobbyOrigin};
 #[derive(Debug, Clone)]
 pub enum LobbyInfoReply {
     Ok,
-    Error { status: u16, code: ErrorCode },
+    Error {
+        status: u16,
+        code: ErrorCode,
+    },
+    /// The Lobby's info followed by blanks, one byte over what the client reads of a response:
+    /// it parses as it is if the size is not checked.
+    Oversized,
 }
 
 #[derive(Debug, Clone)]
@@ -442,6 +448,13 @@ async fn serve_lobby_info(mut stream: TcpStream, shared: &Shared) -> io::Result<
         }
         LobbyInfoReply::Error { status, code } => {
             respond(stream, *status, &envelope(*code, "scripted failure")).await
+        }
+        LobbyInfoReply::Oversized => {
+            let mut body =
+                serde_json::to_vec(&FakeLobby::lobby_info(shared.behavior.protocol_version))
+                    .expect("LobbyInfo serializes");
+            body.resize(crate::api::RESPONSE_MAX_BYTES + 1, b' ');
+            respond(stream, 200, &body).await
         }
     }
 }

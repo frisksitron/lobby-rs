@@ -120,11 +120,7 @@ pub async fn start(cfg: Config, sockets: Sockets) -> Result<RunningServer, Start
     .await
     .map_err(StartError::Sfu)?;
     mailer.check_reachable(&cfg.smtp);
-    let code_sends = Arc::new(CodeSends::new(
-        usize::try_from(cfg.auth.magic_code_sends_per_10m).unwrap_or(usize::MAX),
-        usize::try_from(cfg.auth.magic_code_sends_per_24h).unwrap_or(usize::MAX),
-        usize::try_from(cfg.auth.magic_code_sends_per_client_per_24h).unwrap_or(usize::MAX),
-    ));
+    let code_sends = Arc::new(CodeSends::new(cfg.auth.magic_code_sends));
     // After the last step that can fail, so a failed start leaves no writer task behind.
     let domain = Domain::start(
         Writer {
@@ -218,7 +214,7 @@ async fn load_seed(cfg: &Config, db: &Db) -> Result<Seed, DbError> {
             name: cfg.lobby.name.clone(),
             icon,
             upload_max_bytes: cfg.storage.upload_max_bytes,
-            magic_code_sends: cfg.auth.magic_code_sends_per_10m,
+            magic_code_sends: cfg.auth.magic_code_sends.per_email_per_10m,
             join_requests_enabled: cfg.auth.join_requests_enabled,
             set_up,
             owner,

@@ -129,7 +129,13 @@ impl Sfu {
             let next = self
                 .peers
                 .iter()
-                .flat_map(|p| [Some(p.next_timeout), p.dead_at(dead_peer), p.speaking_until])
+                .flat_map(|p| {
+                    [
+                        Some(p.next_timeout),
+                        p.dead_at(dead_peer),
+                        p.speech.expires_at(),
+                    ]
+                })
                 .flatten()
                 .min();
             // Windows timers round an elapsed deadline up to the next tick: handle it now.
@@ -211,7 +217,7 @@ impl Sfu {
                 p.muted = muted;
                 // The Lobby ends the Member's speaking with the mute itself.
                 if muted {
-                    p.speaking_until = None;
+                    p.speech.clear();
                 }
             }
             SfuOp::StartShare { quality } => {
@@ -321,7 +327,7 @@ impl Sfu {
     /// A Member whose voiced packets stopped coming (muted, DTX, loss) stops speaking.
     fn expire_speech(&mut self, now: Instant) {
         for p in &mut self.peers {
-            if p.speech_expired(now) && !p.closing {
+            if p.speech.expired(now) && !p.closing {
                 self.events.push(SfuEvent {
                     user: p.user.clone(),
                     vsid: p.vsid,
@@ -476,6 +482,7 @@ impl Sfu {
                 received = p.received,
                 forwarded = p.forwarded,
                 muted_dropped = p.muted_dropped,
+                over_budget_dropped = p.over_budget_dropped,
                 sharing = ?p.share_wanted.filter(|_| p.share.is_some()),
                 watching = ?p.watched(),
                 video_received = p.video_received,

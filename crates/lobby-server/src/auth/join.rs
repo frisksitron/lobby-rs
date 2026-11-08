@@ -2,12 +2,13 @@
 //! (bootstrap) or an Ask to Join; `domain::admission` decides which. An Ask to Join hands back a
 //! wait token, which `POST /api/v1/auth/join/status` turns into a session once a Member Vouches.
 
-use axum::{Json, extract::State};
+use axum::{Extension, Json, extract::State};
 use lobby_protocol::{JoinOutcome, JoinRequest, JoinStatus, JoinStatusRequest, UnixMs};
 
 use super::tokens;
 use crate::{
     auth::tokens::Minted,
+    client_ip::ClientIp,
     db::{
         DbError,
         admission::{self, WaitState},
@@ -19,10 +20,12 @@ use crate::{
 
 pub async fn join(
     State(app): State<App>,
+    Extension(client): Extension<ClientIp>,
     AppJson(req): AppJson<JoinRequest>,
 ) -> Result<Json<JoinOutcome>, ApiError> {
     let join = Join {
         ticket_hash: tokens::digest(req.ticket.expose()),
+        client,
         username: req.username,
         minted: Minted::new(UnixMs::now(), &app.cfg.auth),
     };

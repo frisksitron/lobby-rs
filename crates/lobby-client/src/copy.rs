@@ -25,6 +25,7 @@ pub const SIGNED_OUT_HERE: &str = "You were signed out here. Sign in again.";
 pub const REMOVED_FROM_LOBBY: &str = "You were removed from this Lobby.";
 pub const SIGNED_IN_ELSEWHERE: &str = "Signed in on another device";
 pub const NETWORK_ERROR: &str = "Network error. Check your connection.";
+pub const UNEXPECTED_RESPONSE: &str = "Unexpected response from the Lobby";
 /// The Lobby reconnects by itself, so there is nothing to ask the person to do.
 pub const NOT_CONNECTED: &str = "Not connected right now. Reconnecting by itself.";
 pub const COMPOSER_PLACEHOLDER: &str = "Message";
@@ -63,6 +64,7 @@ pub const FILE_UNREADABLE: &str = "The file couldn't be read.";
 pub const ATTACHMENT_GONE: &str = "No longer on the Lobby. Retry uploads it again.";
 pub const MEDIA_NOT_FOUND: &str = "This file is no longer on the Lobby.";
 pub const MEDIA_RATE_LIMITED: &str = "The Lobby is busy. Try again in a moment.";
+pub const MEDIA_TOO_LARGE: &str = "This file is larger than the Lobby said, so it was not saved.";
 pub const IMAGE_UNREADABLE: &str = "This image couldn't be shown.";
 pub const OPEN_NOT_ALLOWED: &str = "This type can only be saved.";
 

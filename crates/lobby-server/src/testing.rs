@@ -26,8 +26,14 @@ use tokio::{
 };
 use tokio_util::task::AbortOnDropHandle;
 
-pub use crate::domain::FRONT_DOOR_WRITES;
-use crate::{Config, RunningServer, ShutdownReport, Sockets, db::users::Profile, start};
+use crate::{
+    Config, RunningServer, ShutdownReport, Sockets, config::MagicCodeSends, db::users::Profile,
+    start,
+};
+pub use crate::{
+    domain::{FRONT_DOOR_WRITES, MAX_PENDING_PER_SITE},
+    jobs::PENDING_MAX_AGE,
+};
 
 const MAIL_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -46,9 +52,13 @@ pub fn test_config(data_dir: &Path) -> Config {
     cfg.shutdown_timeout = Duration::from_secs(5);
     // Tests sign many Members in from one address and one inbox; the limits have their own tests.
     cfg.http.rate_limits = false;
-    cfg.auth.magic_code_sends_per_10m = 1000;
-    cfg.auth.magic_code_sends_per_24h = 1000;
-    cfg.auth.magic_code_sends_per_client_per_24h = 1000;
+    cfg.auth.magic_code_sends = MagicCodeSends {
+        per_email_per_10m: 1000,
+        per_email_per_24h: 1000,
+        per_client_per_24h: 1000,
+        per_mailbox_per_24h: 1000,
+        per_lobby_per_24h: 1000,
+    };
     cfg
 }
 

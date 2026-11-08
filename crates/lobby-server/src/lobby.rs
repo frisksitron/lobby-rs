@@ -41,7 +41,7 @@ pub const REVOCATION_MEMORY: Duration = Duration::from_secs(60);
 #[derive(Clone)]
 pub struct Lobby {
     inner: Arc<Mutex<LobbyState>>,
-    /// A Join moved the earliest voice deadline: the jobs task re-reads it.
+    /// A command moved the earliest voice deadline closer: the jobs task re-reads it.
     voice_wakeup: Arc<Notify>,
 }
 
@@ -361,6 +361,18 @@ impl Lobby {
             .access_request_removed(id, AccessRequestOutcome::Declined, by, at);
     }
 
+    /// Requests dropped for waiting too long. The wire has no outcome for that and 0.1.0 clients
+    /// exist, so each goes out as declined by the owner; clients only drop the request.
+    pub fn access_requests_expired(&self, ids: &[AccessRequestId], at: UnixMs) {
+        let mut state = self.lock();
+        let Some(owner) = state.info.owner.clone() else {
+            return;
+        };
+        for id in ids {
+            state.access_request_removed(id, AccessRequestOutcome::Declined, &owner, at);
+        }
+    }
+
     /// A Vouch: `ACCESS_REQUEST_REMOVED{vouched_in}`, then the new Member's `MEMBER_UPSERT`, in one
     /// critical section.
     pub fn vouched_in(&self, id: &AccessRequestId, by: &UserId, at: UnixMs, profile: Profile) {
@@ -383,13 +395,13 @@ impl Lobby {
         cmd: VoiceCommand,
         now: Instant,
     ) {
-        let is_join = matches!(cmd, VoiceCommand::Join { .. });
-        {
+        let moved_closer = {
             let mut state = self.lock();
             if state.conn(user, conn).is_none() {
                 debug!(%user, conn = conn.0, "voice command from a connection that is gone");
                 return;
             }
+            let before = state.voice.next_deadline();
             state.voice_step(
                 VoiceInput::Cmd {
                     user: user.clone(),
@@ -399,8 +411,10 @@ impl Lobby {
                 },
                 now,
             );
-        }
-        if is_join {
+            let after = state.voice.next_deadline();
+            after.is_some_and(|at| before.is_none_or(|was| at < was))
+        };
+        if moved_closer {
             self.voice_wakeup.notify_one();
         }
     }
@@ -410,8 +424,8 @@ impl Lobby {
         self.lock().voice_step(VoiceInput::Sfu(ev), now);
     }
 
-    /// The join watchdog: ends sessions still Joining past their deadline and returns the next
-    /// deadline.
+    /// The Voice watchdogs: ends sessions still Joining, or with a Pending Screen Share, past
+    /// their deadline and returns the next deadline.
     pub fn tick_voice(&self, now: Instant) -> Option<Instant> {
         let mut state = self.lock();
         state.voice_step(VoiceInput::Tick, now);

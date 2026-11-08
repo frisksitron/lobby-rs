@@ -35,6 +35,9 @@ use crate::{
 pub(crate) const JSON_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 pub(crate) const UPLOAD_REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 const UPLOAD_CHUNK: usize = 64 * 1024;
+/// The most a response, or a WebSocket message, from the Lobby may weigh. The largest honest one
+/// is a page of 200 Messages of 8000 characters at their longest, about 10 MiB.
+pub(crate) const RESPONSE_MAX_BYTES: usize = 16 * 1024 * 1024;
 
 pub(crate) type Progress = Arc<dyn Fn(u64) + Send + Sync>;
 /// A token this close to expiry could lapse on its way to the server.
@@ -76,6 +79,11 @@ impl ApiError {
         }
     }
 
+    /// The Lobby answered with something this client cannot read.
+    fn unexpected(status: Option<u16>) -> Self {
+        Self::new(status, ApiKind::Decode, copy::UNEXPECTED_RESPONSE)
+    }
+
     fn session_expired() -> Self {
         Self::new(None, ApiKind::SessionExpired, copy::SESSION_EXPIRED)
     }
@@ -106,11 +114,7 @@ impl ApiError {
         if e.is_timeout() {
             Self::new(status, ApiKind::Timeout, "The request timed out")
         } else if e.is_decode() {
-            Self::new(
-                status,
-                ApiKind::Decode,
-                "Unexpected response from the Lobby",
-            )
+            Self::unexpected(status)
         } else {
             Self::new(status, ApiKind::Network, copy::NETWORK_ERROR)
         }
@@ -125,11 +129,7 @@ impl ApiError {
                 retry_after: error.retry_after_ms.map(Duration::from_millis),
                 detail: error.detail,
             },
-            Err(_) => Self::new(
-                Some(status.as_u16()),
-                ApiKind::Decode,
-                format!("Unexpected response from the Lobby (HTTP {status})"),
-            ),
+            Err(_) => Self::unexpected(Some(status.as_u16())),
         }
     }
 }
@@ -202,17 +202,11 @@ async fn json<T: DeserializeOwned>(req: RequestBuilder) -> Result<T, ApiError> {
         .await
         .map_err(|e| ApiError::from_reqwest(&e))?;
     let status = res.status();
-    let body = res.bytes().await.map_err(|e| ApiError::from_reqwest(&e))?;
+    let body = read_body(res).await?;
     if !status.is_success() {
         return Err(ApiError::from_error_response(status, &body));
     }
-    serde_json::from_slice(&body).map_err(|_| {
-        ApiError::new(
-            Some(status.as_u16()),
-            ApiKind::Decode,
-            "Unexpected response from the Lobby",
-        )
-    })
+    serde_json::from_slice(&body).map_err(|_| ApiError::unexpected(Some(status.as_u16())))
 }
 
 async fn empty(req: RequestBuilder) -> Result<(), ApiError> {
@@ -225,8 +219,22 @@ async fn empty(req: RequestBuilder) -> Result<(), ApiError> {
     if status.is_success() {
         return Ok(());
     }
-    let body = res.bytes().await.map_err(|e| ApiError::from_reqwest(&e))?;
+    let body = read_body(res).await?;
     Err(ApiError::from_error_response(status, &body))
+}
+
+/// The body of a response, read until it ends or passes [`RESPONSE_MAX_BYTES`]. A Lobby that
+/// sends more is not one this client can talk to, whatever its `Content-Length` says.
+pub(crate) async fn read_body(mut res: reqwest::Response) -> Result<Vec<u8>, ApiError> {
+    let mut body = Vec::new();
+    while let Some(chunk) = res.chunk().await.map_err(|e| ApiError::from_reqwest(&e))? {
+        if body.len() + chunk.len() > RESPONSE_MAX_BYTES {
+            warn!("response body over the size limit");
+            return Err(ApiError::unexpected(Some(res.status().as_u16())));
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body)
 }
 
 pub(crate) async fn request_magic_code(
@@ -647,10 +655,7 @@ impl ApiClient {
             .await
             .map_err(|e| UploadError::Api(ApiError::from_reqwest(&e)))?;
         let status = res.status();
-        let bytes = res
-            .bytes()
-            .await
-            .map_err(|e| UploadError::Api(ApiError::from_reqwest(&e)))?;
+        let bytes = read_body(res).await?;
         if status == StatusCode::PAYLOAD_TOO_LARGE {
             return Err(UploadError::TooLarge);
         }
@@ -659,13 +664,8 @@ impl ApiClient {
                 status, &bytes,
             )));
         }
-        serde_json::from_slice(&bytes).map_err(|_| {
-            UploadError::Api(ApiError::new(
-                Some(status.as_u16()),
-                ApiKind::Decode,
-                "Unexpected response from the Lobby",
-            ))
-        })
+        serde_json::from_slice(&bytes)
+            .map_err(|_| UploadError::Api(ApiError::unexpected(Some(status.as_u16()))))
     }
 }
 
@@ -725,7 +725,7 @@ mod tests {
     use super::*;
     use crate::{
         MemoryTokenStore, TokenStore as _,
-        testing::{FakeBehavior, FakeLobby, Observed, RefreshReply},
+        testing::{FakeBehavior, FakeLobby, LobbyInfoReply, Observed, RefreshReply},
     };
 
     fn expiring(tag: &str, access_in: Duration) -> SessionTokens {
@@ -802,5 +802,19 @@ mod tests {
                 "{reply:?}: {err:?}"
             );
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_response_over_the_size_limit_is_refused() {
+        let behavior = FakeBehavior {
+            lobby_info: LobbyInfoReply::Oversized,
+            ..FakeBehavior::default()
+        };
+        let fake = FakeLobby::start(behavior).await;
+        let err = lobby_info(&reqwest::Client::new(), &fake.origin())
+            .await
+            .unwrap_err();
+        assert_eq!(err.kind, ApiKind::Decode, "{err:?}");
+        assert_eq!(err.status, Some(200));
     }
 }

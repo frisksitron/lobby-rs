@@ -5,7 +5,11 @@
 use std::time::Duration;
 
 use crate::common::{admission::*, *};
-use lobby_server::testing::{TestServer, email_of};
+use lobby_protocol::UnixMs;
+use lobby_server::{
+    Config,
+    testing::{MAX_PENDING_PER_SITE, PENDING_MAX_AGE, TestServer, email_of},
+};
 use serde_json::json;
 
 const ADMIN: &str = "admin@lobby.test";
@@ -48,7 +52,7 @@ async fn the_bootstrap_email_sets_the_lobby_up_and_its_next_code_signs_it_in() {
     );
     let tokens = &again["session"]["tokens"];
     assert_eq!(tokens["accessToken"].as_str().unwrap().len(), 43);
-    let access_ttl = tokens["accessExpiresAt"].as_i64().unwrap() - lobby_protocol::UnixMs::now().0;
+    let access_ttl = tokens["accessExpiresAt"].as_i64().unwrap() - UnixMs::now().0;
     assert!((890_000..=900_000).contains(&access_ttl), "{access_ttl}");
 
     let early = ticket(&env, "early@lobby.test", "ask_to_join").await;
@@ -169,18 +173,25 @@ async fn ask_to_join_vouch_and_decline_reach_every_member_in_order() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn only_so_many_requests_wait_for_a_vouch_at_once() {
-    let env = TestServer::start_with_members(&["alice"], |_| {}).await;
+    let env = TestServer::start_with_members(&["alice"], behind_proxy).await;
     let (mut a, _) = identify(&env.ws_url(), &access(&sign_in(&env, "alice").await)).await;
+    let sites = (0..=20)
+        .map(|n| format!("198.51.100.{n}"))
+        .collect::<Vec<_>>();
     let mut first = String::new();
-    for n in 0..20 {
-        let (id, _) = ask_to_join(&env, &format!("guest{n}"), &mut a).await;
+    for (n, site) in sites[..20].iter().enumerate() {
+        let (name, device) = (format!("guest{n}"), Device { ip: site });
+        let (id, _) = ask_to_join_from(&env, &device, &email_of(&name), &name, &mut a).await;
         if n == 0 {
             first = id;
         }
     }
-    let late = ticket(&env, &email_of("late"), "ask_to_join").await;
+    let (late, device) = (
+        ticket(&env, &email_of("late"), "ask_to_join").await,
+        Device { ip: &sites[20] },
+    );
     assert_message(
-        &join(&env, &late, "late").await,
+        &device.join(&env, &late, "late").await,
         503,
         "LIMIT_REACHED",
         "Too many people are waiting to join. Try again later.",
@@ -190,10 +201,67 @@ async fn only_so_many_requests_wait_for_a_vouch_at_once() {
     let path = format!("/api/v1/access-requests/{first}/decline");
     assert_eq!(post_auth(&env, &path, &alice, &json!({})).await.status, 204);
     assert_eq!(
-        join(&env, &late, "late").await.status,
+        device.join(&env, &late, "late").await.status,
         200,
         "a place is free"
     );
+    assert!(env.shutdown().await.is_clean());
+}
+
+/// One site and one mailbox hold a few places each, not all of them, and a request that waits too
+/// long is dropped, so a stranger who stops asking does not hold a place for good.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn one_site_or_mailbox_cannot_fill_the_places_and_stale_requests_expire() {
+    let env = TestServer::start_with_members(&["alice"], behind_proxy).await;
+    let (mut a, _) = identify(&env.ws_url(), &access(&sign_in(&env, "alice").await)).await;
+    let (site, other, third) = (
+        Device { ip: "203.0.113.9" },
+        Device { ip: "203.0.113.10" },
+        Device { ip: "203.0.113.11" },
+    );
+    let mut waits = Vec::new();
+    for n in 0..MAX_PENDING_PER_SITE {
+        let name = format!("guest{n}");
+        let (_, wait) = ask_to_join_from(&env, &site, &email_of(&name), &name, &mut a).await;
+        waits.push(wait);
+    }
+    let late = ticket(&env, &email_of("late"), "ask_to_join").await;
+    let full = "Too many people are waiting to join. Try again later.";
+    assert_message(
+        &site.join(&env, &late, "late").await,
+        503,
+        "LIMIT_REACHED",
+        full,
+    );
+    // Another site is not held back, and the refused ticket was not spent.
+    assert_eq!(other.join(&env, &late, "late").await.status, 200);
+    next_of(&mut a, "ACCESS_REQUEST_UPSERT").await;
+
+    for (n, email) in ["box+one@lobby.test", "box+two@lobby.test"]
+        .into_iter()
+        .enumerate()
+    {
+        ask_to_join_from(&env, &third, email, &format!("box{n}"), &mut a).await;
+    }
+    let tagged = ticket(&env, "box+three@lobby.test", "ask_to_join").await;
+    assert_message(
+        &third.join(&env, &tagged, "box2").await,
+        503,
+        "LIMIT_REACHED",
+        full,
+    );
+
+    let waiting_for = Duration::from_secs(60);
+    let kept = UnixMs::now().saturating_add(PENDING_MAX_AGE - waiting_for);
+    assert_eq!(env.run_cleanup_at(kept).await.stale_requests, 0);
+    let stale = UnixMs::now().saturating_add(PENDING_MAX_AGE + waiting_for);
+    let waiting = MAX_PENDING_PER_SITE as u64 + 3;
+    assert_eq!(env.run_cleanup_at(stale).await.stale_requests, waiting);
+    for _ in 0..waiting {
+        next_of(&mut a, "ACCESS_REQUEST_REMOVED").await;
+    }
+    assert_envelope(&join_status(&env, &waits[0]).await, 401, "AUTH_FAILED");
+    ask_to_join_from(&env, &site, &email_of("again"), "again", &mut a).await;
     assert!(env.shutdown().await.is_clean());
 }
 
@@ -314,8 +382,10 @@ async fn each_request_is_named_in_its_answer_and_in_its_mail() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn codes_are_capped_per_email_and_client_and_each_challenge_takes_five_guesses() {
-    let env =
-        TestServer::start_with_members(&["alice"], |c| c.auth.magic_code_sends_per_10m = 3).await;
+    let env = TestServer::start_with_members(&["alice"], |c| {
+        c.auth.magic_code_sends.per_email_per_10m = 3;
+    })
+    .await;
     let carol = "carol@lobby.test";
     let first = request_code(&env, carol).await;
     request_code(&env, carol).await;
@@ -381,7 +451,7 @@ async fn codes_are_capped_per_email_and_client_and_each_challenge_takes_five_gue
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn one_client_mails_codes_to_a_capped_number_of_emails_a_day() {
     let env = TestServer::start_with_members(&["alice"], |c| {
-        c.auth.magic_code_sends_per_client_per_24h = 3;
+        c.auth.magic_code_sends.per_client_per_24h = 3;
     })
     .await;
     for made_up in ["x1@lobby.test", "x2@lobby.test", "x3@lobby.test"] {
@@ -408,8 +478,41 @@ async fn one_client_mails_codes_to_a_capped_number_of_emails_a_day() {
 const STRANGER: Device = Device { ip: "203.0.113.9" };
 const CAROL: Device = Device { ip: "198.51.100.7" };
 
-fn behind_proxy(c: &mut lobby_server::config::Config) {
+fn behind_proxy(c: &mut Config) {
     c.http.trusted_proxy_cidrs = vec!["127.0.0.1/32".parse().unwrap()];
+}
+
+/// Many clients cannot bomb one inbox through `+tag` aliases, nor use up the mail provider's
+/// quota between them. Past those caps a stranger's request is answered like any other with
+/// nothing mailed, and a Member's code still goes out.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn codes_are_capped_per_mailbox_and_in_all_across_clients() {
+    let env = TestServer::start_with_members(&["alice"], |c| {
+        behind_proxy(c);
+        c.auth.magic_code_sends.per_mailbox_per_24h = 2;
+        c.auth.magic_code_sends.per_lobby_per_24h = 4;
+    })
+    .await;
+    let sources = (1..=5)
+        .map(|n| format!("198.51.100.{n}"))
+        .collect::<Vec<_>>();
+    let from = |n: usize| Device { ip: &sources[n] };
+    from(0).ask(&env, "carol+a@lobby.test").await;
+    from(1).ask(&env, "Carol+b@lobby.test").await;
+    from(2).ask(&env, "carol@lobby.test").await;
+    from(2).ask(&env, "dave@lobby.test").await;
+    from(3).ask(&env, "eve@lobby.test").await;
+    from(4).ask(&env, "frank@lobby.test").await;
+
+    let alice = email_of("alice");
+    let asked = from(4).ask(&env, &alice).await;
+    let code = env.mail.code_number(&alice, 1).await;
+    let res = from(4).verify(&env, &asked, &code).await;
+    assert_eq!(res.json()["next"], "session", "{}", res.body);
+
+    assert_eq!(env.mail.count_to("carol@lobby.test"), 0);
+    assert_eq!(env.mail.count_to("frank@lobby.test"), 0);
+    assert!(env.shutdown().await.is_clean());
 }
 
 /// A stranger who asks for codes to Carol's email and guesses at them neither spends nor replaces
@@ -432,24 +535,38 @@ async fn a_stranger_cannot_burn_or_replace_a_members_code() {
     assert!(env.shutdown().await.is_clean());
 }
 
-/// A stranger who fills the email's sends and spends a day's worth of wrong guesses on them does
-/// not stop a code reaching Carol, nor her verify.
+/// Under the shipped caps, strangers who fill a Member's mailbox and the Lobby's day of mail and
+/// spend wrong guesses on those codes do not stop a code reaching her, nor her verify.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_strangers_requests_and_guesses_do_not_lock_the_member_out() {
-    let env = TestServer::start_with_members(&["alice"], behind_proxy).await;
-    let carol = "carol@lobby.test";
-    for n in 1..=3 {
-        let theirs = STRANGER.ask(&env, carol).await;
-        let wrong = wrong_code(&env.mail.code_number(carol, n).await);
-        for _ in 0..5 {
-            let res = STRANGER.verify(&env, &theirs, &wrong).await;
-            assert_envelope(&res, 401, "AUTH_FAILED");
+    let caps = Config::default().auth.magic_code_sends;
+    let env = TestServer::start_with_members(&["alice"], |c| {
+        behind_proxy(c);
+        c.auth.magic_code_sends = caps;
+    })
+    .await;
+    for n in 0..caps.per_lobby_per_24h {
+        let ip = format!("10.1.{}.{}", n / 200, n % 200 + 1);
+        let stranger = Device { ip: &ip };
+        let email = if n < caps.per_mailbox_per_24h {
+            format!("alice+{n}@lobby.test")
+        } else {
+            format!("made-up{n}@lobby.test")
+        };
+        let theirs = stranger.ask(&env, &email).await;
+        if n < 3 {
+            let wrong = wrong_code(&env.mail.code_number(&email, 1).await);
+            for _ in 0..5 {
+                let res = stranger.verify(&env, &theirs, &wrong).await;
+                assert_envelope(&res, 401, "AUTH_FAILED");
+            }
         }
     }
-    let mine = CAROL.ask(&env, carol).await;
-    let code = env.mail.code_number(carol, 4).await;
+    let alice = email_of("alice");
+    let mine = CAROL.ask(&env, &alice).await;
+    let code = env.mail.code_number(&alice, 1).await;
     let res = CAROL.verify(&env, &mine, &code).await;
-    assert_eq!(res.status, 200, "{}", res.body);
+    assert_eq!(res.json()["next"], "session", "{}", res.body);
     assert!(env.shutdown().await.is_clean());
 }
 

@@ -19,4 +19,3 @@ pub const INK_POINTS_MAX: usize = 64;
 /// JSON request bodies on every non-upload REST route.
 pub const JSON_BODY_MAX_BYTES: usize = 64 * 1024;
 pub const IMAGE_MAX_EDGE: u32 = 16_384;
-pub const IMAGE_MAX_ALLOC: u64 = 256 * 1024 * 1024;

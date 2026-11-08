@@ -41,7 +41,7 @@ pub(crate) fn voice(refusal: &VoiceRefusal, rid: Option<Rid>, now: Instant) -> E
         }
         VoiceRefusal::VoiceFull | VoiceRefusal::ShareLimit => ErrorCode::LimitReached,
         VoiceRefusal::JoinFailed => ErrorCode::VoiceJoinFailed,
-        VoiceRefusal::Timeout => ErrorCode::VoiceNegotiationTimeout,
+        VoiceRefusal::Timeout | VoiceRefusal::ShareTimeout => ErrorCode::VoiceNegotiationTimeout,
         VoiceRefusal::UnmuteCooldown(_) => ErrorCode::VoiceStateCooldown,
         VoiceRefusal::StaleAnswer | VoiceRefusal::RestartInvalid => {
             ErrorCode::VoiceNegotiationInvalidState
@@ -94,6 +94,10 @@ mod tests {
             (VoiceRefusal::ShareLimit, ErrorCode::LimitReached),
             (VoiceRefusal::JoinFailed, ErrorCode::VoiceJoinFailed),
             (VoiceRefusal::Timeout, ErrorCode::VoiceNegotiationTimeout),
+            (
+                VoiceRefusal::ShareTimeout,
+                ErrorCode::VoiceNegotiationTimeout,
+            ),
             (
                 VoiceRefusal::StaleAnswer,
                 ErrorCode::VoiceNegotiationInvalidState,

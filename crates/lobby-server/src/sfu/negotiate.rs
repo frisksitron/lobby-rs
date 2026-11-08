@@ -24,8 +24,10 @@ use super::{
     SfuEvent, SfuEventKind,
     bitrate::AudioRate,
     event_loop::Sfu,
+    ingress::AudioBudget,
     peer::{Downlink, DownlinkSource, Peer, ShareUplink, Shows, WATCH_LINES, WatchDownlink},
     restart::IceRestart,
+    speech::Speech,
 };
 
 /// Frame-mode reordering on every `Rtc`: str0m's defaults would stall forwarding behind every lost
@@ -152,7 +154,7 @@ impl Sfu {
             connected: false,
             rejoined,
             muted,
-            speaking_until: None,
+            speech: Speech::default(),
             closing: false,
             uplink,
             downlinks,
@@ -170,6 +172,8 @@ impl Sfu {
             received: 0,
             forwarded: 0,
             muted_dropped: 0,
+            audio_in: AudioBudget::new(),
+            over_budget_dropped: 0,
             video_received: 0,
             video_forwarded: 0,
             keyframe_requests: 0,

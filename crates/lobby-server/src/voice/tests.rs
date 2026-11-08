@@ -385,10 +385,10 @@ fn video_started(u: &UserId, v: VoiceSessionId) -> VoiceInput {
 }
 
 fn share_start() -> VoiceCommand {
-    VoiceCommand::ShareStart {
+    VoiceCommand::ShareStart(ShareStart {
         audio: false,
         quality: Quality::UpTo2160,
-    }
+    })
 }
 
 fn watch(sharer: &UserId) -> VoiceCommand {
@@ -476,6 +476,43 @@ fn stopping_a_share_or_leaving_voice_ends_it_for_every_viewer() {
     assert_eq!(sfu_cmds(&fx), [&sfu_cmd(&a, va, SfuOp::Leave)]);
     assert_eq!(m.watching(&b), None);
     assert_eq!(m.view(&a), None);
+}
+
+#[test]
+fn a_share_still_pending_at_its_watchdog_ends_the_session_and_frees_the_slot() {
+    let mut m = VoiceMachine::new(caps(25));
+    let (a, b) = (user(1), user(2));
+    let now = Instant::now();
+    let va = active(&mut m, &a, now);
+    let vb = active(&mut m, &b, now);
+    assert_eq!(m.next_deadline(), None);
+    m.step(cmd(&a, 1, "s", share_start()), now);
+    m.step(cmd(&b, 1, "s", share_start()), now);
+    m.step(video_started(&b, vb), now);
+    assert_eq!(m.sharers(), 2);
+    assert_eq!(m.next_deadline(), Some(now + SHARE_WATCHDOG));
+
+    let fx = m.step(
+        VoiceInput::Tick,
+        now + SHARE_WATCHDOG - Duration::from_secs(1),
+    );
+    assert!(fx.is_empty());
+    let fx = m.step(VoiceInput::Tick, now + SHARE_WATCHDOG);
+    assert_eq!(sfu_cmds(&fx), [&sfu_cmd(&a, va, SfuOp::Leave)]);
+    assert!(frames(&fx).contains(&("VOICE_ENDED", None)), "{fx:?}");
+    assert!(
+        fx.iter().any(|e| matches!(
+            e,
+            VoiceEffect::Refused {
+                refusal: VoiceRefusal::ShareTimeout,
+                ..
+            }
+        )),
+        "{fx:?}"
+    );
+    assert_eq!(m.view(&a), None);
+    assert_eq!(m.sharers(), 1, "only the share that streams is left");
+    assert_eq!(m.next_deadline(), None);
 }
 
 fn source(width: u32, height: u32) -> SourceSize {
