@@ -1,0 +1,11 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "enabled": true
+  },
+  "rid": "d1",
+  "t": "DRAWING_SET"
+}

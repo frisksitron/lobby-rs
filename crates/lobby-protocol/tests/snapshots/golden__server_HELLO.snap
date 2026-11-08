@@ -1,0 +1,13 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "heartbeatMs": 10000,
+    "identifyTimeoutMs": 10000,
+    "protocolVersion": 1,
+    "serverVersion": "0.1.0"
+  },
+  "t": "HELLO"
+}

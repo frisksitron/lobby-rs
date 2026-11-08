@@ -1,0 +1,5 @@
+# Negative fixture for `cargo xtask check-deps`: `installer` turns on lobby-desktop's
+# `automation` feature through a normal dependency, which would ship it.
+[workspace]
+resolver = "3"
+members = ["lobby-desktop", "installer"]

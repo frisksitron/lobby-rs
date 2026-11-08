@@ -1,0 +1,8 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "rid": "s2",
+  "t": "SCREEN_SHARE_STOP"
+}

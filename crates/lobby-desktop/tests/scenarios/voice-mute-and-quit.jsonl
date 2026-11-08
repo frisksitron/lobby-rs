@@ -1,0 +1,34 @@
+{"scenario": "Mute shows on both clients; quitting while In Voice leaves Voice for everyone", "clients": ["a", "b"], "members": ["alice", "bob"]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"on": "a", "click": "voice-mute"}
+{"expect": {"path": "/lobby/voice", "contains": {"muted": true}}}
+{"wait": {"path": "/lobby/members/alice/muted", "eq": true}}
+{"on": "b", "wait": {"path": "/lobby/members/alice/muted", "eq": true}}
+{"shot": "alice-muted", "id": "voice-section"}
+{"on": "a", "click": "voice-mute"}
+{"on": "b", "wait": {"path": "/lobby/members/alice/muted", "eq": false}}
+// Quit (Ctrl+Q) while In Voice: bob sees alice leave Voice and go offline.
+{"close": "a"}
+{"wait": {"all": [{"path": "/lobby/members/alice/in_voice", "eq": false}, {"path": "/lobby/members/alice/presence", "eq": "offline"}, {"path": "/lobby/voice_count", "eq": 1}]}}
+// Ctrl+C on the server with bob In Voice: the restart's ShutdownReport must be clean.
+{"server": "restart"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 8000}

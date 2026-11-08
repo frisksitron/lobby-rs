@@ -1,0 +1,45 @@
+{"scenario": "The owner removes a Member from their panel, asked once more: the Member's client lands on Sign In saying so, and their Messages stay, marked as by someone who left", "clients": ["a", "b"], "members": ["alice", "bob"]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"type": "hello from bob", "into": "composer"}
+{"press": "enter"}
+{"wait": {"path": "/lobby/feed", "contains": {"text": "hello from bob", "pending": false}}}
+// alice set the Lobby up, so she owns it, and only she.
+{"on": "a", "wait": {"path": "/lobby/chat/rows", "contains": {"text": "hello from bob", "deactivated": false}}}
+{"expect": {"all": [{"path": "/lobby/members/alice/owner", "eq": true}, {"path": "/lobby/members/bob/owner", "eq": false}]}}
+{"shot": "member-list", "id": "members"}
+{"right_click": "member-alice"}
+{"wait": {"visible": "sign-out"}, "timeout_ms": 2000}
+{"expect": {"all": [{"gone": "remove-member"}, {"path": "/lobby/member_panel/own/dnd", "eq": false}, {"path": "/lobby/member_panel/own/email", "eq": "alice@lobby.test"}]}}
+{"shot": "own-panel"}
+{"press": "escape"}
+{"wait": {"gone": "sign-out"}, "timeout_ms": 2000}
+{"right_click": "member-bob"}
+{"wait": {"visible": "remove-member"}, "timeout_ms": 2000}
+{"expect": {"all": [{"visible": "make-owner"}, {"gone": "sign-out"}, {"path": "/lobby/member_panel/user", "eq": "bob"}, {"path": "/lobby/member_panel/owner", "eq": false}]}}
+{"shot": "owner-panel"}
+{"click": "remove-member"}
+{"wait": {"visible": "confirm-remove"}, "timeout_ms": 2000}
+{"shot": "remove-confirm"}
+{"click": "confirm-remove"}
+{"wait": {"path": "/lobby/members/bob", "exists": false}, "timeout_ms": 5000}
+{"wait": {"gone": "confirm-remove"}, "timeout_ms": 2000}
+{"wait": {"path": "/lobby/chat/rows", "contains": {"text": "hello from bob", "deactivated": true}}, "timeout_ms": 2000}
+{"shot": "after-removal"}
+{"on": "b", "wait": {"path": "/auth/step", "eq": "Email"}, "timeout_ms": 5000}
+{"expect": {"all": [{"path": "/route", "eq": "SignIn"}, {"path": "/auth/feedback/text", "eq": "You were removed from this Lobby."}]}}
+{"shot": "removed", "id": "auth"}

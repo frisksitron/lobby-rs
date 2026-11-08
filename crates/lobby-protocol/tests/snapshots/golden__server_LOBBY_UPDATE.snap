@@ -1,0 +1,21 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "lobby": {
+      "icon": "blb_2582c529769d2a353bd49743",
+      "instanceId": "lby_5f0e7a9c1b2d3e4f5a6b7c8d",
+      "joinRequestsEnabled": true,
+      "magicCodeSends": 3,
+      "name": "Friends",
+      "owner": "usr_0a1b2c3d4e5f60718293a4b5",
+      "protocolVersion": 1,
+      "serverVersion": "0.1.0",
+      "setUp": true,
+      "uploadMaxBytes": 10485760
+    }
+  },
+  "t": "LOBBY_UPDATE"
+}

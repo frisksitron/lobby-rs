@@ -1,0 +1,40 @@
+{"scenario": "Messages appear on both clients in one order; markup stays text", "clients": ["a", "b"], "members": ["alice", "bob"]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "a", "type": "hello from alice", "into": "composer"}
+{"press": "enter"}
+{"wait": {"path": "/lobby/feed", "contains": {"author": "alice", "text": "hello from alice", "pending": false}}}
+{"expect": {"path": "/lobby/composer", "eq": ""}}
+// A Message's menu copies its text.
+{"right_click": "row-m1"}
+{"click": "menu-copy-message"}
+{"wait": {"path": "/clipboard", "eq": "hello from alice"}}
+{"on": "b", "wait": {"path": "/lobby/feed", "contains": {"author": "alice", "text": "hello from alice"}}, "timeout_ms": 2000}
+{"type": "<script>alert(1)</script>", "into": "composer"}
+{"press": "enter"}
+{"wait": {"path": "/lobby/feed", "contains": {"author": "bob", "text": "<script>alert(1)</script>", "pending": false}}}
+{"on": "a", "wait": {"path": "/lobby/feed/1", "eq": {"author": "bob", "text": "<script>alert(1)</script>", "pending": false}}, "timeout_ms": 2000}
+// Shift+Enter is a new line, not a send.
+{"type": "two", "into": "composer"}
+{"press": "shift-enter"}
+{"type": "lines"}
+{"expect": {"path": "/lobby/composer", "eq": "two\nlines"}}
+{"press": "enter"}
+{"on": "b", "wait": {"path": "/lobby/feed/2/text", "eq": "two\nlines"}, "timeout_ms": 2000}
+{"expect": {"path": "/lobby/feed", "len": 3}}
+{"on": "a", "expect": {"path": "/lobby/feed/0/text", "eq": "hello from alice"}}
+{"shot": "feed", "id": "feed"}

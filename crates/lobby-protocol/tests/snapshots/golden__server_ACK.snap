@@ -1,0 +1,11 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "accessExpiresAt": 1792751145123,
+    "rid": "r7"
+  },
+  "t": "ACK"
+}

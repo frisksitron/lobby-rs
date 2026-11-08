@@ -1,0 +1,65 @@
+{"scenario": "At 480x400 every onboarding step fits with the longest Lobby name and email: its column, controls and feedback line all show", "clients": ["a", "b", "c"], "members": [], "lobby_name": "The Friday Night Board Game and Pizza Club", "bootstrap_email": "carol.marie.van.der.berg-lindqvist@friends-of-the-lobby.example", "join_requests": true, "size": [480, 400]}
+// Connect, then a refused address.
+{"on": "a", "expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "lobby-url", "of": "auth"}, {"inside": "connect", "of": "auth"}, {"inside": "error", "of": "auth"}]}}
+{"type": "not a lobby!", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/url_step/error", "ne": null}, "timeout_ms": 5000}
+{"expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "error", "of": "auth"}]}}
+// Nobody has set the Lobby up: an email that is not the owner's finds it closed.
+{"on": "c", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}, "timeout_ms": 10000}
+{"type": "early.bird.van.der.berg-lindqvist@friends-of-the-lobby.example", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:early.bird.van.der.berg-lindqvist@friends-of-the-lobby.example}", "into": "code-input"}
+{"wait": {"path": "/auth/step", "eq": "Closed"}, "timeout_ms": 5000}
+{"expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "closed-back", "of": "auth"}]}}
+// The owner's email: Email with an error, Code with a wrong code, then Name with an error.
+{"on": "a", "click": "lobby-url"}
+{"press": "ctrl-a"}
+{"type": "{lobby}"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}, "timeout_ms": 5000}
+{"expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "email", "of": "auth"}, {"inside": "send-code", "of": "auth"}, {"inside": "error", "of": "auth"}]}}
+{"type": "carol@", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/feedback/tone", "eq": "error"}, "timeout_ms": 5000}
+{"expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "error", "of": "auth"}]}}
+{"click": "email"}
+{"press": "ctrl-a"}
+{"type": "carol.marie.van.der.berg-lindqvist@friends-of-the-lobby.example"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "code-input", "of": "auth"}, {"inside": "resend-code", "of": "auth"}, {"inside": "error", "of": "auth"}]}}
+{"type": "00000000", "into": "code-input"}
+{"wait": {"path": "/auth/feedback/tone", "eq": "error"}, "timeout_ms": 5000}
+{"expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "error", "of": "auth"}]}}
+{"advance": 700}
+{"type": "{code:carol.marie.van.der.berg-lindqvist@friends-of-the-lobby.example}", "into": "code-input"}
+{"wait": {"path": "/auth/step", "eq": "Name"}, "timeout_ms": 5000}
+{"expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "name", "of": "auth"}, {"inside": "join", "of": "auth"}, {"inside": "error", "of": "auth"}]}}
+{"click": "name"}
+{"press": "ctrl-a"}
+{"type": "c"}
+{"press": "enter"}
+{"wait": {"path": "/auth/feedback/tone", "eq": "error"}, "timeout_ms": 5000}
+{"expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "join", "of": "auth"}, {"inside": "error", "of": "auth"}]}}
+{"click": "name"}
+{"press": "ctrl-a"}
+{"type": "carol"}
+{"press": "enter"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+// Another long email asks to join, and waits.
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}, "timeout_ms": 10000}
+{"type": "dana.marie.van.der.berg-lindqvist@friends-of-the-lobby.example", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:dana.marie.van.der.berg-lindqvist@friends-of-the-lobby.example}", "into": "code-input"}
+{"wait": {"path": "/auth/step", "eq": "Name"}, "timeout_ms": 5000}
+{"expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "name", "of": "auth"}, {"inside": "join", "of": "auth"}, {"inside": "error", "of": "auth"}]}}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "AwaitingVouch"}, "timeout_ms": 5000}
+{"expect": {"all": [{"inside": "auth-column", "of": "auth"}, {"inside": "check-again", "of": "auth"}, {"inside": "other-email", "of": "auth"}, {"inside": "error", "of": "auth"}]}}

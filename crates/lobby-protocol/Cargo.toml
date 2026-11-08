@@ -1,0 +1,26 @@
+[package]
+name = "lobby-protocol"
+description = "Lobby wire and domain types. No IO."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# Id generation. Only the server mints ids, so clients never pull in `rand`.
+rand = ["dep:rand"]
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+markdown.workspace = true
+thiserror.workspace = true
+rand = { workspace = true, optional = true }
+
+[dev-dependencies]
+lobby-protocol = { path = ".", features = ["rand"] }
+insta.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,7 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "refreshToken": "r9AdYVwUr1o4p1c7t2R3sB"
+}

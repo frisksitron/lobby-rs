@@ -1,0 +1,34 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "rev": 2,
+    "sdp": "v=0\r\no=str0m-1 1 2 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\na=ice-lite\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=ice-ufrag:Hq5G\r\na=ice-pwd:Tk7uYb3vXq9pLm2Rz8Wc4Nd6\r\na=mid:0\r\na=sendrecv\r\n",
+    "tracks": [
+      {
+        "mid": "0",
+        "purpose": "voice-audio",
+        "userId": "usr_9f0e7a9c1b2d3e4f5a6b7c8d"
+      },
+      {
+        "mid": "1",
+        "purpose": "voice-audio",
+        "userId": "usr_0a1b2c3d4e5f60718293a4b5"
+      },
+      {
+        "mid": "2",
+        "purpose": "screen-video",
+        "userId": "usr_9f0e7a9c1b2d3e4f5a6b7c8d"
+      },
+      {
+        "mid": "3",
+        "purpose": "watch-video",
+        "userId": "usr_0a1b2c3d4e5f60718293a4b5"
+      }
+    ],
+    "voiceSessionId": 17
+  },
+  "t": "RTC_OFFER"
+}

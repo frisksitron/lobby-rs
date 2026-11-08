@@ -1,0 +1,31 @@
+{"scenario": "The server goes away and comes back: Reconnecting, then the Lobby with its history", "clients": ["a", "b"], "members": ["alice", "bob"]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"type": "before the restart", "into": "composer"}
+{"press": "enter"}
+{"on": "a", "wait": {"path": "/lobby/feed", "contains": {"text": "before the restart"}}}
+// Ctrl+C on the server; its ShutdownReport must be clean.
+{"server": "stop"}
+{"wait": {"path": "/lobby/connection", "contains": {"title": "Connection lost", "action": "Try now"}}, "timeout_ms": 3000}
+{"on": "b", "wait": {"path": "/lobby/connection/title", "eq": "Connection lost"}, "timeout_ms": 3000}
+{"on": "a", "shot": "reconnecting", "id": "title-bar"}
+{"server": "start"}
+// Back by itself, no click.
+{"wait": {"path": "/lobby/connection", "eq": null}, "timeout_ms": 8000}
+{"on": "b", "wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 8000}
+{"on": "a", "expect": {"path": "/lobby/feed", "contains": {"author": "bob", "text": "before the restart"}}}
+{"wait": {"path": "/lobby/members/bob/presence", "eq": "online"}}

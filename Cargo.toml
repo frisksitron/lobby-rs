@@ -1,0 +1,179 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+# The check-deps negative fixture is its own workspace; vendored patches are not ours to lint.
+exclude = ["xtask/fixtures", "vendor"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "AGPL-3.0-only"
+publish = false
+repository = "https://github.com/frisksitron/lobby-rs"
+
+[workspace.dependencies]
+lobby-protocol = { path = "crates/lobby-protocol" }
+lobby-server = { path = "crates/lobby-server" }
+lobby-client = { path = "crates/lobby-client" }
+
+gpui-kit = "=0.8.1"
+# Rendered tests draw real GPUI frames headlessly through wgpu (dev-dependency only; the version
+# gpui-kit's gpui-pre builds for other platforms).
+gpui-pre-wgpu = "=0.3.10"
+tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal", "fs", "io-util"] }
+tokio-util = { version = "=0.7.20", features = ["rt"] }
+axum = { version = "=0.8.9", default-features = false, features = ["http1", "json", "query", "tokio", "ws", "macros", "tracing", "matched-path"] }
+tower-http = { version = "=0.7.1", features = ["trace", "timeout", "limit", "fs", "set-header", "catch-panic"] }
+# The trait that `tower-http` services implement, needed to call `ServeFile`.
+tower-service = "0.3"
+sqlx = { version = "=0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
+# The server names tungstenite's error type to tell a protocol violation from a lost peer; it is
+# the same 0.29 that axum's `ws` feature already builds.
+tungstenite = { version = "=0.29.0", default-features = false }
+tokio-tungstenite = { version = "=0.29.0", default-features = false, features = ["connect", "rustls-tls-webpki-roots"] }
+# `http2`: a Lobby behind Caddy serves every request over one warm connection, kept alive by pings.
+reqwest = { version = "=0.12.28", default-features = false, features = ["rustls-tls", "http2", "json", "stream"] }
+figment = { version = "=0.10.19", features = ["toml", "env"] }
+ipnet = { version = "=2.12.2", features = ["serde"] }
+humantime-serde = "=1.1.1"
+directories = "=6.0.0"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "fmt", "json"] }
+tracing-appender = "0.2.5"
+thiserror = "2.0.21"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0.154"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+futures-lite = "2.6.1"
+rand = "0.9"
+url = "2.5.8"
+anyhow = "1"
+tempfile = "3.27"
+insta = { version = "=1.49.0", features = ["json"] }
+sha2 = "=0.10.9"
+base64 = "=0.22.1"
+keyring = "=4.2.0"
+chrono = { version = "=0.4.45", default-features = false, features = ["clock", "std"] }
+# STARTTLS over rustls with ring, the one rustls provider (no aws-lc).
+lettre = { version = "=0.11.23", default-features = false, features = ["builder", "smtp-transport", "pool", "hostname", "tokio1-rustls-tls"] }
+# For the tests' STARTTLS SMTP sink (dev-dependencies, same versions as the tree's).
+tokio-rustls = { version = "=0.26.6", default-features = false, features = ["ring", "logging", "tls12"] }
+rustls-pki-types = "=1.15.1"
+# str0m uses its pure-Rust crypto on both ends; libopus is the one C codec.
+str0m = { version = "=0.24.1", default-features = false, features = ["rust-crypto"] }
+cpal = "=0.18.2"
+opus = "=0.4.0"
+rtrb = "=0.4.0"
+# Capture DSP, both BSD-3 and pure Rust: RNNoise's port (default features pull in a CLI), and the
+# WebRTC audio processing port (noise suppression and AEC3).
+nnnoiseless = { version = "=0.5.2", default-features = false }
+sonora = "=0.2.0"
+windows-capture = "=2.0.1"
+# The version windows-capture builds; used directly only by `media::win` (DWM, PrintWindow, network
+# changes, the communications audio device) and the desktop's `host` (OS idle time, window
+# placement, the tray icon, the one-instance pipe, the Sharer's ink overlay and the window events
+# it follows).
+windows = { version = "=0.62.2", features = ["Win32_Foundation", "Win32_Graphics_Dwm", "Win32_Graphics_Gdi", "Win32_Media_Audio", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock", "Win32_Storage_Xps", "Win32_System_Com", "Win32_System_LibraryLoader", "Win32_System_Pipes", "Win32_System_RemoteDesktop", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_Accessibility", "Win32_UI_HiDpi", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+# The version windows builds; `#[implement]` names it, for the COM callback through which the
+# hardware encoder hands a texture back (`media::mf`).
+windows-core = "=0.62.2"
+# The exe icon, compiled by lobby-desktop's build script; the version GPUI builds for its manifest.
+embed-resource = "=3.0.12"
+# The per-user install's registry entries (Installed apps); the version gpui-pre-windows builds.
+windows-registry = "=0.6.1"
+# The HWND behind a GPUI window, for placing it; gpui's own version.
+raw-window-handle = "=0.6.2"
+fast_image_resize = "=6.1.0"
+yuvutils-rs = { version = "=0.8.3", default-features = false, features = ["avx", "sse"] }
+image = { version = "=0.25.10", default-features = false }
+socket2 = "=0.6.5"
+proptest = "=1.12.0"
+# markdown-rs, the version gpui-component already builds.
+markdown = "=1.0.0"
+# Round joins and caps on ink paths: gpui re-exports lyon's StrokeOptions but not LineJoin or
+# LineCap. The version gpui's paths build.
+lyon = "=1.0.19"
+
+# str0m's RustCrypto backend without aws-lc: see vendor/str0m-rust-crypto/Cargo.toml.
+# GPUI's test scheduler without its lock-order deadlock: see vendor/gpui-pre-scheduler/Cargo.toml.
+[patch.crates-io]
+str0m-rust-crypto = { path = "vendor/str0m-rust-crypto" }
+gpui-pre-scheduler = { path = "vendor/gpui-pre-scheduler" }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+unused_qualifications = "warn"
+
+[workspace.lints.clippy]
+await_holding_lock = "deny"
+
+# The shipped app and server: one optimisation unit across every crate.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+debug = "line-tables-only"
+
+# Line tables only: backtraces still resolve, a debugger shows no variables, and target/ stays a
+# fraction of the size.
+[profile.dev]
+debug = "line-tables-only"
+
+# fast_image_resize is generic: its resize loops are instantiated in lobby-client, so that crate is
+# optimized too.
+[profile.dev.package.lobby-client]
+opt-level = 2
+
+[profile.dev.package.fast_image_resize]
+opt-level = 3
+
+[profile.dev.package.yuvutils-rs]
+opt-level = 3
+
+# The capture DSP runs 100 frames/s of RNNoise and the WebRTC processing; unoptimized, a debug
+# build cannot keep up with the microphone.
+[profile.dev.package.nnnoiseless]
+opt-level = 3
+
+[profile.dev.package.sonora]
+opt-level = 3
+
+[profile.dev.package.sonora-aec3]
+opt-level = 3
+
+[profile.dev.package.sonora-agc2]
+opt-level = 3
+
+[profile.dev.package.sonora-common-audio]
+opt-level = 3
+
+[profile.dev.package.sonora-fft]
+opt-level = 3
+
+[profile.dev.package.sonora-ns]
+opt-level = 3
+
+[profile.dev.package.sonora-simd]
+opt-level = 3
+
+[profile.dev.package.easyfft]
+opt-level = 3
+
+[profile.dev.package.realfft]
+opt-level = 3
+
+[profile.dev.package.rustfft]
+opt-level = 3
+
+# SRTP seals and opens every Screen Share packet on both clients and the SFU; unoptimized, a debug
+# build cannot carry 4K. The generic AES-GCM code is instantiated in str0m-rust-crypto.
+[profile.dev.package.str0m-rust-crypto]
+opt-level = 3
+
+[profile.dev.package.polyval]
+opt-level = 3
+
+# With debug assertions, gpui's Windows renderer compiles its HLSL shaders when it opens a window:
+# about 175 ms of every debug launch. Without, its build script compiles them once, with fxc.
+[profile.dev.package.gpui-pre-windows]
+debug-assertions = false

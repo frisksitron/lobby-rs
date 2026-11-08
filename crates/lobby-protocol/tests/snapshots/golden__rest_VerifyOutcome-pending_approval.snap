@@ -1,0 +1,8 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "next": "pending_approval",
+  "waitToken": "w5CfAXyWt3q6r3e9v4T5uD"
+}

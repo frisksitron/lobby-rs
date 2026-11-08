@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # The Release runs it too, and publishes only once it passes.
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+  # .config/nextest.toml: everything but the GPU tests, and every failure reported.
+  NEXTEST_PROFILE: ci
+
+jobs:
+  windows:
+    name: Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # rust-toolchain.toml pins the channel and components; rustup installs it on first use.
+      - name: Toolchain
+        run: rustup show active-toolchain
+
+      # Debug builds optimise lobby-client so Screen Share keeps up when run by hand; the tests
+      # need none of it, and it is the biggest compile of the run.
+      - name: Unoptimised lobby-client
+        shell: bash
+        run: |
+          printf '[profile.dev.package.lobby-client]\nopt-level = 0\n' \
+            >> "${CARGO_HOME:-$HOME/.cargo}/config.toml"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Only main's runs refresh the cache, so a pull request or a Release does not wait
+          # minutes to save one.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+
+      # The checks AGENTS.md lists, in its order: fmt, the five xtask checks, both clippy runs,
+      # nextest and the doc tests.
+      - name: Gates
+        run: cargo xtask gates
+
+  # The app is Windows only; the server ships as a Linux image, so it is checked there too.
+  server:
+    name: Server on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Toolchain
+        run: rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+
+      - name: Clippy
+        run: cargo clippy -p lobby-server -p lobby-protocol --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo nextest run -p lobby-server -p lobby-protocol

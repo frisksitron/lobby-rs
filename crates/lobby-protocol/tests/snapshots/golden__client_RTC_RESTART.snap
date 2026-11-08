@@ -1,0 +1,11 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "voiceSessionId": 17
+  },
+  "rid": "v4",
+  "t": "RTC_RESTART"
+}

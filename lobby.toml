@@ -1,0 +1,26 @@
+# Development configuration, read by `cargo run -p lobby-server` from the repository root.
+# Every key and its default: deploy/lobby.example.toml.
+
+[lobby]
+name = "Dev Lobby"
+
+[http]
+bind = "127.0.0.1:8080"
+
+[database]
+path = "./data/lobby.db"
+
+[storage]
+blob_root = "./data/blobs"
+
+[auth]
+bootstrap_email = ""          # the first Member's email
+
+[smtp]                        # Magic Codes: a local sink such as mailpit on 1025
+host = "127.0.0.1"
+port = 1025
+from = "Lobby <noreply@lobby.localhost>"
+
+[sfu]
+udp_bind = "127.0.0.1:50000"
+advertise_ips = ["127.0.0.1"]

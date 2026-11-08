@@ -1,0 +1,8 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "challenge": "c6DgBZzXu4r7s4f0w5U6vE",
+  "code": "80421579"
+}

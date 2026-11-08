@@ -1,0 +1,11 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "error": {
+    "code": "CONFLICT",
+    "detail": "USERNAME_TAKEN",
+    "message": "Username already taken"
+  }
+}

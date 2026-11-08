@@ -1,0 +1,11 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "presence": "idle"
+  },
+  "rid": "p1",
+  "t": "PRESENCE_SET"
+}

@@ -1,0 +1,13 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "size": {
+      "height": 1080,
+      "width": 1920
+    }
+  },
+  "t": "SCREEN_SHARE_SOURCE"
+}

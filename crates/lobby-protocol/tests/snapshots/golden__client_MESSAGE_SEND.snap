@@ -1,0 +1,12 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "attachmentIds": [],
+    "content": "hi <b>"
+  },
+  "rid": "9f2c4a1be07d4c55a1d0f3e2b6a7c8d9",
+  "t": "MESSAGE_SEND"
+}

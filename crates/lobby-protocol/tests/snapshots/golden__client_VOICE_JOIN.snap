@@ -1,0 +1,12 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "deafened": false,
+    "muted": false
+  },
+  "rid": "v1",
+  "t": "VOICE_JOIN"
+}

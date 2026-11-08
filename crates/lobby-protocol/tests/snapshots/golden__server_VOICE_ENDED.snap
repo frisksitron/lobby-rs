@@ -1,0 +1,11 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "reason": "connection_lost",
+    "voiceSessionId": 17
+  },
+  "t": "VOICE_ENDED"
+}

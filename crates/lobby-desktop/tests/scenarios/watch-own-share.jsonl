@@ -1,0 +1,69 @@
+{"scenario": "A Sharer's own share is a share like any other: it shows in the panel without the network, the rows' watch tiles switch between it and another Member's, it goes fullscreen with Stop sharing, and closing it keeps sharing", "clients": ["a", "b"], "members": ["alice", "bob"]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+// Past the moment a click on Share Screen is taken as the end of a double-click on Join Voice.
+{"advance": 600}
+{"on": "a", "advance": 600}
+// alice shares the still test pattern, encoded once a second: only her own view shows it. bob's
+// moves, as a Viewer of a still share can wait seconds for its first picture.
+{"on": "a", "click": "share-screen"}
+{"wait": {"path": "/elements/picker-test-2", "exists": true}, "timeout_ms": 5000}
+{"scroll": "source-picker-list", "to": "picker-test-2"}
+{"click": "picker-test-2"}
+{"wait": {"path": "/lobby/voice/share", "eq": "live"}, "timeout_ms": 8000}
+{"wait": {"all": [{"path": "/lobby/viewer/whose", "eq": "mine"}, {"path": "/lobby/viewer/shown", "ne": 0}]}}
+{"expect": {"all": [{"path": "/lobby/watching", "eq": null}, {"path": "/lobby/members/alice/tile", "eq": "on_screen"}, {"visible": "share-toolbar"}, {"visible": "share-let-draw"}, {"visible": "share-close"}, {"visible": "share-fullscreen"}, {"gone": "viewer-stop-share"}, {"visible": "composer"}]}}
+{"move_to": "viewer-panel"}
+{"shot": "own", "hover": true}
+{"on": "b", "click": "share-screen"}
+{"wait": {"path": "/elements/picker-test-0", "exists": true}, "timeout_ms": 5000}
+{"scroll": "source-picker-list", "to": "picker-test-0"}
+{"click": "picker-test-0"}
+{"wait": {"path": "/lobby/voice/share", "eq": "live"}, "timeout_ms": 8000}
+// Both rows offer their share, one's own first, named You.
+{"on": "a", "wait": {"path": "/lobby/sharers", "eq": ["You", "bob"]}, "timeout_ms": 3000}
+{"expect": {"all": [{"visible": "watch-alice"}, {"visible": "watch-bob"}]}}
+{"shot": "own-and-bob", "id": "viewer-panel"}
+{"click": "watch-bob"}
+{"wait": {"all": [{"path": "/lobby/watching", "eq": "bob"}, {"path": "/lobby/viewer/whose", "eq": "bob"}, {"path": "/lobby/viewer/shown", "ne": 0}]}}
+{"shot": "watching-bob", "id": "viewer-panel"}
+{"click": "watch-alice"}
+{"wait": {"all": [{"path": "/lobby/watching", "eq": null}, {"path": "/lobby/viewer/whose", "eq": "mine"}, {"path": "/lobby/viewer/shown", "ne": 0}]}}
+// Fullscreen has no Stop sharing: the share stops from the Voice controls. Esc twice leaves.
+{"click": "share-fullscreen"}
+{"wait": {"path": "/lobby/viewer/fullscreen", "eq": true}}
+{"expect": {"all": [{"gone": "viewer-stop-share"}, {"visible": "share-fullscreen-exit"}]}}
+{"shot": "own-fullscreen", "hover": true}
+{"press": "escape"}
+{"wait": {"path": "/lobby/viewer/esc_hint", "eq": true}}
+{"press": "escape"}
+{"wait": {"path": "/lobby/viewer/fullscreen", "eq": false}}
+// Closing one's own view keeps sharing; the own row's tile brings it back.
+{"click": "share-close"}
+{"wait": {"path": "/lobby/viewer", "eq": null}}
+{"expect": {"all": [{"path": "/lobby/voice/share", "eq": "live"}, {"path": "/lobby/members/alice/tile", "eq": "rest"}]}}
+{"on": "b", "expect": {"path": "/lobby/members/alice/sharing", "eq": true}}
+{"on": "a", "click": "watch-alice"}
+{"wait": {"all": [{"path": "/lobby/viewer/whose", "eq": "mine"}, {"path": "/lobby/viewer/shown", "ne": 0}]}}
+// Stop sharing stays in the Voice bar, and the view goes with the share.
+{"click": "share-stop"}
+{"wait": {"all": [{"path": "/lobby/sharing", "eq": null}, {"path": "/lobby/viewer", "eq": null}]}, "timeout_ms": 3000}
+{"on": "b", "wait": {"path": "/lobby/members/alice/sharing", "eq": false}, "timeout_ms": 3000}

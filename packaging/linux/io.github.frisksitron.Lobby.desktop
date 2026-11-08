@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Lobby
+Comment=Chat, Voice and Screen Share with your friends
+Exec=lobby
+Icon=io.github.frisksitron.Lobby
+Terminal=false
+Categories=Network;Chat;InstantMessaging;
+Keywords=voice;chat;screen share;friends;
+StartupWMClass=io.github.frisksitron.Lobby

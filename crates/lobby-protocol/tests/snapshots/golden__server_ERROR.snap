@@ -1,0 +1,13 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "code": "VOICE_JOIN_COOLDOWN",
+    "message": "",
+    "retryAfterMs": 14250,
+    "rid": "r13"
+  },
+  "t": "ERROR"
+}

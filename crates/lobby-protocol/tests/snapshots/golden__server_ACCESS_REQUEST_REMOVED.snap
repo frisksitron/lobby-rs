@@ -1,0 +1,13 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "handledAt": 1792750360000,
+    "handledBy": "usr_9f0e7a9c1b2d3e4f5a6b7c8d",
+    "id": "acr_3c4d5e6f708192a3b4c5d6e7",
+    "outcome": "vouched_in"
+  },
+  "t": "ACCESS_REQUEST_REMOVED"
+}

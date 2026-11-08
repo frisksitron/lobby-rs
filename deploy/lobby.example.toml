@@ -1,0 +1,78 @@
+# lobby-server configuration: every key with its default.
+#
+# Precedence: these defaults, then this file (`--config <path>`, or ./lobby.toml), then
+# LOBBY_* environment variables with `__` between levels (LOBBY_SMTP__PASSWORD, LOBBY_HTTP__BIND).
+# Unknown keys are errors, a bad value is an error, and 0 means 0. Durations are humantime
+# strings ("10s", "15m", "30d"). An invalid configuration exits with code 78.
+#
+# Required: smtp.host and smtp.from (or smtp.log_codes for local development) and a non-empty
+# sfu.advertise_ips.
+
+shutdown_timeout = "10s"              # keep below the container's stop_grace_period (compose: 20s)
+
+[lobby]
+name = "Lobby"
+
+[http]
+bind = "0.0.0.0:8080"
+trusted_proxy_cidrs = []              # ["127.0.0.1/32", "::1/128"]: Caddy on the same host (compose)
+# Per-IP REST limits and the send throttle; off only for tests.
+rate_limits = true
+
+[ws]
+identify_timeout = "10s"
+ping_interval = "10s"
+pong_timeout = "15s"
+write_timeout = "10s"
+outbound_queue = 256
+max_frame_bytes = 65536
+max_unidentified_per_ip = 20          # 0 = unlimited
+max_unidentified_global = 200         # 0 = unlimited
+send_every = "200ms"                  # a Member's sends after a burst of five (http.rate_limits)
+
+[database]
+path = "./data/lobby.db"
+
+[storage]
+blob_root = "./data/blobs"
+upload_max_bytes = 10485760           # 1 MiB ..= 1 GiB
+
+[auth]
+access_ttl = "15m"
+refresh_ttl = "30d"
+magic_code_ttl = "10m"
+magic_code_sends_per_10m = 3         # per email and client IP, as is the next
+magic_code_sends_per_24h = 10
+magic_code_sends_per_client_per_24h = 50   # per client IP, to any emails
+bootstrap_email = ""                  # the only email that may create the first Member
+join_requests_enabled = true
+
+[smtp]                                # host and from are required, unless log_codes
+host = ""
+port = 587                            # STARTTLS required; localhost or port 1025: when offered
+username = ""
+password = ""                         # prefer LOBBY_SMTP__PASSWORD or password_file
+# A file holding the password (compose secret); not with password.
+password_file = ""
+from = ""
+# Debug builds only: log Magic Codes, mail nothing; loopback http.bind, no proxy.
+log_codes = false
+
+[sfu]
+udp_bind = "0.0.0.0:50000"
+# Required: public IPv4 first, then IPv6; a home server adds its LAN IP.
+advertise_ips = []
+# When a port mapping makes the public port differ from udp_bind's.
+# advertise_port = 50000
+tcp_bind = "0.0.0.0:50000"            # media over TCP, for Members whose network blocks UDP
+# tcp_advertise_port = 50000          # as advertise_port, for tcp_bind
+# A Member whose client sends nothing for this long leaves Voice.
+dead_peer_after = "15s"
+dead_peer_after_restart = "35s"       # the same while their client restarts its media connection
+
+[voice]
+max_participants = 25
+max_sharers = 4
+
+[jobs]
+cleanup_interval = "1h"

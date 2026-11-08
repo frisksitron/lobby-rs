@@ -1,0 +1,9 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+[
+  "1080",
+  "1440",
+  "2160"
+]

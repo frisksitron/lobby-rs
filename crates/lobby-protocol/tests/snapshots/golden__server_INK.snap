@@ -1,0 +1,31 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "authorId": "usr_0a1b2c3d4e5f60718293a4b5",
+    "batch": {
+      "end": false,
+      "epoch": 2,
+      "points": [
+        {
+          "x": 110,
+          "y": 205
+        },
+        {
+          "x": 65535,
+          "y": 0
+        }
+      ],
+      "prev": {
+        "x": 100,
+        "y": 200
+      },
+      "seq": 4,
+      "shareId": 3,
+      "stroke": 7
+    }
+  },
+  "t": "INK"
+}

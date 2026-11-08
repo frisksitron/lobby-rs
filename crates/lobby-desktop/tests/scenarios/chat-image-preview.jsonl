@@ -1,0 +1,37 @@
+{"scenario": "A picture dropped into the composer uploads, goes with the Message and shows its 480 px preview on both clients at the box it reserved; its dialog offers Save and Open", "clients": ["a", "b"], "members": ["alice", "bob"]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "a", "drop": "composer", "paths": ["photo-640x480.png"]}
+{"expect": {"path": "/lobby/drafts/0/name", "eq": "photo-640x480.png"}}
+{"wait": {"path": "/lobby/drafts/0/state", "eq": "ready"}}
+{"expect": {"path": "/lobby/send_enabled", "eq": true}}
+{"shot": "draft-ready", "id": "composer"}
+{"type": "the view from here", "into": "composer"}
+{"press": "enter"}
+{"wait": {"path": "/lobby/drafts", "len": 0}}
+{"wait": {"path": "/lobby/chat/rows/2/attachments/0/shown", "eq": true}}
+{"expect": {"path": "/lobby/chat/rows/2/attachments/0", "contains": {"name": "photo-640x480.png", "kind": "picture", "preview": [480, 360], "box": [320.0, 240.0]}}}
+{"shot": "sent", "id": "feed"}
+// bob: the same preview, the same box.
+{"on": "b", "wait": {"path": "/lobby/chat/rows/2/attachments/0/shown", "eq": true}}
+{"expect": {"path": "/lobby/chat/rows/2", "contains": {"author": "alice", "text": "the view from here", "pending": null}}}
+{"expect": {"path": "/lobby/chat/rows/2/attachments/0", "contains": {"kind": "picture", "preview": [480, 360], "box": [320.0, 240.0]}}}
+{"shot": "seen", "id": "feed"}
+{"click": "attachment-m1-0"}
+{"wait": {"path": "/lobby/attachment_dialog/open", "eq": true}}
+{"expect": {"all": [{"path": "/lobby/attachment_dialog/can_open", "eq": true}, {"visible": "preview-save"}, {"visible": "preview-open"}, {"gone": "preview-reveal"}]}}
+{"shot": "dialog"}

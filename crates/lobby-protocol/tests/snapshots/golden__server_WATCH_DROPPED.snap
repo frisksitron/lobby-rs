@@ -1,0 +1,11 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "downlinkBps": 4700000,
+    "frames": 58
+  },
+  "t": "WATCH_DROPPED"
+}

@@ -1,0 +1,11 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "error": {
+    "code": "RATE_LIMITED",
+    "message": "Too many requests",
+    "retryAfterMs": 14250
+  }
+}

@@ -1,0 +1,14 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "id": "blb_2582c529769d2a353bd49743",
+  "mimeType": "image/png",
+  "name": "cat.png",
+  "preview": {
+    "height": 320,
+    "width": 480
+  },
+  "size": 81234
+}

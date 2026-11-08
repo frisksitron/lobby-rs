@@ -1,0 +1,10 @@
+target/
+*.db
+*.db-wal
+*.db-shm
+/data/
+*.snap.new
+.pending-snap
+/sweep.timestamp
+packaging/linux/cargo-sources.json
+/dist/

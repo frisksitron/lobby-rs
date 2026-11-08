@@ -1,0 +1,33 @@
+# nextest runs every test in its own process, so a static mutex in a test binary serializes
+# nothing. The tests that use the GPU's encoder or decoder take turns, because a consumer GPU runs
+# few encoder sessions at once. Every other test runs beside them.
+[test-groups]
+real-media = { max-threads = 1 }
+
+[profile.default]
+# A test that runs past 30 s is stuck.
+slow-timeout = { period = "15s", terminate-after = 2 }
+
+[profile.ci]
+# GitHub's runners have no GPU, so CI leaves out the real-media tests below (a default-filter
+# cannot name a group), and reports every failure instead of stopping at the first.
+default-filter = '''
+not (package(lobby-client) & ((binary(integration) & test(/^(share|watch)::/)) | test(/^media::mf::/) | test(/^media::watch::/)))
+& not (package(lobby-desktop) & binary(e2e_ui) & test(share_scenarios))
+'''
+fail-fast = false
+
+[[profile.default.overrides]]
+filter = 'package(lobby-client) & ((binary(integration) & test(/^(share|watch)::/)) | test(/^media::mf::/) | test(/^media::watch::/))'
+test-group = 'real-media'
+
+[[profile.default.overrides]]
+# Two tests play the desktop scenarios. A scenario that hangs fails on the timeout of its own
+# wait; this only ends a run that is stuck.
+filter = 'package(lobby-desktop) & binary(e2e_ui)'
+slow-timeout = { period = "30s", terminate-after = 10 }
+
+[[profile.default.overrides]]
+# The scenarios that start a Screen Share encode on the GPU. The others use fake media only.
+filter = 'package(lobby-desktop) & binary(e2e_ui) & test(share_scenarios)'
+test-group = 'real-media'

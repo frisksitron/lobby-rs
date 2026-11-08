@@ -1,0 +1,8 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "rid": "r12",
+  "t": "VOICE_LEAVE"
+}

@@ -1,0 +1,108 @@
+# A patched copy of gpui-pre-scheduler 0.3.10 (Apache-2.0, Zed Industries), used through
+# `[patch.crates-io]` in the workspace manifest. This is the manifest crates.io published.
+#
+# The copy differs from upstream only in `TestScheduler::block_until` in
+# `src/test_scheduler.rs`. With a timeout, upstream locked `rng` and then waited for `state`.
+# Every schedule from another thread locks `state` and then `rng`. A headless app that closed
+# while a Session's driver or a share's encoder thread scheduled a task could deadlock for good.
+# That hung the real-media layout tests in about one run in ten. 0.3.11 has the same code.
+# Drop this copy when the pinned gpui-pre takes `state` first there.
+
+[package]
+edition = "2024"
+name = "gpui-pre-scheduler"
+version = "0.3.10"
+build = false
+publish = true
+autolib = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+description = "Zed's `scheduler` crate (gpui-pre snapshot of zed@08cbb88)"
+readme = false
+license = "Apache-2.0"
+repository = "https://github.com/zed-industries/zed"
+resolver = "2"
+
+[package.metadata.gpui-pre]
+zed-crate = "scheduler"
+zed-version = "0.1.0"
+zed-rev = "08cbb88a152c3751a43e853425a70e9f631a5918"
+
+[features]
+test-support = []
+wasm-threads = [
+    "dep:wasm_thread",
+    "flume/spin",
+]
+
+[lib]
+name = "scheduler"
+path = "src/scheduler.rs"
+doctest = false
+
+[dependencies.async-task]
+version = "4.7"
+
+[dependencies.backtrace]
+version = "0.3"
+
+[dependencies.chrono]
+version = "0.4"
+features = [
+    "std",
+    "serde",
+    "now",
+    "wasmbind",
+]
+default-features = false
+
+[dependencies.flume]
+version = "0.12"
+features = ["async"]
+default-features = false
+
+[dependencies.futures]
+version = "0.3.34"
+
+[dependencies.parking_lot]
+version = "0.12.1"
+
+[dependencies.rand]
+version = "0.9"
+features = [
+    "std",
+    "std_rng",
+    "os_rng",
+]
+default-features = false
+
+[dependencies.web-time]
+version = "1.1.0"
+
+[target.'cfg(target_family = "wasm")'.dependencies.wasm_thread]
+version = "0.3"
+features = ["es_modules"]
+optional = true
+
+[lints.clippy]
+dbg_macro = "deny"
+declare_interior_mutable_const = "deny"
+disallowed_methods = "deny"
+large_enum_variant = "allow"
+let_underscore_future = "allow"
+nonminimal_bool = "allow"
+redundant_clone = "deny"
+single_range_in_vec_init = "allow"
+todo = "deny"
+too_many_arguments = "allow"
+type_complexity = "allow"
+
+[lints.clippy.style]
+level = "allow"
+priority = -1
+
+[lints.rust.unexpected_cfgs]
+level = "allow"
+priority = 0

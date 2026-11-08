@@ -1,0 +1,11 @@
+[alias]
+xtask = "run --quiet --package xtask --"
+
+# lld links faster than link.exe. The C runtime is linked in, so the app starts on a Windows that
+# lacks the Visual C++ runtime. A RUSTFLAGS variable replaces these flags, so CI sets none.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[env]
+CMAKE_TOOLCHAIN_FILE_x86_64_pc_windows_msvc = { value = ".cargo/static-crt.cmake", relative = true }

@@ -1,0 +1,147 @@
+# A `v<version>` tag, pushed by `cargo xtask release <version>`, becomes a GitHub Release with the
+# Windows app, which every installed Lobby updates to, and a server image on ghcr.io. CI, the
+# app, its notices and the image build side by side; nothing is published unless CI passes.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  app:
+    name: Windows app
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # rust-toolchain.toml pins the channel and components; rustup installs it on first use.
+      - name: Toolchain
+        run: rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: The tag names the workspace version
+        shell: bash
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/{n;s/^version = "\(.*\)"/\1/p}' Cargo.toml)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME, but Cargo.toml says $version"
+            exit 1
+          fi
+
+      # The app learns its repository here: it installs itself and reads this repository's
+      # Releases for updates.
+      - name: Build LobbySetup.exe and latest.json
+        run: cargo xtask dist --repo ${{ github.repository }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: app
+          path: dist/
+
+  notices:
+    name: Third-party notices
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+
+      # The licence of every crate in the Windows app (about.toml names its target); a licence
+      # not accepted there fails here.
+      - name: Generate
+        working-directory: packaging/notices
+        run: >
+          cargo about generate -m ../../crates/lobby-desktop/Cargo.toml about.hbs
+          -o THIRD-PARTY-NOTICES.html
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: notices
+          path: packaging/notices/THIRD-PARTY-NOTICES.html
+
+  publish:
+    name: Publish the Release
+    needs: [ci, app, notices]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      # gh uploads the files before it publishes, so no app sees a Release without its files.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY"
+          dist/LobbySetup.exe dist/latest.json dist/THIRD-PARTY-NOTICES.html
+          --title "Lobby ${GITHUB_REF_NAME#v}" --generate-notes --verify-tag
+
+  image:
+    name: Server image
+    runs-on: ubuntu-latest
+    outputs:
+      name: ${{ steps.image.outputs.name }}
+      version: ${{ steps.image.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Image name and version
+        id: image
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lobby-server" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v4
+
+      # Built into the cache only; `push-image` sends it once CI has passed.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  push-image:
+    name: Push the server image
+    needs: [ci, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # The same build as `image`, so every layer comes from the cache.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: |
+            ${{ needs.image.outputs.name }}:${{ needs.image.outputs.version }}
+            ${{ needs.image.outputs.name }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.image.outputs.version }}
+          cache-from: type=gha

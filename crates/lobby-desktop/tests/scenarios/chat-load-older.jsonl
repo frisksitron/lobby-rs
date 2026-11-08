@@ -1,0 +1,30 @@
+{"scenario": "Load Older Messages keeps what was read in sight, down to the beginning of history", "clients": ["a"], "members": ["alice", "bob"], "history": {"author": "bob", "count": 120}, "layer3_only": "the history is stored before the in-process server starts"}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"wait": {"path": "/lobby/chat/older", "eq": "available"}}
+{"expect": {"path": "/lobby/feed", "len": 50}}
+{"expect": {"path": "/lobby/chat/at_bottom", "eq": true}}
+// The wheel alone goes up to the top and back down to the last Message, without Jump to latest.
+{"wheel": "feed-list", "notches": 40}
+{"expect": {"visible": "load-older"}}
+{"wheel": "feed-list", "notches": -40}
+{"expect": {"path": "/lobby/chat/at_bottom", "eq": true}}
+{"scroll": "feed-list", "to": "load-older"}
+{"click": "load-older"}
+{"wait": {"path": "/lobby/feed", "len": 100}}
+// The first Message that was in view goes to the top: what was read stays in sight, the older page is above it.
+{"wait": {"all": [{"visible": "row-m72"}, {"gone": "load-older"}]}, "timeout_ms": 2000}
+{"shot": "after-load", "id": "feed"}
+{"scroll": "feed-list", "to": "load-older"}
+{"click": "load-older"}
+{"wait": {"path": "/lobby/chat/older", "eq": "beginning"}}
+{"expect": {"path": "/lobby/feed", "len": 120}}
+{"expect": {"path": "/lobby/feed/0/text", "eq": "Message 1 of 120"}}
+{"scroll": "feed-list", "to": "feed-history"}
+{"shot": "beginning", "id": "feed"}

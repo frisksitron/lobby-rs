@@ -1,0 +1,43 @@
+# A patched copy of str0m-rust-crypto 0.6.0 (MIT OR Apache-2.0, Martin Algesten), used through
+# `[patch.crates-io]` in the workspace manifest.
+#
+# Upstream enables dimpl's `rcgen` feature for DTLS certificate generation, and dimpl's `rcgen`
+# implies `aws-lc-rs`, which dimpl then also prefers as its DTLS crypto provider. That puts
+# aws-lc (C/asm) into the media transport, against the pure-Rust media decision and
+# `cargo xtask check-deps` rule 2. This copy differs from upstream only in `src/dtls.rs`: the
+# self-signed P-256 certificate is built with RustCrypto (p256 + x509-cert), and the DTLS
+# configuration names the RustCrypto provider explicitly. Everything else is upstream's.
+#
+# The published 0.6.0 package ships no license files; LICENSE-MIT.txt is str0m's (same author
+# and repository, from str0m 0.24.1) and LICENSE-APACHE.txt the Apache-2.0 text. The
+# dependencies whose features decide the crypto backend are exact pins (the Cargo.lock
+# versions), so a `cargo update` cannot re-couple aws-lc behind check-deps' back.
+[package]
+name = "str0m-rust-crypto"
+version = "0.6.0"
+authors = ["Martin Algesten <martin@algesten.se>"]
+description = "Pure Rust crypto backend for str0m WebRTC (lobby-rs patch: no aws-lc)"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/algesten/str0m"
+readme = "README.md"
+edition = "2024"
+rust-version = "1.85.0"
+publish = false
+
+[dependencies]
+str0m-proto = { version = "=0.7.0", default-features = false, features = ["dtls"] }
+dimpl = { version = "=0.7.6", default-features = false, features = ["rust-crypto"] }
+aes = "0.8"
+aes-gcm = "0.10"
+ctr = "0.9"
+hmac = "0.12.1"
+p256 = { version = "=0.13.2", features = ["ecdh", "ecdsa", "pkcs8"] }
+sha1 = "0.10"
+sha2 = "0.10"
+time = "0.3"
+x509-cert = { version = "=0.2.5", default-features = false, features = ["std"] }
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+# Upstream's code as published; a registry dependency would have its lints capped.
+[lints.rust]
+deprecated = "allow"

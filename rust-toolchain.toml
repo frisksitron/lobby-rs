@@ -1,0 +1,5 @@
+[toolchain]
+channel = "1.95"
+components = ["rustfmt", "clippy"]
+# Linux CI builds for its own host target.
+targets = ["x86_64-pc-windows-msvc"]

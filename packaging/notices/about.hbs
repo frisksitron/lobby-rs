@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Lobby: third-party notices</title>
+<style>
+body { font: 15px/1.5 system-ui, sans-serif; max-width: 860px; margin: 2rem auto; padding: 0 1rem; }
+pre { white-space: pre-wrap; background: #f4f4f4; padding: 1rem; font-size: 13px; }
+li { margin: .2rem 0; }
+</style>
+</head>
+<body>
+<h1>Third-party notices</h1>
+<p>Lobby for Windows is built from the open-source crates below, each under the licence named.
+It also embeds the Figtree font (SIL Open Font License 1.1) and Lucide icons (ISC).</p>
+<h2>Licences used</h2>
+<ul>
+{{#each overview}}<li><a href="#{{id}}">{{name}}</a> ({{count}})</li>
+{{/each}}
+</ul>
+{{#each licenses}}
+<h3 id="{{id}}">{{name}}</h3>
+<p>Used by:</p>
+<ul>
+{{#each used_by}}<li>{{crate.name}} {{crate.version}}</li>
+{{/each}}
+</ul>
+<pre>{{text}}</pre>
+{{/each}}
+</body>
+</html>

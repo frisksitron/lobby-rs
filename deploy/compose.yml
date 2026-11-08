@@ -1,0 +1,34 @@
+# Run from this directory: `docker compose up -d`. Settings come from deploy/.env (see .env.example).
+name: lobby
+services:
+  lobby:
+    # A Release publishes ghcr.io/<owner>/lobby-server; `build` makes the same image from source.
+    image: ${LOBBY_IMAGE:-lobby-server}:${LOBBY_VERSION:-latest}
+    build: { context: .., dockerfile: deploy/Dockerfile }
+    # On a bridge network, docker-proxy hides IPv6 client addresses from Caddy and the SFU.
+    network_mode: host
+    restart: unless-stopped
+    stop_signal: SIGTERM
+    # Above shutdown_timeout (10s), so the ShutdownReport is written before Docker kills the process.
+    stop_grace_period: 20s
+    environment:
+      LOBBY_SMTP__PASSWORD_FILE: /run/secrets/smtp_password
+    secrets: [smtp_password]
+    volumes:
+      - ./lobby.toml:/etc/lobby/lobby.toml:ro
+      - /opt/lobby/data:/data
+  caddy:
+    image: caddy:2.10.2-alpine
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      LOBBY_DOMAIN: ${LOBBY_DOMAIN:?set LOBBY_DOMAIN in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: { lobby: { condition: service_started } }
+secrets:
+  # Owned by uid 10001, mode 0400 (README). The compose file only names the path.
+  smtp_password: { file: /opt/lobby/smtp_password }
+volumes: { caddy-data: {}, caddy-config: {} }
