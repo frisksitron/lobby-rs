@@ -22,7 +22,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 
 use super::{
-    MediaError, ShareOpId, VoiceEvent, VoiceEvents,
+    MediaError, ShareLoad, ShareOpId, VoiceEvent, VoiceEvents,
     capture::{Capture, CaptureEnd, CaptureSetup, FrameSlot, Waited},
     gpu::GpuPicture,
     mf::HardwareEncoder,
@@ -38,29 +38,6 @@ pub const IDLE_REPEAT: Duration = Duration::from_secs(1);
 pub const ENCODED_QUEUE: usize = 8;
 const STATS_EVERY: Duration = Duration::from_secs(5);
 const LOAD_EVERY: Duration = Duration::from_secs(1);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ShareLoad {
-    pub window: Duration,
-    /// Pictures the capture made, whether or not the encoder had room for them.
-    pub offered: u32,
-    /// New pictures out of the encoder; repeats of the last are not counted.
-    pub encoded: u32,
-}
-
-impl ShareLoad {
-    pub fn offered_fps(&self) -> u32 {
-        per_second(self.offered, self.window)
-    }
-
-    pub fn encoded_fps(&self) -> u32 {
-        per_second(self.encoded, self.window)
-    }
-}
-
-fn per_second(count: u32, window: Duration) -> u32 {
-    (f64::from(count) / window.as_secs_f64().max(f64::EPSILON)).round() as u32
-}
 
 struct LoadWindow {
     since: Instant,

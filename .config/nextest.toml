@@ -8,6 +8,12 @@ real-media = { max-threads = 1 }
 # A test that runs past 30 s is stuck.
 slow-timeout = { period = "15s", terminate-after = 2 }
 
+[profile.ci]
+# GitHub's runners have no GPU, so CI runs everything but the real-media group, and reports every
+# failure instead of stopping at the first.
+default-filter = 'not group(real-media)'
+fail-fast = false
+
 [[profile.default.overrides]]
 filter = 'package(lobby-client) & ((binary(integration) & test(/^(share|watch)::/)) | test(/^media::mf::/) | test(/^media::watch::/))'
 test-group = 'real-media'

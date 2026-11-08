@@ -31,6 +31,30 @@ pub const OWN_SHARE_GAP: Duration = Duration::from_millis(25);
 #[cfg(windows)]
 pub const OWN_SHARE_MAX: (u32, u32) = (1280, 720);
 
+/// How the share kept up over `window`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ShareLoad {
+    pub window: Duration,
+    /// Pictures the capture made, whether or not the encoder had room for them.
+    pub offered: u32,
+    /// New pictures out of the encoder; repeats of the last are not counted.
+    pub encoded: u32,
+}
+
+impl ShareLoad {
+    pub fn offered_fps(&self) -> u32 {
+        per_second(self.offered, self.window)
+    }
+
+    pub fn encoded_fps(&self) -> u32 {
+        per_second(self.encoded, self.window)
+    }
+}
+
+fn per_second(count: u32, window: Duration) -> u32 {
+    (f64::from(count) / window.as_secs_f64().max(f64::EPSILON)).round() as u32
+}
+
 /// Where the copies go: the feed of the one view that shows the share now, if there is one. The
 /// Session opens a feed each time the share is shown, which closes the one before, and closes the
 /// last when the share ends.

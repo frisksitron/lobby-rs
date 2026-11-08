@@ -68,11 +68,11 @@ pub use mf::hardware_encoder;
 pub use mic_volume::{GainUnavailable, MicGain, MicVolume};
 pub use monitor::MonitorControl;
 pub(crate) use own_share::OwnShareFeed;
+pub use own_share::ShareLoad;
 pub use rtc::RouteProbe;
 pub use screen::{ScreenSource, SourceId, SourceKind, TestMotion, list_sources};
 #[cfg(all(windows, feature = "test-support"))]
 pub use screen::{grab_monitor, grab_window};
-pub use share::ShareLoad;
 pub use thumbs::{
     ThumbUpdate, Thumbnail, Thumbnails, request_thumbnails, synthetic as synthetic_thumbnail,
 };

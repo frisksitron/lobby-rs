@@ -18,7 +18,7 @@ jobs:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # rust-toolchain.toml pins the channel and components; rustup installs it on first use.
       - name: Toolchain
@@ -34,9 +34,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      - uses: taiki-e/install-action@nextest
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
 
       # The checks AGENTS.md lists, in its order: fmt, the five xtask checks, both clippy runs,
-      # nextest and the doc tests.
+      # nextest and the doc tests. The ci profile is in .config/nextest.toml.
       - name: Gates
         run: cargo xtask gates
+        env:
+          NEXTEST_PROFILE: ci
