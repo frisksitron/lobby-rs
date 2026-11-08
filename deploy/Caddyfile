@@ -3,6 +3,8 @@
 {
 	admin off
 	servers {
+		# The app speaks HTTP/1.1 and 2 only; no HTTP/3 means no UDP on 443.
+		protocols h1 h2
 		timeouts {
 			read_header 10s
 			idle 5m

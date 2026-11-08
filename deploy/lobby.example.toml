@@ -44,6 +44,8 @@ magic_code_ttl = "10m"
 magic_code_sends_per_10m = 3         # per email and client IP, as is the next
 magic_code_sends_per_24h = 10
 magic_code_sends_per_client_per_24h = 50   # per client IP, to any emails
+magic_code_sends_per_mailbox_per_24h = 20  # per mailbox (+tag aliases are one), all clients
+magic_code_sends_per_lobby_per_24h = 80    # in all; keep it below the mail provider's daily quota
 bootstrap_email = ""                  # the only email that may create the first Member
 join_requests_enabled = true
 

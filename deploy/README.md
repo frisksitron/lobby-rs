@@ -5,7 +5,7 @@ or a home server that a friend group shares.
 
 ## What you get
 
-- **Caddy** takes ports 80 and 443 (tcp, plus 443/udp for HTTP/3), gets and renews a Let's Encrypt
+- **Caddy** takes ports 80 and 443 (tcp), gets and renews a Let's Encrypt
   certificate for your domain, and proxies to the server.
 - **lobby-server** listens on `127.0.0.1:8080` for HTTP and WebSocket, and on `50000` (udp)
   for Voice and Screen Share. It also listens on `50000` (tcp) for Members whose network blocks
@@ -34,20 +34,16 @@ run a small Lobby, but the image needs more than that to build (see [Build paths
    apt install docker.io docker-compose-v2 docker-buildx
    ```
 
-2. **Open the firewall**, for IPv4 and IPv6.
+2. **Open the firewall and harden the host.** Open 80 and 443 over tcp, and 50000 over udp and
+   tcp for the SFU (tcp is for Members whose network blocks UDP), for IPv4 and IPv6, and at the
+   cloud provider's firewall too. Beyond that, the usual care for a public machine:
 
-   ```sh
-   ufw allow 22/tcp
-   ufw allow 80/tcp
-   ufw allow 443
-   ufw allow 50000/udp
-   ufw allow 50000/tcp
-   ufw enable
-   ```
-
-   `ufw allow 443` opens tcp and udp, as Caddy serves HTTP/3. The SFU uses udp on 50000, and tcp
-   on 50000 for Members whose network blocks UDP.
-   A cloud provider's own firewall needs the same rules.
+   - SSH with keys only, no passwords, and rate-limited (`ufw limit 22/tcp`).
+   - Docker's logs capped (`max-size` and `max-file` in `/etc/docker/daemon.json`).
+   - Automatic security updates (`unattended-upgrades`).
+   - Optionally, a per-network cap on new connections to 80, 443 and 50000 (iptables
+     `connlimit` and `hashlimit`, an IPv6 /48 counted as one network), so one attacker cannot
+     hold every connection slot.
 
 3. **Add DNS records** for your domain: an `A` record to the public IPv4 address, and an `AAAA`
    record to the IPv6 address if the machine has one. Caddy cannot get a certificate until they
@@ -59,6 +55,10 @@ run a small Lobby, but the image needs more than that to build (see [Build paths
    ```sh
    install -d -m 0700 -o 10001 -g 10001 /opt/lobby/data
    ```
+
+   Uploads go to `/opt/lobby/data/blobs`. Mount a size-capped filesystem there (a loop file in
+   `/etc/fstab` works, so it is mounted before Docker starts), so uploads that fill it cannot
+   stop the database. Give the mounted directory to uid 10001 as well.
 
 5. **Store the SMTP password** (the API key for Magic Code mail) in `/opt/lobby/smtp_password`,
    readable only by the container's user. Compose mounts it as a secret with its host owner, and
