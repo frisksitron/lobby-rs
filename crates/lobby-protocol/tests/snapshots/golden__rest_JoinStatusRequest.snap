@@ -1,0 +1,7 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "waitToken": "w5CfAXyWt3q6r3e9v4T5uD"
+}

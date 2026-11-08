@@ -1,0 +1,44 @@
+{"scenario": "The owner hands the Lobby on from a Member's panel, asked once more: ownership moves on both clients, the new owner's panels offer the owner's actions and the old owner's no longer do", "clients": ["a", "b"], "members": ["alice", "bob"]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"right_click": "member-alice"}
+{"wait": {"path": "/lobby/member_panel/user", "eq": "alice"}, "timeout_ms": 2000}
+{"expect": {"all": [{"gone": "remove-member"}, {"gone": "make-owner"}, {"path": "/lobby/member_panel/owner", "eq": true}, {"path": "/lobby/members/alice/owner", "eq": true}]}}
+{"press": "escape"}
+{"wait": {"path": "/lobby/member_panel", "eq": null}, "timeout_ms": 2000}
+{"on": "a", "wait": {"path": "/lobby/members/bob/presence", "eq": "online"}, "timeout_ms": 2000}
+{"mark": "before"}
+{"right_click": "member-bob"}
+{"wait": {"visible": "make-owner"}, "timeout_ms": 2000}
+{"expect": {"all": [{"path": "/lobby/member_panel/user", "eq": "bob"}, {"path": "/lobby/member_panel/owner", "eq": false}]}}
+{"click": "make-owner"}
+{"wait": {"visible": "confirm-make-owner"}, "timeout_ms": 2000}
+{"shot": "make-owner-confirm"}
+{"click": "confirm-make-owner"}
+{"wait": {"all": [{"path": "/lobby/members/bob/owner", "eq": true}, {"path": "/lobby/members/alice/owner", "eq": false}]}, "timeout_ms": 5000}
+{"wait": {"gone": "confirm-make-owner"}, "timeout_ms": 2000}
+// Ownership moved; no row did.
+{"expect": {"all": [{"unchanged": "member-alice", "since": "before"}, {"unchanged": "member-bob", "since": "before"}]}}
+{"shot": "owner-moved", "id": "members"}
+{"right_click": "member-bob"}
+{"wait": {"path": "/lobby/member_panel/user", "eq": "bob"}, "timeout_ms": 2000}
+{"expect": {"all": [{"gone": "make-owner"}, {"path": "/lobby/member_panel/owner", "eq": true}]}}
+{"on": "b", "wait": {"all": [{"path": "/lobby/members/bob/owner", "eq": true}, {"path": "/lobby/members/alice/owner", "eq": false}]}, "timeout_ms": 5000}
+{"right_click": "member-alice"}
+{"wait": {"visible": "remove-member"}, "timeout_ms": 2000}
+{"expect": {"path": "/lobby/member_panel/user", "eq": "alice"}}
+{"shot": "new-owner-panel"}

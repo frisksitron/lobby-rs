@@ -1,0 +1,37 @@
+{"scenario": "Two Members join Voice; joining an empty Voice moves no row; leaving shows at once", "clients": ["a", "b"], "members": ["alice", "bob", "carol"]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "a", "wait": {"path": "/lobby/members/bob/section", "eq": "online"}}
+// The sidebar: Online and Offline sections, the Voice controls pinned at its foot.
+{"expect": {"all": [{"path": "/lobby/members/alice/section", "eq": "online"}, {"path": "/lobby/members/carol/section", "eq": "offline"}, {"visible": "voice-bar"}, {"visible": "member-list"}, {"path": "/lobby/voice/controls", "eq": "join"}]}}
+{"mark": "before-voice"}
+{"shot": "sidebar-before", "id": "members"}
+{"click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"expect": {"all": [{"path": "/lobby/members/alice/section", "eq": "voice"}, {"visible": "voice-section"}, {"unchanged": "member-bob", "since": "before-voice"}, {"unchanged": "member-carol", "since": "before-voice"}, {"unchanged": "voice-bar", "since": "before-voice"}, {"unchanged": "feed", "since": "before-voice"}]}}
+{"shot": "sidebar-in-voice", "id": "members"}
+{"on": "b", "wait": {"path": "/lobby/members/alice/in_voice", "eq": true}}
+{"click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"expect": {"path": "/lobby/voice_count", "eq": 2}}
+{"on": "a", "wait": {"all": [{"path": "/lobby/members/bob/section", "eq": "voice"}, {"path": "/lobby/voice_count", "eq": 2}]}}
+{"expect": {"unchanged": "voice-bar", "since": "before-voice"}}
+{"on": "b", "click": "voice-leave"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "join"}}
+// The moment the controls say Join Voice, bob's own list has him out of Voice too.
+{"expect": {"path": "/lobby/members/bob/in_voice", "eq": false}}
+{"on": "a", "wait": {"all": [{"path": "/lobby/members/bob/in_voice", "eq": false}, {"path": "/lobby/voice_count", "eq": 1}]}}

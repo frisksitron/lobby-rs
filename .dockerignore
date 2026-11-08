@@ -1,0 +1,15 @@
+# The build context is the repository root (docker build -f deploy/Dockerfile .).
+# Every workspace member's Cargo.toml and src/ must stay: --locked resolves the whole workspace.
+target/
+.git/
+.audit/
+.claude/
+docs/
+crates/lobby-desktop/assets/
+data/
+*.db
+*.db-wal
+*.db-shm
+lobby.toml
+deploy/lobby.toml
+deploy/.env

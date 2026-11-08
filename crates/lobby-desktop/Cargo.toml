@@ -1,0 +1,74 @@
+[package]
+name = "lobby-desktop"
+description = "The Lobby desktop app (GPUI)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "lobby"
+path = "src/main.rs"
+
+[[bin]]
+name = "lobby-gallery"
+path = "src/bin/lobby_gallery.rs"
+required-features = ["gallery"]
+
+[features]
+# The opt-in automation channel for `cargo xtask drive` and the scenario tests. Dev builds only: a
+# release build with it refuses to compile.
+automation = ["gpui-kit/test-support", "lobby-client/test-support", "dep:serde_json", "image/png"]
+# The component gallery window (`lobby-gallery`). Dev builds only, like `automation`.
+gallery = []
+
+[dependencies]
+lobby-client.workspace = true
+lobby-protocol.workspace = true
+gpui-kit.workspace = true
+lyon.workspace = true
+# The pixel buffer type GPUI's `RenderImage` holds.
+image.workspace = true
+# The runtime is built in main.rs only; the rest of the crate holds a Handle.
+tokio.workspace = true
+tokio-util.workspace = true
+futures-lite.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+# The feed's local days (Today, Yesterday, day dividers).
+chrono.workspace = true
+serde_json = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+# The OS idle time for idle presence and window placement; the version gpui-pre-windows already
+# builds.
+# The install's shortcuts take the PROPVARIANT and property store features.
+windows = { workspace = true, features = ["Win32_Storage_EnhancedStorage", "Win32_System_Com_StructuredStorage", "Win32_System_Variant", "Win32_UI_Shell_PropertiesSystem"] }
+windows-registry.workspace = true
+raw-window-handle.workspace = true
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource.workspace = true
+
+[dev-dependencies]
+# The tests use the scenario interpreter and open the component gallery.
+lobby-desktop = { path = ".", features = ["automation", "gallery"] }
+gpui-kit = { workspace = true, features = ["test-support"] }
+lobby-client = { workspace = true, features = ["test-support"] }
+# A real in-process server behind the two Shells.
+lobby-server = { workspace = true, features = ["test-support"] }
+# Real pixels without a window.
+gpui-pre-wgpu = { workspace = true, features = ["test-support"] }
+image = { workspace = true, features = ["png", "jpeg"] }
+serde_json.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

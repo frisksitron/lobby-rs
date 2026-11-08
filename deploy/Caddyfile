@@ -1,0 +1,20 @@
+# admin off: nothing on the host's loopback can reconfigure Caddy. A config change needs
+# `docker compose restart caddy`, since `caddy reload` goes through the admin API.
+{
+	admin off
+	servers {
+		timeouts {
+			read_header 10s
+			idle 5m
+		}
+	}
+}
+
+# read_body and write stay unset on purpose. The server times out uploads at 120s and
+# requests at 10s itself; a Caddy timeout at or below 120s would cut
+# slow uploads, and write would cut WebSockets. A value must stay above 130s.
+{$LOBBY_DOMAIN} {
+	reverse_proxy 127.0.0.1:8080 {
+		header_up X-Forwarded-For {remote_host}
+	}
+}

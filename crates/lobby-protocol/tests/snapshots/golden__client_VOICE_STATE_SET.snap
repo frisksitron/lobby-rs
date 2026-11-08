@@ -1,0 +1,12 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "deafened": false,
+    "muted": true
+  },
+  "rid": "v2",
+  "t": "VOICE_STATE_SET"
+}

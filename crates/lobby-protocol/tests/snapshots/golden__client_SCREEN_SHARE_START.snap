@@ -1,0 +1,12 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "audio": false,
+    "quality": "1440"
+  },
+  "rid": "s1",
+  "t": "SCREEN_SHARE_START"
+}

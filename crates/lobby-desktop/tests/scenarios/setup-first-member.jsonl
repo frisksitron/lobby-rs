@@ -1,0 +1,26 @@
+{"scenario": "A fresh Lobby: its owner names itself and sets the Lobby up, anyone earlier is told it is not open yet", "clients": ["a", "b"], "bootstrap_email": "owner@lobby.test"}
+// Someone else tries first: the code proves the email, and the Lobby says it is not open yet.
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"click": "connect"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "early@lobby.test", "into": "email"}
+{"click": "send-code"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:early@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/auth/step", "eq": "Closed"}, "timeout_ms": 5000}
+{"expect": {"path": "/route", "eq": "SignIn"}}
+{"shot": "not-open-yet", "id": "auth"}
+// The owner's code leads to a name, suggested from the email; the name sets the Lobby up.
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"click": "connect"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "owner@lobby.test", "into": "email"}
+{"click": "send-code"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:owner@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/auth/step", "eq": "Name"}, "timeout_ms": 5000}
+{"expect": {"path": "/auth/name", "eq": "owner"}}
+{"shot": "create-lobby", "id": "auth"}
+{"click": "join"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"expect": {"all": [{"path": "/lobby/me", "eq": "owner"}, {"path": "/lobby/members/owner/presence", "eq": "online"}]}}

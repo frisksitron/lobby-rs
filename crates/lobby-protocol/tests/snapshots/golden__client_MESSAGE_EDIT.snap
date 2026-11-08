@@ -1,0 +1,12 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "content": "hi, fixed",
+    "messageId": 4182
+  },
+  "rid": "e1",
+  "t": "MESSAGE_EDIT"
+}

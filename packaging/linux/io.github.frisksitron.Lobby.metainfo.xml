@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.frisksitron.Lobby</id>
+  <name>Lobby</name>
+  <summary>Chat, Voice and Screen Share for friend groups</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT OR Apache-2.0</project_license>
+  <developer id="io.github.frisksitron">
+    <name>The Lobby contributors</name>
+  </developer>
+  <description>
+    <p>
+      Lobby is a place for a group of friends who host their own server. Everyone in the Lobby
+      sees everything: one chat, one Voice room and Screen Share, with no channels to manage.
+    </p>
+    <p>You need the address of a Lobby to connect to.</p>
+  </description>
+  <launchable type="desktop-id">io.github.frisksitron.Lobby.desktop</launchable>
+  <url type="homepage">https://github.com/frisksitron/lobby-rs</url>
+  <url type="bugtracker">https://github.com/frisksitron/lobby-rs/issues</url>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+  </content_rating>
+  <releases>
+    <release version="0.1.0" date="2026-11-08"/>
+  </releases>
+</component>

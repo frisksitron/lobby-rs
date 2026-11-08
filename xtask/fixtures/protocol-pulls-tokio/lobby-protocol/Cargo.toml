@@ -1,0 +1,11 @@
+[package]
+name = "lobby-protocol"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+innocent = { path = "../innocent" }
+
+[dev-dependencies]
+axum = { path = "../axum" }

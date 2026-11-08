@@ -1,0 +1,15 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "request": {
+      "createdAt": 1792750300000,
+      "id": "acr_3c4d5e6f708192a3b4c5d6e7",
+      "requesterLabel": "carol@example.com",
+      "username": "carol"
+    }
+  },
+  "t": "ACCESS_REQUEST_UPSERT"
+}

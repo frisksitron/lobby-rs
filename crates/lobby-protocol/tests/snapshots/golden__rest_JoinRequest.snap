@@ -1,0 +1,8 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "ticket": "v4BeZWxVs2p5q2d8u3S4tC",
+  "username": "carol"
+}

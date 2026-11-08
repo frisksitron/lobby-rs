@@ -1,0 +1,57 @@
+[package]
+name = "lobby-server"
+description = "The Lobby backend: HTTP, WebSocket, Lobby state, SFU, storage."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "lobby-server"
+path = "src/main.rs"
+
+[features]
+# `lobby_server::testing` (TestServer, test_config). Never adds HTTP routes.
+test-support = []
+
+[dependencies]
+lobby-protocol = { workspace = true, features = ["rand"] }
+tokio.workspace = true
+tokio-util.workspace = true
+axum.workspace = true
+tower-http.workspace = true
+tower-service.workspace = true
+tungstenite.workspace = true
+sqlx.workspace = true
+sha2.workspace = true
+base64.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+figment.workspace = true
+humantime-serde.workspace = true
+ipnet.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+futures-util.workspace = true
+str0m.workspace = true
+# Larger UDP buffers on the SFU socket (already in the tree through tokio).
+socket2.workspace = true
+lettre.workspace = true
+tempfile.workspace = true
+image = { workspace = true, features = ["jpeg", "png", "gif", "webp"] }
+
+[dev-dependencies]
+lobby-server = { path = ".", features = ["test-support"] }
+figment = { workspace = true, features = ["test"] }
+tokio = { workspace = true, features = ["test-util"] }
+tokio-tungstenite.workspace = true
+tempfile.workspace = true
+proptest.workspace = true
+tokio-rustls.workspace = true
+rustls-pki-types = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true

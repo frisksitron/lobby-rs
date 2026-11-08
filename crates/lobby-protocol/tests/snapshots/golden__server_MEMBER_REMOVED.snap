@@ -1,0 +1,10 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "userId": "usr_9f0e7a9c1b2d3e4f5a6b7c8d"
+  },
+  "t": "MEMBER_REMOVED"
+}

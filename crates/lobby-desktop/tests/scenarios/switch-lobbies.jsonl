@@ -1,0 +1,54 @@
+{"scenario": "Two Lobbies: switching and back needs no Sign In and shows the feed at once; In Voice, the switch asks first", "clients": ["a"], "members": ["alice", "bob"], "second_lobby": true, "sent_files": [{"author": "bob", "file": "photo-640x480.png", "name": "view.png"}]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"all": [{"path": "/lobby/phase", "eq": "connected"}, {"path": "/lobby/chat/rows/2/attachments/0/shown", "eq": true}]}, "timeout_ms": 5000}
+{"shot": "first-lobby"}
+// Add Lobby… from the switcher in the title bar: a dialog, the person stays where they are.
+{"click": "lobby-switcher"}
+{"wait": {"visible": "switcher-add"}, "timeout_ms": 2000}
+{"shot": "switcher"}
+{"click": "switcher-add"}
+{"wait": {"path": "/add_lobby_open", "eq": true}, "timeout_ms": 2000}
+{"type": "{lobby2}", "into": "add-lobby-url"}
+{"shot": "add-lobby", "id": "add-lobby"}
+{"click": "add-lobby-connect"}
+{"wait": {"all": [{"path": "/auth/lobby", "eq": "Second Lobby"}, {"path": "/auth/step", "eq": "Email"}]}, "timeout_ms": 5000}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code2:alice@lobby.test}", "into": "code-input"}
+{"wait": {"all": [{"path": "/lobby/name", "eq": "Second Lobby"}, {"path": "/lobby/phase", "eq": "connected"}]}, "timeout_ms": 5000}
+{"expect": {"path": "/lobbies", "len": 2}}
+{"shot": "second-lobby"}
+// Ctrl+1 goes back to the first Lobby: its tokens were kept, so straight in. With its server
+// down it cannot connect, and still its feed and bob's picture show at once, as it was left.
+{"server": "stop"}
+{"press": "ctrl-1"}
+{"wait": {"path": "/lobby/name", "eq": "Test Lobby"}, "timeout_ms": 2000}
+{"expect": {"all": [{"not": {"path": "/lobby/phase", "eq": "connected"}}, {"path": "/lobby/feed", "contains": {"author": "bob"}}, {"path": "/lobby/chat/rows/2/attachments/0/shown", "eq": true}]}}
+{"shot": "switched-back"}
+{"server": "start"}
+{"wait": {"all": [{"path": "/lobby/phase", "eq": "connected"}, {"path": "/lobby/connection", "eq": null}]}, "timeout_ms": 8000}
+{"expect": {"path": "/lobby/feed", "len": 1}}
+{"press": "ctrl-2"}
+{"wait": {"all": [{"path": "/lobby/name", "eq": "Second Lobby"}, {"path": "/lobby/phase", "eq": "connected"}]}, "timeout_ms": 5000}
+// In Voice, a switch asks first; Stay keeps everything as it was.
+{"click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"press": "ctrl-1"}
+{"wait": {"all": [{"path": "/switch_asks", "eq": true}, {"path": "/window/dialog", "eq": true}]}, "timeout_ms": 2000}
+{"shot": "switch-asks"}
+{"press": "escape"}
+{"wait": {"path": "/switch_asks", "eq": false}, "timeout_ms": 2000}
+{"expect": {"all": [{"path": "/lobby/name", "eq": "Second Lobby"}, {"path": "/lobby/voice/controls", "eq": "in_voice"}]}}
+// Asked again and confirmed: Voice is left and the first Lobby opens.
+{"press": "ctrl-1"}
+{"wait": {"path": "/switch_asks", "eq": true}, "timeout_ms": 2000}
+{"press": "enter"}
+{"wait": {"all": [{"path": "/lobby/name", "eq": "Test Lobby"}, {"path": "/lobby/phase", "eq": "connected"}]}, "timeout_ms": 5000}
+{"expect": {"path": "/lobby/voice/controls", "eq": "join"}}

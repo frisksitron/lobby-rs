@@ -1,0 +1,75 @@
+[package]
+name = "lobby-client"
+description = "Everything the Lobby client does without pixels. GPUI-free; exposes only runtime-agnostic handles."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# `lobby_client::testing`: test doubles for e2e and desktop tests.
+test-support = ["lobby-protocol/rand"]
+
+[dependencies]
+lobby-protocol.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tokio-tungstenite.workspace = true
+reqwest.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+url.workspace = true
+directories.workspace = true
+keyring.workspace = true
+sha2.workspace = true
+rand.workspace = true
+chrono.workspace = true
+# The Markdown-shortcut composer (`compose`).
+markdown.workspace = true
+# Voice.
+str0m.workspace = true
+cpal.workspace = true
+opus.workspace = true
+rtrb.workspace = true
+nnnoiseless.workspace = true
+sonora.workspace = true
+# Screen Share.
+fast_image_resize.workspace = true
+yuvutils-rs.workspace = true
+socket2.workspace = true
+# Decoding attachments (`media_cache`) and re-encoding pasted bitmaps (`drafts`).
+image = { workspace = true, features = ["jpeg", "png", "gif", "webp", "bmp"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-capture.workspace = true
+# Direct3D 11 and DXGI for Screen Share's GPU path (`media::gpu`), Media Foundation for its
+# hardware encoder (`media::mf`) and the Viewer's decoder (`media::mf_decode`). The microphone's
+# volume (`media::mic_volume`) is an endpoint's volume control, activated on its IMMDevice.
+windows = { workspace = true, features = [
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_Media_MediaFoundation",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+] }
+windows-core.workspace = true
+
+[dev-dependencies]
+lobby-client = { path = ".", features = ["test-support"] }
+lobby-server = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
+# A paused clock for `pen_baseline`.
+tokio = { workspace = true, features = ["test-util"] }
+# The share bench's `RUST_LOG` output.
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

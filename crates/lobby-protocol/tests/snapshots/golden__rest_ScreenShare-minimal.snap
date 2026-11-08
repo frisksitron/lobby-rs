@@ -1,0 +1,9 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "audio": true,
+  "quality": "1080",
+  "shareId": 3
+}

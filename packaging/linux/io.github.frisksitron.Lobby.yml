@@ -1,0 +1,43 @@
+id: io.github.frisksitron.Lobby
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.llvm20
+command: lobby
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --socket=pulseaudio
+  - --share=network
+  - --share=ipc
+  # Saved sign-ins live in the desktop's password store (Secret Service).
+  - --talk-name=org.freedesktop.secrets
+  # Toasts for Messages while the window is in the background.
+  - --talk-name=org.freedesktop.Notifications
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/llvm20/bin
+  prepend-ld-library-path: /usr/lib/sdk/llvm20/lib
+  env:
+    CARGO_HOME: /run/build/lobby/cargo
+    CARGO_NET_OFFLINE: 'true'
+modules:
+  - name: lobby
+    buildsystem: simple
+    build-commands:
+      - cargo --offline build --release --locked -p lobby-desktop --bin lobby
+      - install -Dm755 target/release/lobby /app/bin/lobby
+      - install -Dm644 packaging/linux/io.github.frisksitron.Lobby.desktop /app/share/applications/io.github.frisksitron.Lobby.desktop
+      - install -Dm644 packaging/linux/io.github.frisksitron.Lobby.svg /app/share/icons/hicolor/scalable/apps/io.github.frisksitron.Lobby.svg
+      - install -Dm644 packaging/linux/io.github.frisksitron.Lobby.metainfo.xml /app/share/metainfo/io.github.frisksitron.Lobby.metainfo.xml
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - target
+          - .audit
+          - .git
+      # Written by packaging/linux/flatpak.sh with flatpak-cargo-generator from Cargo.lock.
+      - cargo-sources.json

@@ -1,0 +1,97 @@
+# A `v<version>` tag, pushed by `cargo xtask release <version>`, becomes a GitHub Release with the
+# Windows app, which every installed Lobby updates to, and a server image on ghcr.io.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  app:
+    name: Windows app
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml pins the channel and components; rustup installs it on first use.
+      - name: Toolchain
+        run: rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: The tag names the workspace version
+        shell: bash
+        run: |
+          version=$(sed -n '/^\[workspace.package\]/{n;s/^version = "\(.*\)"/\1/p}' Cargo.toml)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME, but Cargo.toml says $version"
+            exit 1
+          fi
+
+      # The app learns its repository here: it installs itself and reads this repository's
+      # Releases for updates.
+      - name: Build LobbySetup.exe and latest.json
+        run: cargo xtask dist --repo ${{ github.repository }}
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+
+      # The licence of every crate in the app; a licence not accepted in about.toml fails here.
+      - name: Third-party notices
+        working-directory: packaging/notices
+        run: >
+          cargo about generate -m ../../crates/lobby-desktop/Cargo.toml about.hbs
+          -o ../../dist/THIRD-PARTY-NOTICES.html
+
+      # gh uploads the files before it publishes, so no app sees a Release without its files.
+      - name: Publish the Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/LobbySetup.exe dist/latest.json
+          dist/THIRD-PARTY-NOTICES.html
+          --title "Lobby ${GITHUB_REF_NAME#v}" --generate-notes --verify-tag
+
+  server:
+    name: Server image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image name and version
+        id: image
+        run: |
+          echo "name=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/lobby-server" >> "$GITHUB_OUTPUT"
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ steps.image.outputs.version }}
+            ${{ steps.image.outputs.name }}:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ steps.image.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

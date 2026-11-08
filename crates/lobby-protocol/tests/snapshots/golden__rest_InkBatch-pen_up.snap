@@ -1,0 +1,12 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "end": true,
+  "epoch": 2,
+  "points": [],
+  "seq": 4,
+  "shareId": 3,
+  "stroke": 7
+}

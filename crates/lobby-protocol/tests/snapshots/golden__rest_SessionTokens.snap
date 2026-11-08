@@ -1,0 +1,10 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "accessExpiresAt": 1792751145123,
+  "accessToken": "q8ZcXUvTq0n3o0b6s1Q2rA",
+  "refreshExpiresAt": 1795342245123,
+  "refreshToken": "r9AdYVwUr1o4p1c7t2R3sB"
+}

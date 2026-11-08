@@ -1,0 +1,95 @@
+{"scenario": "Two Members share; the third watches from a Member's card, moves to the other with one press on its row's watch tile, goes fullscreen (Esc once hints, Esc twice leaves) and stops from the card", "clients": ["a", "b", "c"], "members": ["alice", "bob", "carol"]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "c", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "carol@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:carol@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "a", "click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"on": "b", "click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"on": "c", "click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+// Past the moment a click on Share Screen is taken as the end of a double-click on Join Voice.
+{"advance": 600}
+{"on": "a", "advance": 600}
+{"click": "share-screen"}
+{"wait": {"path": "/elements/picker-test-0", "exists": true}, "timeout_ms": 5000}
+{"scroll": "source-picker-list", "to": "picker-test-0"}
+{"click": "picker-test-0"}
+{"wait": {"path": "/lobby/voice/share", "eq": "live"}, "timeout_ms": 8000}
+// The Sharers' own shares show by default; they close them and keep sharing.
+{"wait": {"path": "/lobby/viewer/whose", "eq": "mine"}}
+{"click": "share-close"}
+{"wait": {"path": "/lobby/viewer", "eq": null}}
+{"on": "c", "click": "share-screen"}
+{"wait": {"path": "/elements/picker-test-0", "exists": true}, "timeout_ms": 5000}
+{"scroll": "source-picker-list", "to": "picker-test-0"}
+{"click": "picker-test-0"}
+{"wait": {"path": "/lobby/voice/share", "eq": "live"}, "timeout_ms": 8000}
+{"wait": {"path": "/lobby/viewer/whose", "eq": "mine"}}
+{"click": "share-close"}
+{"wait": {"path": "/lobby/viewer", "eq": null}}
+{"on": "b", "wait": {"path": "/lobby/sharers", "len": 2}, "timeout_ms": 3000}
+// Watch from the card: a right-click on their row opens it.
+{"right_click": "member-alice"}
+{"wait": {"path": "/lobby/member_panel/user", "eq": "alice"}}
+{"expect": {"all": [{"visible": "member-watch"}, {"visible": "volume-slider"}]}}
+{"shot": "card-watch"}
+{"click": "member-watch"}
+{"wait": {"path": "/lobby/viewer/shown", "ne": 0}}
+{"expect": {"all": [{"path": "/lobby/watching", "eq": "alice"}, {"path": "/lobby/member_panel", "eq": null}, {"path": "/lobby/viewer/fullscreen", "eq": false}, {"visible": "watch-carol"}, {"visible": "share-fullscreen"}]}}
+{"shot": "watching-alice", "id": "viewer-panel"}
+{"shot": "watching-alice-window"}
+// One click moves the Watch.
+{"click": "watch-carol"}
+{"wait": {"all": [{"path": "/lobby/watching", "eq": "carol"}, {"path": "/lobby/viewer/shown", "ne": 0}]}}
+{"shot": "watching-carol", "id": "viewer-panel"}
+// Fullscreen: the control, then Esc once for the hint, Esc again to leave.
+{"click": "share-fullscreen"}
+{"wait": {"path": "/lobby/viewer/fullscreen", "eq": true}}
+{"expect": {"all": [{"visible": "share-fullscreen-overlay"}, {"gone": "viewer-panel"}, {"visible": "share-fullscreen-exit"}]}}
+{"shot": "fullscreen-window"}
+{"press": "escape"}
+{"wait": {"path": "/lobby/viewer/esc_hint", "eq": true}}
+{"expect": {"all": [{"visible": "fullscreen-hint"}, {"path": "/lobby/viewer/fullscreen", "eq": true}]}}
+{"shot": "fullscreen-hint-window"}
+{"press": "escape"}
+{"wait": {"path": "/lobby/viewer/fullscreen", "eq": false}}
+{"expect": {"all": [{"visible": "viewer-panel"}, {"gone": "fullscreen-hint"}, {"gone": "share-fullscreen-overlay"}]}}
+// The overlay's control leaves at once.
+{"click": "share-fullscreen"}
+{"wait": {"path": "/lobby/viewer/fullscreen", "eq": true}}
+{"click": "share-fullscreen-exit"}
+{"wait": {"path": "/lobby/viewer/fullscreen", "eq": false}}
+{"click": "watch-alice"}
+{"wait": {"all": [{"path": "/lobby/watching", "eq": "alice"}, {"path": "/lobby/viewer/shown", "ne": 0}]}}
+// Stop from the card.
+{"right_click": "member-alice"}
+{"wait": {"path": "/lobby/member_panel/user", "eq": "alice"}}
+{"expect": {"all": [{"visible": "member-stop-watching"}, {"gone": "member-watch"}]}}
+{"shot": "card-stop-watching"}
+{"click": "member-stop-watching"}
+{"wait": {"all": [{"path": "/lobby/watching", "eq": null}, {"path": "/lobby/viewer", "eq": null}]}}
+// A Sharer who stops is no longer offered.
+{"on": "c", "click": "share-stop"}
+{"on": "b", "wait": {"path": "/lobby/sharers", "len": 1}, "timeout_ms": 3000}

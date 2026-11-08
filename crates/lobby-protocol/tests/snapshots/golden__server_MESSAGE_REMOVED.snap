@@ -1,0 +1,11 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "d": {
+    "messageId": 4182,
+    "rev": 312
+  },
+  "t": "MESSAGE_REMOVED"
+}

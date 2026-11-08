@@ -1,0 +1,23 @@
+{"scenario": "Two Members sign in with a Magic Code and see each other online", "clients": ["a", "b"], "members": ["alice", "bob"]}
+// A first start: the address field is empty, and the rail shows the steps ahead.
+{"on": "a", "expect": {"path": "/url_step/value", "eq": ""}}
+{"type": "{lobby}", "into": "lobby-url"}
+{"click": "connect"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"click": "send-code"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"expect": {"all": [{"path": "/lobby/members/alice/presence", "eq": "online"}, {"path": "/lobby/members/bob/presence", "eq": "offline"}, {"path": "/lobby/members/bob/section", "eq": "offline"}]}}
+// Enter in each field does what its button does.
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/members/alice/presence", "eq": "online"}, "timeout_ms": 5000}
+{"on": "a", "wait": {"path": "/lobby/members/bob/presence", "eq": "online"}}
+{"shot": "members", "id": "member-list"}

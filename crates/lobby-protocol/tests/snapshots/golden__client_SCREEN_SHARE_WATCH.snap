@@ -1,0 +1,11 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "sharerId": "usr_9f0e7a9c1b2d3e4f5a6b7c8d"
+  },
+  "rid": "s3",
+  "t": "SCREEN_SHARE_WATCH"
+}

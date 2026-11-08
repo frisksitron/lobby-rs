@@ -1,0 +1,27 @@
+# Copy to deploy/lobby.toml and fill in the three blanks (bootstrap_email, smtp.from,
+# advertise_ips). Every other key and its default: lobby.example.toml.
+[lobby]
+name = "Lobby"
+
+[http]
+# Host network, Caddy in front. Never 0.0.0.0 here: the port would be public without TLS.
+bind = "127.0.0.1:8080"
+trusted_proxy_cidrs = ["127.0.0.1/32", "::1/128"]
+
+[auth]
+# The first Member's email.
+bootstrap_email = ""
+
+[smtp]
+host = "smtp.resend.com"
+port = 587
+username = "resend"
+from = "Lobby <login@mail.example.com>"
+# The password comes from the compose secret (LOBBY_SMTP__PASSWORD_FILE). Never put it here.
+
+[sfu]
+# Dual-stack on Linux, so IPv6 Members reach Voice.
+udp_bind = "[::]:50000"
+tcp_bind = "[::]:50000"
+# The public IPv4 FIRST, then the IPv6. A home server adds its LAN IP last.
+advertise_ips = ["203.0.113.7", "2001:db8::7"]

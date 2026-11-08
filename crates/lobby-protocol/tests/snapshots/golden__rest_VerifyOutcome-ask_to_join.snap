@@ -1,0 +1,8 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: value
+---
+{
+  "next": "ask_to_join",
+  "ticket": "v4BeZWxVs2p5q2d8u3S4tC"
+}

@@ -1,0 +1,17 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "tokens": {
+    "accessExpiresAt": 1792751145123,
+    "accessToken": "q8ZcXUvTq0n3o0b6s1Q2rA",
+    "refreshExpiresAt": 1795342245123,
+    "refreshToken": "r9AdYVwUr1o4p1c7t2R3sB"
+  },
+  "user": {
+    "createdAt": 1792000000000,
+    "id": "usr_9f0e7a9c1b2d3e4f5a6b7c8d",
+    "username": "alice"
+  }
+}

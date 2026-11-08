@@ -1,0 +1,27 @@
+# `cargo about` config for THIRD-PARTY-NOTICES.html, which each Release ships beside
+# LobbySetup.exe: the licence of every crate the Windows app is built from.
+targets = ["x86_64-pc-windows-msvc"]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# The permissive licences of the tree, most preferred first; a dependency under anything else
+# fails the release until it is reviewed and added here.
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "Zlib",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "MPL-2.0",
+    "BSL-1.0",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "Unlicense",
+    "0BSD",
+    "NCSA",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT-0",
+    "BSD-1-Clause",
+    "BlueOak-1.0.0",
+]

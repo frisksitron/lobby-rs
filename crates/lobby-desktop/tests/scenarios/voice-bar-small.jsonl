@@ -1,0 +1,84 @@
+{"scenario": "At 480x400 the Voice bar holds a face for everyone in Voice: out of Voice a sharer's face is inert and says to join, in Voice it watches them and stops again, your own share fills your face's badge, and joining, muting and sharing never move the bar, the composer or the feed", "clients": ["a", "b", "c"], "members": ["alice", "bob", "carol"], "size": [480, 400]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+// Nobody in Voice: the bar holds Join Voice alone.
+{"expect": {"visible": "voice-join"}}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "c", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "carol@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:carol@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "b", "click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"advance": 600}
+{"click": "share-screen"}
+{"wait": {"path": "/elements/picker-test-0", "exists": true}, "timeout_ms": 5000}
+{"scroll": "source-picker-list", "to": "picker-test-0"}
+{"click": "picker-test-0"}
+{"wait": {"path": "/lobby/voice/share", "eq": "live"}, "timeout_ms": 8000}
+{"wait": {"path": "/lobby/viewer/whose", "eq": "mine"}}
+{"click": "share-close"}
+{"wait": {"path": "/lobby/viewer", "eq": null}}
+{"on": "c", "click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"click": "voice-mute"}
+{"wait": {"path": "/lobby/members/carol/muted", "eq": true}}
+// Out of Voice: bob's face carries a faint badge and does nothing; carol's has the mic.
+{"on": "a", "wait": {"all": [{"path": "/lobby/members/bob/tile", "eq": "faint"}, {"path": "/lobby/members/carol/muted", "eq": true}, {"visible": "face-bob"}, {"visible": "face-carol"}]}, "timeout_ms": 5000}
+{"expect": {"path": "/elements/face-bob/disabled", "eq": true}}
+{"mark": "out"}
+{"shot": "out"}
+{"click": "face-bob"}
+{"advance": 1000}
+{"expect": {"all": [{"path": "/lobby/viewer", "eq": null}, {"path": "/lobby/watching", "eq": null}]}}
+{"shot": "out-tooltip", "hover": true}
+{"click": "voice-join"}
+{"wait": {"path": "/lobby/voice/controls", "eq": "in_voice"}, "timeout_ms": 8000}
+{"wait": {"path": "/lobby/members/bob/tile", "eq": "rest"}, "timeout_ms": 5000}
+{"expect": {"all": [{"path": "/elements/face-bob/label", "eq": "Watch bob"}, {"not": {"path": "/elements/face-bob/disabled", "eq": true}},{"unchanged": "voice-strip", "since": "out"}, {"unchanged": "composer", "since": "out"}, {"unchanged": "feed", "since": "out"}]}}
+// Muting moves nothing either.
+{"click": "voice-mute"}
+{"wait": {"path": "/lobby/members/alice/muted", "eq": true}}
+{"expect": {"all": [{"unchanged": "voice-strip", "since": "out"}, {"unchanged": "composer", "since": "out"}, {"unchanged": "feed", "since": "out"}]}}
+{"click": "voice-mute"}
+{"wait": {"path": "/lobby/members/alice/muted", "eq": false}}
+// Pressing bob's face watches him; pressing it again stops.
+{"click": "face-bob"}
+{"wait": {"all": [{"path": "/lobby/watching", "eq": "bob"}, {"path": "/lobby/viewer/shown", "ne": 0}, {"path": "/lobby/members/bob/tile", "eq": "on_screen"}]}, "timeout_ms": 5000}
+{"expect": {"all": [{"path": "/elements/face-bob/label", "eq": "Stop watching bob"}, {"unchanged": "voice-strip", "since": "out"}, {"unchanged": "composer", "since": "out"}]}}
+{"shot": "in"}
+{"click": "face-bob"}
+{"wait": {"all": [{"path": "/lobby/viewer", "eq": null}, {"path": "/lobby/members/bob/tile", "eq": "rest"}]}, "timeout_ms": 5000}
+// Alice shares: her own preview shows, and her face's badge fills.
+{"advance": 600}
+{"click": "share-screen"}
+{"wait": {"path": "/elements/picker-test-0", "exists": true}, "timeout_ms": 5000}
+{"scroll": "source-picker-list", "to": "picker-test-0"}
+{"click": "picker-test-0"}
+{"wait": {"all": [{"path": "/lobby/voice/share", "eq": "live"}, {"path": "/lobby/viewer/whose", "eq": "mine"}]}, "timeout_ms": 8000}
+{"wait": {"path": "/elements/face-alice/label", "eq": "Hide your share"}, "timeout_ms": 3000}
+{"expect": {"all": [{"unchanged": "voice-strip", "since": "out"}, {"unchanged": "composer", "since": "out"}]}}
+{"shot": "mine"}
+// The Members button opens the sheet over the dimmed window.
+{"click": "members-toggle"}
+{"wait": {"all": [{"path": "/lobby/members_open", "eq": true}, {"visible": "member-list"}, {"visible": "watch-bob"}]}, "timeout_ms": 2000}
+{"shot": "members"}
+{"press": "escape"}
+{"wait": {"all": [{"path": "/lobby/members_open", "eq": false}, {"gone": "member-list"}]}, "timeout_ms": 2000}

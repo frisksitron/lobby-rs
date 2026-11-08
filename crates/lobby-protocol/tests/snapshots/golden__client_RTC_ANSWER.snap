@@ -1,0 +1,13 @@
+---
+source: crates/lobby-protocol/tests/golden.rs
+expression: encoded
+---
+{
+  "d": {
+    "rev": 2,
+    "sdp": "v=0\r\no=str0m-1 1 2 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\na=ice-lite\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=ice-ufrag:Hq5G\r\na=ice-pwd:Tk7uYb3vXq9pLm2Rz8Wc4Nd6\r\na=mid:0\r\na=sendrecv\r\n",
+    "voiceSessionId": 17
+  },
+  "rid": "v3",
+  "t": "RTC_ANSWER"
+}
