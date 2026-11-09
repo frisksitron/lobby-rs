@@ -15,6 +15,7 @@ use gpui_kit::{
     KeyDownEvent, Keystroke, MouseButton, ParentElement as _, Render, SharedString, Styled as _,
     Subscription, Task, TestSupportExt as _, Window,
     assets::IconName,
+    canvas,
     component::{
         ActiveTheme as _, Disableable as _, Icon, Sizable as _,
         button::{Button, ButtonVariants as _},
@@ -39,7 +40,7 @@ use crate::{
         FORMAT_BAR_HEIGHT, FormatBar, ICON_XS, INLINE_H, MediaImages, SURFACE_INNER_RADIUS,
         SURFACE_PAD, SURFACE_RADIUS,
         context_menu::{menu_frame, menu_item},
-        draft_strip, format_for, mention_menu,
+        draft_strip, format_for, mention_chip, mention_menu,
     },
     lobbies::Lobbies,
     session_entity::SessionEntity,
@@ -815,6 +816,28 @@ impl ComposerView {
         }
     }
 
+    /// The fill behind each `@name` the field holds that a sent Message would show as a chip.
+    /// Laid over the field after it: the field's layout is set in its paint.
+    fn mention_chips(&self, value: &str, cx: &App) -> Option<impl IntoElement> {
+        if !value.contains('@') {
+            return None;
+        }
+        let names = self.session.read(cx).state()?.mention_names();
+        let input = self.input.clone();
+        Some(
+            canvas(
+                |_, _, _| {},
+                move |bounds, _, window, cx| {
+                    mention_chip::paint_in_field(&bounds, &input, &names, window, cx);
+                },
+            )
+            .absolute()
+            .top_0()
+            .left_0()
+            .size_full(),
+        )
+    }
+
     /// The field, then the attach button, the formatting bar and Send. In a narrow window the bar
     /// folds into one "Aa" menu beside Send so the feed keeps its room at 480×400. `value` is the
     /// field's text, copied out of it once per frame.
@@ -853,6 +876,7 @@ impl ComposerView {
                         .unwrap_or(false)
                 }
             }))
+            .children(self.mention_chips(value, cx))
             .test_support()
             .context_menu(input_menu(self.input.clone()));
         let corner = device_in(SURFACE_INNER_RADIUS, cx);
