@@ -26,7 +26,7 @@ use crate::{
     access, account, auth, chat,
     client_ip::{self, ClientIp},
     error::ApiError,
-    media, owner, profile_images,
+    landing, media, owner, profile_images,
     server::App,
     uploads, ws,
 };
@@ -75,6 +75,7 @@ fn table() -> Vec<Route> {
         methods,
     };
     vec![
+        route(Json, landing::PATH, BASELINE, get(landing::page)),
         route(Json, routes::HEALTH, Unlimited, get(health)),
         route(Json, routes::LOBBY, PerWindow(60), get(lobby_info)),
         route(

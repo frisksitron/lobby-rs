@@ -93,6 +93,28 @@ async fn requests_with_an_origin_header_get_403() {
 }
 
 #[tokio::test]
+async fn the_address_opens_a_landing_page_and_other_paths_stay_json_errors() {
+    let env = TestServer::start_with(|cfg| cfg.lobby.name = "<script>&".into()).await;
+    let addr = env.addr;
+
+    let page = get(addr, "/").await;
+    assert_eq!(page.status, 200, "{}", page.body);
+    assert_eq!(
+        page.header("content-type"),
+        Some("text/html; charset=utf-8")
+    );
+    assert_eq!(page.header("cache-control"), Some("no-cache"));
+    let policy = page.header("content-security-policy").unwrap();
+    assert!(policy.starts_with("default-src 'none';"), "{policy}");
+    assert!(policy.contains("frame-ancestors 'none'"), "{policy}");
+    assert!(page.body.contains("&lt;script&gt;&amp;"), "{}", page.body);
+    assert!(!page.body.contains("<script>&"), "{}", page.body);
+
+    assert_envelope(&get(addr, "/no/such/route").await, 404, "NOT_FOUND");
+    assert!(env.shutdown().await.is_clean());
+}
+
+#[tokio::test]
 async fn every_error_has_the_json_envelope() {
     let env = TestServer::start().await;
     let addr = env.addr;

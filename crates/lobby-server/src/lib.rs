@@ -13,6 +13,7 @@ mod db;
 mod domain;
 pub mod error;
 mod jobs;
+mod landing;
 mod limits;
 mod linger;
 mod lobby;
