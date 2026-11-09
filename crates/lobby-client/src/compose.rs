@@ -76,18 +76,17 @@ impl MentionTarget {
     }
 }
 
-/// The Members whose username starts with what was typed (any case), but not `me`, by name, and
-/// `@everyone` last when it starts with what was typed too.
+/// The Members whose username starts with what was typed (any case), by name, and `@everyone` last
+/// when it starts with what was typed too.
 pub fn mention_matches<'a>(
     typed: &str,
     names: impl IntoIterator<Item = &'a Username>,
-    me: Option<&Username>,
 ) -> Vec<MentionTarget> {
     let typed = typed.to_lowercase();
     let everyone = EVERYONE.starts_with(&typed);
     let mut found: Vec<&Username> = names
         .into_iter()
-        .filter(|n| Some(*n) != me && n.as_str().to_lowercase().starts_with(&typed))
+        .filter(|n| n.as_str().to_lowercase().starts_with(&typed))
         .collect();
     found.sort_by_key(|n| n.as_str().to_lowercase());
     found.truncate(MENTION_MENU_MAX - usize::from(everyone));
@@ -691,22 +690,18 @@ mod tests {
         assert_eq!(query("hi al", 5), None);
 
         let members = [name("Alice"), name("alan"), name("bob"), name("amy")];
-        let (alice, bob) = (&members[0], &members[2]);
         let member = |i: usize| MentionTarget::Member(members[i].clone());
-        let found = mention_matches("A", &members, Some(alice));
-        assert_eq!(found, [member(1), member(3)]);
-        assert_eq!(mention_matches("", &members, Some(bob)).len(), 4);
-        assert_eq!(mention_matches("zz", &members, None).len(), 0);
-        assert_eq!(
-            mention_matches("EV", &members, None),
-            [MentionTarget::Everyone]
-        );
+        let found = mention_matches("A", &members);
+        assert_eq!(found, [member(1), member(0), member(3)]);
+        assert_eq!(mention_matches("", &members).len(), MENTION_MENU_MAX);
+        assert_eq!(mention_matches("zz", &members).len(), 0);
+        assert_eq!(mention_matches("EV", &members), [MentionTarget::Everyone]);
 
         let many: Vec<Username> = (0..9).map(|i| name(&format!("mem{i}"))).collect();
-        let all = mention_matches("", &many, None);
+        let all = mention_matches("", &many);
         assert_eq!(all.len(), MENTION_MENU_MAX);
         assert_eq!(all.last(), Some(&MentionTarget::Everyone));
-        assert_eq!(mention_matches("m", &many, None).len(), MENTION_MENU_MAX);
+        assert_eq!(mention_matches("m", &many).len(), MENTION_MENU_MAX);
 
         let q = mention_query("hi @al and", 6).unwrap();
         let e = complete_mention("hi @al and", &q, &member(0));

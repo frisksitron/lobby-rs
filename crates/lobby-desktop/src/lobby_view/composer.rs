@@ -386,11 +386,8 @@ impl ComposerView {
             return None;
         }
         let state = self.session.read(cx).state()?;
-        let matches = compose::mention_matches(
-            &query.typed,
-            state.members.values().map(|m| &m.username),
-            state.my_username(),
-        );
+        let members = state.members.values().map(|m| &m.username);
+        let matches = compose::mention_matches(&query.typed, members);
         (!matches.is_empty()).then_some((query, matches))
     }
 
