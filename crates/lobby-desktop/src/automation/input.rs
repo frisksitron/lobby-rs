@@ -480,14 +480,19 @@ pub fn perform(
 }
 
 /// A GPUI action by name (`lobby::Quit`), or a host event: `idle`, `active`, `wake`,
-/// `tray:show`, `tray:quit`, `window:close`, or `resize:<w>x<h>` (content size in logical pixels,
-/// real app only, done by `pipe`).
+/// `tray:show`, `tray:quit`, `window:close`, `open-link:<link>` (a `lobby://` link, as the OS
+/// hands it over), or `resize:<w>x<h>` (content size in logical pixels, real app only, done by
+/// `pipe`).
 fn action(
     shell: &Entity<Shell>,
     name: &str,
     window: &mut Window,
     cx: &mut App,
 ) -> Result<(), StepError> {
+    if let Some(link) = name.strip_prefix("open-link:") {
+        shell.update(cx, |s, cx| s.open_link(link, window, cx));
+        return Ok(());
+    }
     match name {
         // The injected idle source stays put, so the periodic check agrees with the step.
         "idle" => shell.update(cx, |s, cx| {

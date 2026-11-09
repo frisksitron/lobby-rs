@@ -1,0 +1,32 @@
+{"scenario": "A lobby:// link only puts the address in the form: its Lobby is never connected to until Connect; a Lobby already added is switched to", "clients": ["a"], "members": ["alice"], "second_lobby": true}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"all": [{"path": "/lobby/name", "eq": "Test Lobby"}, {"path": "/lobby/phase", "eq": "connected"}]}, "timeout_ms": 5000}
+// The Lobby the person is in, and links that are not an address: nothing new shows.
+{"action": "open-link:lobby://{host}"}
+{"action": "open-link:lobby://user@evil.example"}
+{"action": "open-link:lobby://{host}/path?x=1"}
+{"expect": {"all": [{"path": "/route", "eq": "Lobby"}, {"path": "/add_lobby_open", "eq": false}, {"path": "/window/dialog", "eq": false}, {"path": "/lobbies", "len": 1}]}}
+// An address the Lobbies list does not have: Add Lobby opens with the field filled, and the
+// person stays in their Lobby, with nothing connected to, until they click Connect.
+{"action": "open-link:LOBBY://{host2}/"}
+{"wait": {"path": "/add_lobby_open", "eq": true}, "timeout_ms": 2000}
+{"shot": "link-add-lobby", "id": "add-lobby"}
+{"expect": {"all": [{"path": "/add_lobby_url", "eq": "{lobby2}"}, {"path": "/route", "eq": "Lobby"}, {"path": "/lobby/name", "eq": "Test Lobby"}, {"path": "/lobbies", "len": 1}, {"path": "/auth", "exists": false}]}}
+{"click": "add-lobby-connect"}
+{"wait": {"all": [{"path": "/auth/lobby", "eq": "Second Lobby"}, {"path": "/auth/step", "eq": "Email"}]}, "timeout_ms": 5000}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code2:alice@lobby.test}", "into": "code-input"}
+{"wait": {"all": [{"path": "/lobby/name", "eq": "Second Lobby"}, {"path": "/lobby/phase", "eq": "connected"}]}, "timeout_ms": 5000}
+{"expect": {"path": "/lobbies", "len": 2}}
+// A Lobby this device has: the link switches to it.
+{"action": "open-link:lobby://{host}"}
+{"wait": {"all": [{"path": "/lobby/name", "eq": "Test Lobby"}, {"path": "/lobby/phase", "eq": "connected"}]}, "timeout_ms": 5000}
+{"expect": {"all": [{"path": "/add_lobby_open", "eq": false}, {"path": "/lobbies", "len": 2}]}}

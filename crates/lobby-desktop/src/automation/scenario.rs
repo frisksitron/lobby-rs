@@ -38,7 +38,9 @@
 //!   and 1 to 1.5 they fall off it, on the letterbox or past it. Down and move fail where no canvas
 //!   is drawn; whether the press drew is for the model to say.
 //! - `{"action": "<name>"}`: a GPUI action (`lobby::Quit`) or a host event: `idle`, `active`,
-//!   `wake`, `tray:show`, `tray:quit`, `window:close` (the close button: hides to the tray).
+//!   `wake`, `tray:show`, `tray:quit`, `window:close` (the close button: hides to the tray),
+//!   `open-link:<link>` (a `lobby://` link, as the OS hands it over: the Shell opens it as it
+//!   does one from a browser).
 //! - `{"wait": <predicate>, "timeout_ms": 5000}`: polls the model until it holds.
 //! - `{"expect": <predicate>}`: holds now.
 //! - `{"shot": "<name>", "id": "<id>"}`: a 1x crop of the element (the window without `id`),
@@ -78,11 +80,13 @@
 //! (the element lies wholly within the other); and `all`, `any`, `not`.
 //!
 //! Placeholders, filled before parsing: `{lobby}` and `{lobby2}` (the Lobbies' addresses),
+//! `{host}` and `{host2}` (the same without `http://`, for a `lobby://` link),
 //! `{lobby:<client>}` (an `own_paths` client's own address), `{tmp}` (a directory of the run's
 //! own, for a Save dialog's `save_dir`) and `{big:<n>}` (a file of `n` MiB in it, made for the
 //! run); `{code:<email>}` in a `type` is the newest Magic Code the Lobby mailed there, and
-//! `{code2:<email>}` the second Lobby's. `cargo xtask drive` fills `{lobby}`, `{lobby2}` and the
-//! codes only. A Member `alice` of the header's `members` has the email `alice@lobby.test`.
+//! `{code2:<email>}` the second Lobby's. `cargo xtask drive` fills `{lobby}`, `{lobby2}`, `{host}`,
+//! `{host2}` and the codes only. A Member `alice` of the header's `members` has the email
+//! `alice@lobby.test`.
 
 use std::time::Duration;
 

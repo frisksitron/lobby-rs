@@ -19,6 +19,9 @@ pub enum OriginError {
     Invalid,
 }
 
+/// The URL scheme of the link a Lobby's page hands to the app: `lobby://<address>`.
+pub const DEEP_LINK_SCHEME: &str = "lobby";
+
 /// Where plain `http` is accepted. Bearer tokens, refresh tokens, Join tickets and Magic Codes must
 /// never travel in cleartext, so only a loopback Lobby may skip TLS unless the developer switch
 /// `LOBBY_ALLOW_HTTP=1` says otherwise.
@@ -63,6 +66,26 @@ impl LobbyOrigin {
         } else {
             Err(OriginError::NotHttps)
         }
+    }
+
+    /// The Lobby a `lobby://<address>` link names, or `None` for a link that is anything else. The
+    /// link comes from outside the app, so only a bare address is accepted: no credentials, path,
+    /// query or fragment. The address goes through [`LobbyOrigin::parse`], so its https rule holds.
+    pub fn from_deep_link(link: &str, policy: HttpPolicy) -> Option<Self> {
+        let (scheme, after) = link.split_once("://")?;
+        if !scheme.eq_ignore_ascii_case(DEEP_LINK_SCHEME) {
+            return None;
+        }
+        let address = after.strip_suffix('/').unwrap_or(after);
+        // A second `://` and a path both contain a slash. A percent sign could hide a character
+        // the others refuse.
+        let refused = |c: char| {
+            matches!(c, '@' | '/' | '\\' | '?' | '#' | '%') || c.is_whitespace() || c.is_control()
+        };
+        if address.contains(refused) {
+            return None;
+        }
+        Self::parse(address, policy).ok()
     }
 
     /// Structural normalization only: an explicit `http` or `https` scheme and a host. Stored
@@ -273,6 +296,51 @@ mod tests {
                     .map(LobbyOrigin::as_str),
                 expected.as_ref().map(|s| *s),
                 "{input:?} under {policy:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_deep_link_is_a_bare_address_and_nothing_else() {
+        for (link, expected) in [
+            ("lobby://lobby.late.fm", Some("https://lobby.late.fm")),
+            ("LOBBY://Lobby.Late.FM/", Some("https://lobby.late.fm")),
+            (
+                "lobby://lobby.late.fm:8443",
+                Some("https://lobby.late.fm:8443"),
+            ),
+            ("lobby://localhost:8080", Some("http://localhost:8080")),
+            ("lobby://127.0.0.1:8080/", Some("http://127.0.0.1:8080")),
+            (
+                "lobby://192.168.1.20:8080",
+                Some("https://192.168.1.20:8080"),
+            ),
+            ("lobby://user@evil.com", None),
+            ("lobby://https://evil.com", None),
+            ("lobby://http://localhost", None),
+            ("lobby://x/y", None),
+            ("lobby://x//", None),
+            ("lobby://x?a=1", None),
+            ("lobby://x#f", None),
+            ("lobby://x y", None),
+            ("lobby://x\ty", None),
+            ("lobby://x\\y", None),
+            ("lobby://lo%62by.late.fm", None),
+            ("lobby://", None),
+            ("lobby:///", None),
+            ("lobby://:8080", None),
+            (" lobby://lobby.late.fm", None),
+            ("lobby:lobby.late.fm", None),
+            ("https://lobby.late.fm", None),
+            ("lobbyx://lobby.late.fm", None),
+            ("", None),
+        ] {
+            assert_eq!(
+                LobbyOrigin::from_deep_link(link, HttpPolicy::LoopbackOnly)
+                    .as_ref()
+                    .map(LobbyOrigin::as_str),
+                expected,
+                "{link:?}"
             );
         }
     }

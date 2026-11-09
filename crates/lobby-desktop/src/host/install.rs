@@ -1,20 +1,25 @@
 //! Installing and uninstalling the app for one person, with no installer and no admin prompt. A
 //! published build is its own setup: started from anywhere but `%LOCALAPPDATA%\Programs\Lobby`, it
-//! copies itself there, adds Start menu and desktop shortcuts and an entry in Installed apps, and
-//! starts the copy. That entry runs `Lobby.exe --uninstall`. Updates swap the exe in place
-//! ([`relaunch`]), so the folder never holds more than one app.
+//! copies itself there, adds Start menu and desktop shortcuts, an entry in Installed apps and the
+//! `lobby://` link handler, and starts the copy. That entry runs `Lobby.exe --uninstall`. Updates
+//! swap the exe in place ([`relaunch`]), so the folder never holds more than one app.
 
 #![allow(unsafe_code)]
 
 use std::{
-    env, fs, io,
+    env,
+    ffi::OsString,
+    fs, io,
     os::windows::process::CommandExt as _,
     path::{Path, PathBuf},
     process::Command,
     time::{Duration, Instant},
 };
 
-use lobby_client::update::{APP_FILES, Version, clean_up, swap_in};
+use lobby_client::{
+    DEEP_LINK_SCHEME,
+    update::{APP_FILES, Version, clean_up, swap_in},
+};
 use tokio::runtime::Handle;
 use tracing::{info, warn};
 use windows::{
@@ -39,13 +44,15 @@ use windows::{
     core::{GUID, HSTRING, Interface as _},
 };
 
-use super::{single_instance, win};
+use super::{link_in, single_instance, win};
 use crate::host_env::{APP_NAME, AUMID_PREFIX};
 
 pub const EXE: &str = "Lobby.exe";
 pub const UNINSTALL_ARG: &str = "--uninstall";
 const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Lobby";
 const AUMID_KEY: &str = r"Software\Classes\AppUserModelId";
+const CLASSES_KEY: &str = r"Software\Classes";
+const SCHEME_DESCRIPTION: &str = "URL:Lobby";
 const SHORTCUT: &str = "Lobby.lnk";
 const DESCRIPTION: &str = "Chat, Voice and Screen Share with your friends";
 /// How long setup and uninstall wait for a running Lobby to quit. Quitting takes under two
@@ -94,7 +101,7 @@ pub fn on_start(rt: &Handle, me: Version) -> Startup {
         warn!("no exe path or no LOCALAPPDATA: running where it is");
         return Startup::Run;
     };
-    let uninstall = env::args_os().any(|a| a == UNINSTALL_ARG);
+    let uninstall = uninstall_requested(&env::args_os().skip(1).collect::<Vec<_>>());
     let installed_exe = dir.join(EXE);
     let in_install_dir = same_path(&exe, &installed_exe);
     let installed = installed_exe.exists().then(installed_version).flatten();
@@ -137,6 +144,12 @@ pub fn on_start(rt: &Handle, me: Version) -> Startup {
             Startup::Exit
         }
     }
+}
+
+/// `--uninstall` among the arguments, unless a `lobby://` link is there too: a link is untrusted
+/// text, and quotes in it can pass for more arguments.
+fn uninstall_requested(args: &[OsString]) -> bool {
+    link_in(args.iter().cloned()).is_none() && args.iter().any(|a| a == UNINSTALL_ARG)
 }
 
 fn install(rt: &Handle, exe: &Path, dir: &Path, me: Version) -> io::Result<()> {
@@ -200,6 +213,35 @@ fn register(exe: &Path, me: Version) -> io::Result<()> {
     ] {
         key.set_u32(name, value).map_err(io::Error::other)?;
     }
+    register_link_handler(&link_handler_key(), exe)
+}
+
+/// Where Windows looks for what runs a `lobby://` link.
+fn link_handler_key() -> String {
+    format!(r"{CLASSES_KEY}\{DEEP_LINK_SCHEME}")
+}
+
+/// Makes `exe` what Windows runs for a `lobby://` link, in `key` under the current user: written
+/// at each start, so it follows the exe's place.
+fn register_link_handler(key: &str, exe: &Path) -> io::Result<()> {
+    let exe = exe.display();
+    let user = windows_registry::CURRENT_USER;
+    let scheme = user.create(key).map_err(io::Error::other)?;
+    // The empty name is the key's default value.
+    scheme
+        .set_string("", SCHEME_DESCRIPTION)
+        .map_err(io::Error::other)?;
+    scheme
+        .set_string("URL Protocol", "")
+        .map_err(io::Error::other)?;
+    for (sub, value) in [
+        ("DefaultIcon", format!("\"{exe}\",0")),
+        (r"shell\open\command", format!("\"{exe}\" \"%1\"")),
+    ] {
+        user.create(format!(r"{key}\{sub}"))
+            .and_then(|k| k.set_string("", value))
+            .map_err(io::Error::other)?;
+    }
     Ok(())
 }
 
@@ -236,6 +278,7 @@ fn uninstall_from(rt: &Handle, dir: &Path) {
     let user = windows_registry::CURRENT_USER;
     let _ = user.remove_tree(UNINSTALL_KEY);
     let _ = user.remove_tree(format!(r"{AUMID_KEY}\{AUMID_PREFIX}"));
+    let _ = user.remove_tree(link_handler_key());
     let files: Vec<String> = APP_FILES
         .iter()
         .map(|f| format!("\"{}\"", dir.join(f).display()))
@@ -375,5 +418,14 @@ mod tests {
         );
         assert_eq!(plan(false, true, Some(me), me), Plan::Run);
         assert_eq!(plan(true, true, Some(me), me), Plan::Uninstall);
+    }
+
+    #[test]
+    fn a_link_never_passes_for_the_uninstall_flag() {
+        let args = |list: &[&str]| list.iter().map(OsString::from).collect::<Vec<_>>();
+        assert!(uninstall_requested(&args(&["--uninstall"])));
+        assert!(!uninstall_requested(&args(&[])));
+        assert!(!uninstall_requested(&args(&["lobby://x", "--uninstall"])));
+        assert!(!uninstall_requested(&args(&["--uninstall", "LOBBY:x"])));
     }
 }

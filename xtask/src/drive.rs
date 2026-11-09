@@ -75,10 +75,19 @@ pub fn parse_args(args: impl IntoIterator<Item = String>) -> Result<Options, Str
 }
 
 fn fill(s: &str, lobby: &str, lobby2: Option<&str>) -> Result<String, String> {
-    let mut s = s.replace("{lobby}", lobby);
-    if s.contains("{lobby2}") {
-        let second = lobby2.ok_or("{lobby2} needs a second Lobby")?;
-        s = s.replace("{lobby2}", second);
+    let host_of = |origin: &'_ str| {
+        origin
+            .split_once("://")
+            .map_or(origin.to_owned(), |(_, h)| h.to_owned())
+    };
+    let mut s = s
+        .replace("{lobby}", lobby)
+        .replace("{host}", &host_of(lobby));
+    if s.contains("{lobby2}") || s.contains("{host2}") {
+        let second = lobby2.ok_or("{lobby2} and {host2} need a second Lobby")?;
+        s = s
+            .replace("{lobby2}", second)
+            .replace("{host2}", &host_of(second));
     }
     Ok(s)
 }

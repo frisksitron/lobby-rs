@@ -1,6 +1,7 @@
 //! One Lobby per person and profile. The first launch serves a named pipe; a second launch finds
 //! it taken, lets the first bring its window to the front and exits, before it opens a window or
-//! touches `state.json` or the keychain.
+//! touches `state.json` or the keychain. A second launch that holds a `lobby://` link hands the
+//! link over as well.
 
 #[cfg(not(windows))]
 use tokio::{runtime::Handle, sync::mpsc::UnboundedSender};
@@ -34,6 +35,7 @@ pub fn pipe_name(profile: &str) -> String {
 pub fn acquire(
     _allow_multiple: bool,
     _name: &str,
+    _link: Option<&str>,
     _rt: &Handle,
     _events: UnboundedSender<HostEvent>,
 ) -> Instance {
@@ -58,6 +60,8 @@ mod windows_pipe {
     use crate::host::{HostEvent, win};
 
     const SHOW: &str = "show";
+    /// `open <link>`: show, and take the link.
+    const OPEN: &str = "open ";
     /// From setup or uninstall, which must replace or delete the running exe.
     const QUIT: &str = "quit";
     /// ERROR_PIPE_BUSY: every instance of the pipe is serving a client right now.
@@ -80,11 +84,13 @@ mod windows_pipe {
         format!(r"\\.\pipe\lobby-instance-{}-{profile}", win::session_id())
     }
 
-    /// Becomes the first instance, or tells the one that runs to show itself. `events` gets
-    /// [`HostEvent::Relaunched`] for each second launch.
+    /// Becomes the first instance, or tells the one that runs to show itself, and to open `link`
+    /// when this launch holds one. `events` gets [`HostEvent::Relaunched`] for each second launch,
+    /// and [`HostEvent::OpenLink`] for each link.
     pub fn acquire(
         allow_multiple: bool,
         name: &str,
+        link: Option<&str>,
         rt: &Handle,
         events: UnboundedSender<HostEvent>,
     ) -> Instance {
@@ -106,7 +112,12 @@ mod windows_pipe {
                 }
                 // Another process made the first instance of this pipe and still holds it.
                 Err(e) if e.kind() == io::ErrorKind::PermissionDenied => {
-                    match rt.block_on(signal(name, SHOW)) {
+                    let message = link.map_or_else(
+                        || SHOW.to_owned(),
+                        // One line: a newline in an argument would end the message early.
+                        |link| format!("{OPEN}{}", link.replace(['\r', '\n'], " ")),
+                    );
+                    match rt.block_on(signal(name, &message)) {
                         Ok(_) => return Instance::Signalled,
                         Err(e) => info!(pipe = name, error = %e, "the running instance is gone"),
                     }
@@ -184,10 +195,13 @@ mod windows_pipe {
             }
             let mut lines = BufReader::new(current).lines();
             if let Ok(Ok(Some(line))) = timeout(MESSAGE_BUDGET, lines.next_line()).await {
-                let event = match line.trim() {
+                let line = line.trim();
+                let event = match line {
                     SHOW => Some(HostEvent::Relaunched),
                     QUIT => Some(HostEvent::QuitForSetup),
-                    _ => None,
+                    _ => line
+                        .strip_prefix(OPEN)
+                        .map(|link| HostEvent::OpenLink(link.to_owned())),
                 };
                 if let Some(event) = event {
                     let _ = events.send(event);

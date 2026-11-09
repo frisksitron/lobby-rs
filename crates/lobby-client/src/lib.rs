@@ -69,7 +69,7 @@ pub use media::{Thumbnail, Thumbnails, request_thumbnails, synthetic_thumbnail};
 pub use media_cache::{
     DECODED_BUDGET_BYTES, DecodedImage, Lru, MediaCache, MediaCacheError, Variant, picture,
 };
-pub use origin::{HttpPolicy, LobbyOrigin, OriginError};
+pub use origin::{DEEP_LINK_SCHEME, HttpPolicy, LobbyOrigin, OriginError};
 pub use paths::Paths;
 pub use persist::{Loaded, Lobby, PersistError, Persisted, SavedWindow, StateFile, Upserted};
 pub use session::{

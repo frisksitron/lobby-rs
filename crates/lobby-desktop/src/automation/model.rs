@@ -167,6 +167,7 @@ fn model(shell: &Shell, window: &Window, cx: &App) -> Value {
         },
         "lobbies": lobbies,
         "add_lobby_open": shell.add_lobby.is_some(),
+        "add_lobby_url": shell.add_lobby.as_ref().map(|v| v.read(cx).url.read(cx).value().to_string()),
         "settings": settings(shell, cx),
         "switch_asks": shell.pending_switch.is_some(),
         "errand": shell.errand_on().map(ToString::to_string),

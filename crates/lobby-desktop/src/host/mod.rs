@@ -10,14 +10,15 @@ mod tray;
 #[cfg(windows)]
 mod win;
 
-use std::{rc::Rc, time::Duration};
+use std::{ffi::OsString, rc::Rc, time::Duration};
 
 use gpui_kit::App;
+use lobby_client::DEEP_LINK_SCHEME;
 use tokio::sync::mpsc::UnboundedSender;
 
 /// What the OS asks of the app from outside its window: the tray's menu and click, and a second
 /// launch.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum HostEvent {
     Show,
     Quit,
@@ -26,6 +27,20 @@ pub enum HostEvent {
     /// Setup or uninstall is about to replace or delete the app: quit, and leave a downloaded
     /// update where it is.
     QuitForSetup,
+    /// A `lobby://` link was opened, as the OS gave it. The Shell decides what it means.
+    OpenLink(String),
+}
+
+/// The `lobby://` link a launch was given, if any (`args` are the arguments after the exe's
+/// name). Any argument that starts with the scheme counts, so a link cannot pass for a flag.
+pub fn link_in(args: impl IntoIterator<Item = OsString>) -> Option<String> {
+    let prefix = format!("{DEEP_LINK_SCHEME}:");
+    args.into_iter()
+        .map(|arg| arg.to_string_lossy().into_owned())
+        .find(|arg| {
+            arg.get(..prefix.len())
+                .is_some_and(|head| head.eq_ignore_ascii_case(&prefix))
+        })
 }
 
 /// What the Shell does to its OS window. The app's is [`os_window_host`]; tests hand in one that

@@ -62,22 +62,31 @@ fn main() -> anyhow::Result<()> {
     let profile =
         KeyringTokenStore::profile(env.instance_id.as_deref(), env.user_data_dir.as_deref());
     // Before the keychain, the state file and any window: a second launch only asks the first to
-    // show itself.
+    // show itself, and to open its link.
+    let link = host::link_in(std::env::args_os().skip(1));
     let (host_events, host_incoming) = tokio::sync::mpsc::unbounded_channel();
     let instance = match single_instance::acquire(
         env.allow_multiple_instances,
         &single_instance::pipe_name(&profile),
+        link.as_deref(),
         rt.handle(),
         host_events.clone(),
     ) {
         Instance::Signalled => {
-            info!("another instance is running: asked it to show itself");
+            info!(
+                link = link.is_some(),
+                "another instance is running: asked it to show itself"
+            );
             logging::flush_and_drop();
             return Ok(());
         }
         Instance::First(guard) => Some(guard),
         Instance::Unguarded => None,
     };
+    // This launch's own link takes the same way in as a second launch's.
+    if let Some(link) = link {
+        let _ = host_events.send(HostEvent::OpenLink(link));
+    }
     let store: Arc<dyn TokenStore> = if env.insecure_tokens {
         warn!("LOBBY_INSECURE_TOKENS=1: tokens are kept in memory only and lost on exit");
         Arc::new(MemoryTokenStore::new())
@@ -150,7 +159,15 @@ fn main() -> anyhow::Result<()> {
                 Ok((window, shell)) => {
                     clock.step("main window");
                     clock.on_first_frame(window, cx);
-                    host_events_for(&env, &shell, host_events, host_incoming, instance, cx);
+                    host_events_for(
+                        &env,
+                        &shell,
+                        window,
+                        host_events,
+                        host_incoming,
+                        instance,
+                        cx,
+                    );
                     start_updates(update_feed, &update_client, &shell, on_exit, cx);
                     automation(&env, window, shell, cx);
                 }
@@ -236,6 +253,7 @@ fn window_setup(env: &HostEnv, state: &Persisted, cx: &App) -> WindowSetup {
 fn host_events_for(
     env: &HostEnv,
     shell: &Entity<Shell>,
+    window: AnyWindowHandle,
     events: UnboundedSender<HostEvent>,
     incoming: UnboundedReceiver<HostEvent>,
     instance: Option<single_instance::Guard>,
@@ -254,7 +272,7 @@ fn host_events_for(
         if let Some(guard) = instance {
             shell.hold_instance(guard);
         }
-        shell.listen(incoming, cx);
+        shell.listen(incoming, window, cx);
     });
 }
 

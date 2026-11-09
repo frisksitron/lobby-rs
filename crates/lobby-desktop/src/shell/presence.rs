@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use gpui_kit::{Context, Window};
+use gpui_kit::{AnyWindowHandle, Context, Window};
 use lobby_client::{Intent, SoundPlayer};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::info;
@@ -50,27 +50,40 @@ impl Shell {
         self.instance = Some(guard);
     }
 
-    /// Takes what the OS asks of the app from outside its window: the tray's menu and click.
-    pub fn listen(&mut self, mut events: UnboundedReceiver<HostEvent>, cx: &mut Context<Self>) {
+    /// Takes what the OS asks of the app from outside its window: the tray's menu and click, a
+    /// second launch and a `lobby://` link. `window` is the one a link's form opens in.
+    pub fn listen(
+        &mut self,
+        mut events: UnboundedReceiver<HostEvent>,
+        window: AnyWindowHandle,
+        cx: &mut Context<Self>,
+    ) {
         self.host_events = Some(cx.spawn(async move |this, cx| {
             while let Some(event) = events.recv().await {
-                let handled = this.update(cx, |shell, cx| match event {
-                    HostEvent::Show => shell.show_window(cx),
-                    HostEvent::Quit => shell.quit(cx),
-                    HostEvent::QuitForSetup => {
-                        crate::updates::AppUpdates::keep_update_staged(cx);
-                        shell.quit(cx);
-                    }
-                    HostEvent::Relaunched => {
-                        info!("shown by a second launch");
-                        shell.show_window(cx);
-                    }
+                let handled = window.update(cx, |_, window, cx| {
+                    this.update(cx, |shell, cx| shell.on_host_event(event, window, cx))
                 });
-                if handled.is_err() {
+                if !matches!(handled, Ok(Ok(()))) {
                     break;
                 }
             }
         }));
+    }
+
+    fn on_host_event(&mut self, event: HostEvent, window: &mut Window, cx: &mut Context<Self>) {
+        match event {
+            HostEvent::Show => self.show_window(cx),
+            HostEvent::Quit => self.quit(cx),
+            HostEvent::QuitForSetup => {
+                crate::updates::AppUpdates::keep_update_staged(cx);
+                self.quit(cx);
+            }
+            HostEvent::Relaunched => {
+                info!("shown by a second launch");
+                self.show_window(cx);
+            }
+            HostEvent::OpenLink(link) => self.open_link(&link, window, cx),
+        }
     }
 
     /// The window's close button. With the tray icon there and "Close to tray" on, it never quits:

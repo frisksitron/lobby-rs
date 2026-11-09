@@ -196,11 +196,13 @@ impl World {
 
     fn fill(&self, text: &str) -> String {
         let mut text = text.replace("{lobby}", self.proxy.origin().as_str());
+        text = text.replace("{host}", self.proxy.origin().host());
         for (client, path) in &self.paths {
             text = text.replace(&format!("{{lobby:{client}}}"), path.origin().as_str());
         }
         if let Some(second) = &self.second {
             text = text.replace("{lobby2}", &second.origin());
+            text = text.replace("{host2}", second.origin().trim_start_matches("http://"));
         }
         // Forward slashes: the path goes into JSON strings as it is.
         let tmp = self.scratch.path().display().to_string().replace('\\', "/");

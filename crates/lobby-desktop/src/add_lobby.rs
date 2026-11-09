@@ -79,6 +79,14 @@ impl AddLobbyView {
         self.url.update(cx, |u, cx| u.focus(window, cx));
     }
 
+    /// Puts `address` in the field and the focus there. It never connects: pressing Connect is
+    /// the person's yes.
+    pub fn set_address(&self, address: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.url
+            .update(cx, |u, cx| u.set_value(address.to_owned(), window, cx));
+        self.focus(window, cx);
+    }
+
     pub fn busy(&self, cx: &gpui_kit::App) -> bool {
         self.entry.read(cx).busy()
     }

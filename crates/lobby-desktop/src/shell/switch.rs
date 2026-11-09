@@ -253,6 +253,58 @@ impl Shell {
         }
     }
 
+    /// A `lobby://` link from outside the app: the Open in Lobby button of a Lobby's page. The
+    /// window comes to the front first. A Lobby the person is in or has added is opened; any other
+    /// is only put in the address form. It is never connected to here: pressing Connect with the
+    /// address in view is the person's yes, or a link could walk them into typing their email and
+    /// Magic Code on a lookalike server.
+    pub fn open_link(&mut self, raw: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.quit != QuitState::Running {
+            return;
+        }
+        self.show_window(cx);
+        let Some(origin) = LobbyOrigin::from_deep_link(raw, self.client.policy()) else {
+            info!(len = raw.len(), "a lobby:// link is not a Lobby address");
+            return;
+        };
+        if self.current_origin() == Some(&origin) {
+            info!(lobby = %origin, "link: already in that Lobby");
+            return;
+        }
+        let saved = self
+            .lobbies
+            .read(cx)
+            .list()
+            .iter()
+            .any(|l| l.origin == origin);
+        // Another dialog is the person's to answer: a second one would stack on it.
+        if window.has_active_dialog(cx) && (saved || self.add_lobby.is_none()) {
+            info!(lobby = %origin, "link: a dialog is open, so the link is ignored");
+            return;
+        }
+        if saved {
+            info!(lobby = %origin, "link: switching to a Lobby of this device");
+            self.switch_to(origin, window, cx);
+        } else if let Some(view) = self.add_lobby.clone() {
+            if view.read(cx).busy(cx) {
+                info!(lobby = %origin, "link: Add Lobby is connecting, so the link is ignored");
+                return;
+            }
+            info!(lobby = %origin, "link: address put in the open Add Lobby");
+            view.update(cx, |v, cx| v.set_address(origin.as_str(), window, cx));
+        } else if matches!(self.route, Route::Lobby(_)) {
+            info!(lobby = %origin, "link: Add Lobby opened with its address");
+            self.open_add_lobby(window, cx);
+            if let Some(view) = self.add_lobby.clone() {
+                view.update(cx, |v, cx| v.set_address(origin.as_str(), window, cx));
+            }
+        } else {
+            info!(lobby = %origin, "link: address put in the Lobby address step");
+            self.back_to = None;
+            self.show_url_step(Some(origin.as_str()), window, cx);
+        }
+    }
+
     pub fn add_lobby(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.quit != QuitState::Running {
             return;
