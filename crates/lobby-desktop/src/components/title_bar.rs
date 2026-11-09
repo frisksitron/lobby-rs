@@ -5,8 +5,7 @@ use std::time::Duration;
 
 use gpui_kit::{
     Animation, AnimationExt as _, AnyElement, App, Hsla, InteractiveElement as _, IntoElement,
-    MouseButton, ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
-    base::GlobalState,
+    ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
     component::{ActiveTheme as _, TitleBar},
     div, ease_out_quint, hsla,
 };
@@ -113,17 +112,9 @@ impl RenderOnce for AppTitleBar {
                     .pr_2()
                     .children(self.right),
             );
-        // Windows moves the window in its own loop and the mouse-up never reaches the app, so a
-        // text selection started by this press would stay on and follow the pointer.
-        let area = div()
-            .relative()
-            .flex_1()
-            .h_full()
-            .on_mouse_down(MouseButton::Left, |_, _, cx| {
-                GlobalState::suppress_text_selection(cx)
-            })
-            .child(row);
-        let bar = TitleBar::new().h(u(TITLE_BAR_HEIGHT)).child(area);
+        let bar = TitleBar::new()
+            .h(u(TITLE_BAR_HEIGHT))
+            .child(div().relative().flex_1().h_full().child(row));
         match self.tint {
             None => bar.into_any_element(),
             Some((key, color)) => bar

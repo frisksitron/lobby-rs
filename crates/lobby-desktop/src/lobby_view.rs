@@ -27,9 +27,11 @@ use std::{rc::Rc, time::Duration};
 
 use gpui_kit::{
     AnyElement, AnyView, AppContext as _, ClipboardItem, Context, DragMoveEvent, Entity,
-    EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyDownEvent,
+    EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyDownEvent, MouseDownEvent,
     ParentElement as _, Render, SharedString, StyleRefinement, Styled as _, Subscription, Task,
     TestSupportExt as _, Window, actions,
+    base::GlobalState,
+    canvas,
     component::{ActiveTheme as _, Theme, WindowExt as _},
     div, linear_color_stop, linear_gradient,
     prelude::FluentBuilder as _,
@@ -736,6 +738,23 @@ impl LobbyView {
                         linear_color_stop(background, 0.),
                         linear_color_stop(background.opacity(0.), 1.),
                     )),
+            )
+            // The kit's text selection starts from a press anywhere in the window. Only the chat
+            // has text to select, and when Windows moves or resizes the window the mouse-up never
+            // reaches the app, so a selection started on the frame would follow the pointer.
+            .child(
+                canvas(
+                    |_, _, _| {},
+                    |chat, _, window, _| {
+                        window.on_mouse_event(move |press: &MouseDownEvent, phase, _, cx| {
+                            if phase.bubble() && !chat.contains(&press.position) {
+                                GlobalState::suppress_text_selection(cx);
+                            }
+                        });
+                    },
+                )
+                .absolute()
+                .inset_0(),
             )
             .test_support()
             .into_any_element()
