@@ -439,6 +439,8 @@ fn decision_row(
         .overflow_hidden()
         .child(
             div()
+                // GPUI keeps hover state by id: without one, entering the row never redraws it.
+                .id(SharedString::from(format!("decision-hover-{key}")))
                 .px_2()
                 .py(u(ENTRY_PAD))
                 .rounded_md()

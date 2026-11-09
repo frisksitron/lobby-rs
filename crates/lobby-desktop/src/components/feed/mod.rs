@@ -775,6 +775,8 @@ fn message_row(
         .pt(u(top))
         .child(
             div()
+                // GPUI keeps hover state by id: without one, entering the row never redraws it.
+                .id(SharedString::from(format!("row-hover-{}", m.key)))
                 .relative()
                 .w_full()
                 .rounded_md()
