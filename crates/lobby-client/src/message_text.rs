@@ -8,9 +8,10 @@
 use std::{
     cell::{Cell, RefCell},
     collections::{BTreeSet, HashMap, HashSet},
+    ops::Range,
 };
 
-use lobby_protocol::{Username, content};
+use lobby_protocol::{EVERYONE, Username, content};
 use markdown::mdast::{List, Node};
 
 use crate::{compose::longest_run, links::is_external_link};
@@ -19,20 +20,57 @@ use crate::{compose::longest_run, links::is_external_link};
 /// A link a Member types never keeps it (`is_external_link`), so only this module writes one.
 pub const MENTION_SCHEME: &str = "lobby-mention:";
 
-/// The usernames a Message can mention: the current Members', lowercase. `@name` of a Member who
-/// left stays text.
+/// The usernames a Message can mention: the current Members', lowercase, and `everyone`. `@name`
+/// of a Member who left stays text.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MentionNames(HashSet<String>);
 
 impl MentionNames {
     pub fn of<'a>(names: impl IntoIterator<Item = &'a Username>) -> Self {
-        Self(
-            names
-                .into_iter()
-                .map(|n| n.as_str().to_lowercase())
-                .collect(),
-        )
+        let mut names: HashSet<String> = names
+            .into_iter()
+            .map(|n| n.as_str().to_lowercase())
+            .collect();
+        names.insert(EVERYONE.to_owned());
+        Self(names)
     }
+}
+
+/// An `@name` in some text that [`MentionNames`] holds: the bytes from the `@` to the end of the
+/// name, and the name as typed.
+pub(crate) struct Mention<'a> {
+    pub range: Range<usize>,
+    pub name: &'a str,
+}
+
+/// The mentions in `value`, in order: the `@` has no name character before it, and the whole run
+/// of name characters after it is a name in `names` (any case).
+pub(crate) fn mentions_in<'a>(
+    value: &'a str,
+    names: &'a MentionNames,
+) -> impl Iterator<Item = Mention<'a>> {
+    let mut after = 0;
+    std::iter::from_fn(move || {
+        while let Some(at) = value[after..].find('@').map(|i| i + after) {
+            after = at + 1;
+            let boundary = value[..at]
+                .chars()
+                .next_back()
+                .is_none_or(|c| !is_name_char(c));
+            let name_len = value[after..]
+                .find(|c| !is_name_char(c))
+                .unwrap_or(value.len() - after);
+            let name = &value[after..after + name_len];
+            if boundary && names.0.contains(&name.to_lowercase()) {
+                after += name_len;
+                return Some(Mention {
+                    range: at..after,
+                    name,
+                });
+            }
+        }
+        None
+    })
 }
 
 /// A Message's content, parsed once: Markdown for the renderer and the plain text it reads as.
@@ -83,9 +121,10 @@ impl MessageText {
         }
     }
 
-    /// Whether the Message mentions the Member with this username.
+    /// Whether the Message mentions the Member with this username, by name or as `@everyone`.
     pub fn mentions(&self, username: &Username) -> bool {
         self.mentions.contains(&username.as_str().to_lowercase())
+            || self.mentions.contains(EVERYONE)
     }
 }
 
@@ -310,31 +349,17 @@ impl Writer<'_> {
     /// Text with each mention in it written as a link the renderer draws as a chip.
     fn words(&self, value: &str, out: &mut String) {
         let mut plain_from = 0;
-        let mut after = 0;
-        while !self.in_link.get()
-            && let Some(at) = value[after..].find('@').map(|i| i + after)
-        {
-            after = at + 1;
-            let boundary = value[..at]
-                .chars()
-                .next_back()
-                .is_none_or(|c| !is_name_char(c));
-            let name_len = value[after..]
-                .find(|c| !is_name_char(c))
-                .unwrap_or(value.len() - after);
-            let name = &value[after..after + name_len];
-            let lower = name.to_lowercase();
-            if !boundary || !self.names.0.contains(&lower) {
-                continue;
+        if !self.in_link.get() {
+            for Mention { range, name } in mentions_in(value, self.names) {
+                let lower = name.to_lowercase();
+                text(&value[plain_from..range.start], out);
+                out.push_str(&format!(
+                    "[{}](<{MENTION_SCHEME}{lower}>)",
+                    escape(&format!("@{name}"))
+                ));
+                self.mentioned.borrow_mut().insert(lower);
+                plain_from = range.end;
             }
-            text(&value[plain_from..at], out);
-            out.push_str(&format!(
-                "[{}](<{MENTION_SCHEME}{lower}>)",
-                escape(&format!("@{name}"))
-            ));
-            self.mentioned.borrow_mut().insert(lower);
-            plain_from = after + name_len;
-            after = plain_from;
         }
         text(&value[plain_from..], out);
     }
@@ -578,15 +603,22 @@ mod tests {
             ("[@alice](https://e.x/@alice)", 0),
             ("[x](lobby-mention:alice)", 0),
             ("a_@alice", 0),
+            ("@everyone and @EveryOne", 2),
+            ("@everyones", 0),
+            ("`@everyone`", 0),
+            ("[@everyone](https://e.x)", 0),
         ] {
             assert_eq!(chip(content), chips, "{content:?}");
             let text = MessageText::of_in(content, &names);
             assert_eq!(
                 text.mentions(&alice),
                 text.markdown.contains("mention:alice")
+                    || text.markdown.contains("mention:everyone")
             );
             assert_eq!(text.plain, MessageText::of(content).plain, "{content:?}");
         }
-        assert!(!MessageText::of("@alice").mentions(&alice));
+        assert!(!MessageText::of("@alice @everyone").mentions(&alice));
+        assert!(MessageText::of_in("@everyone", &names).mentions(&Username::parse("zed").unwrap()));
+        assert!(!MessageText::of_in("@alice", &names).mentions(&Username::parse("zed").unwrap()));
     }
 }

@@ -112,13 +112,16 @@ pub enum Taken {
 /// Usernames are unique case-insensitively across every User and pending Access Requests: a
 /// removed Member keeps theirs, except for their own return (the same email). Emails are unique
 /// across active Users and pending requests, so a removed Member may ask again. `except` leaves
-/// one pending request out (the one being Vouched in).
+/// one pending request out (the one being Vouched in). A reserved name is always taken.
 pub async fn taken(
     conn: &mut SqliteConnection,
     username: &Username,
     email: &Email,
     except: Option<&AccessRequestId>,
 ) -> Result<Option<Taken>, DbError> {
+    if username.is_reserved() {
+        return Ok(Some(Taken::Username));
+    }
     let except = except.map(AccessRequestId::as_str).unwrap_or_default();
     let name: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM users WHERE username = ?1
@@ -153,6 +156,9 @@ pub async fn username_taken(
     username: &Username,
     me: &UserId,
 ) -> Result<bool, DbError> {
+    if username.is_reserved() {
+        return Ok(true);
+    }
     Ok(sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM users WHERE username = ?1 AND id <> ?2)
              OR EXISTS(SELECT 1 FROM access_requests WHERE username = ?1 AND status = 'pending')",

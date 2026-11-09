@@ -274,6 +274,22 @@ async fn a_ticket_works_once_for_ten_minutes_and_survives_a_refused_name() {
     let taken = join(&env, &carol, "ALICE").await;
     assert_message(&taken, 409, "CONFLICT", "Username already taken");
     assert_eq!(taken.json()["error"]["detail"], "USERNAME_TAKEN");
+    // `@everyone` is no one's name.
+    let reserved = join(&env, &carol, "Everyone").await;
+    assert_eq!(reserved.json()["error"]["detail"], "USERNAME_TAKEN");
+    let bearer = format!("Bearer {}", access(&sign_in(&env, "alice").await));
+    let renamed = http(
+        env.addr,
+        "PATCH",
+        "/api/v1/users/me",
+        &[
+            ("Content-Type", "application/json"),
+            ("Authorization", bearer.as_str()),
+        ],
+        r#"{"username":"EVERYONE"}"#,
+    )
+    .await;
+    assert_eq!(renamed.json()["error"]["detail"], "USERNAME_TAKEN");
     wait_token(&join(&env, &carol, "carol").await.json());
     assert_message(
         &join(&env, &carol, "carol").await,

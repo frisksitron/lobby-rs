@@ -6,10 +6,13 @@
 
 use std::ops::Range;
 
-use lobby_protocol::{Username, content};
+use lobby_protocol::{EVERYONE, Username, content};
 use markdown::mdast::Node;
 
-use crate::{links::is_external_link, message_text::is_name_char};
+use crate::{
+    links::is_external_link,
+    message_text::{MentionNames, is_name_char, mentions_in},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Edit {
@@ -57,29 +60,121 @@ pub fn mention_query(text: &str, caret: usize) -> Option<MentionQuery> {
     })
 }
 
-/// The Members whose username starts with what was typed (any case), but not `me`, by name.
+/// Who an `@name` can reach: one Member, or all of them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MentionTarget {
+    Member(Username),
+    Everyone,
+}
+
+impl MentionTarget {
+    pub fn name(&self) -> &str {
+        match self {
+            MentionTarget::Member(username) => username.as_str(),
+            MentionTarget::Everyone => EVERYONE,
+        }
+    }
+}
+
+/// The Members whose username starts with what was typed (any case), but not `me`, by name, and
+/// `@everyone` last when it starts with what was typed too.
 pub fn mention_matches<'a>(
     typed: &str,
     names: impl IntoIterator<Item = &'a Username>,
     me: Option<&Username>,
-) -> Vec<&'a Username> {
+) -> Vec<MentionTarget> {
     let typed = typed.to_lowercase();
+    let everyone = EVERYONE.starts_with(&typed);
     let mut found: Vec<&Username> = names
         .into_iter()
         .filter(|n| Some(*n) != me && n.as_str().to_lowercase().starts_with(&typed))
         .collect();
     found.sort_by_key(|n| n.as_str().to_lowercase());
-    found.truncate(MENTION_MENU_MAX);
+    found.truncate(MENTION_MENU_MAX - usize::from(everyone));
     found
+        .into_iter()
+        .cloned()
+        .map(MentionTarget::Member)
+        .chain(everyone.then_some(MentionTarget::Everyone))
+        .collect()
 }
 
-/// The query's `@name` replaced by `@username` and a space, the caret after it.
-pub fn complete_mention(text: &str, query: &MentionQuery, username: &Username) -> Edit {
+/// The query's `@name` replaced by `@name` of the target and a space, the caret after it.
+pub fn complete_mention(text: &str, query: &MentionQuery, target: &MentionTarget) -> Edit {
     let rest = &text[query.range.end..];
     let space = if rest.starts_with(' ') { "" } else { " " };
-    let head = format!("{}@{username}{space}", &text[..query.range.start]);
+    let head = format!("{}@{}{space}", &text[..query.range.start], target.name());
     let caret = head.len() + usize::from(space.is_empty());
     Edit::caret(format!("{head}{rest}"), caret)
+}
+
+/// The byte ranges of the mentions in a draft, from each `@` to the end of its name: the ones a
+/// sent Message would show as chips. A draft that does not parse has none.
+pub fn mention_spans(text: &str, names: &MentionNames) -> Vec<Range<usize>> {
+    let mut spans = Vec::new();
+    if text.contains('@')
+        && let Ok(root) = content::parse(text)
+    {
+        collect_spans(&root, text, names, &mut spans);
+    }
+    spans
+}
+
+fn collect_spans(node: &Node, source: &str, names: &MentionNames, out: &mut Vec<Range<usize>>) {
+    match node {
+        Node::Link(_) | Node::LinkReference(_) => {}
+        Node::Text(t) => {
+            let found: Vec<_> = mentions_in(&t.value, names).collect();
+            let Some(pos) = t.position.as_ref().filter(|_| !found.is_empty()) else {
+                return;
+            };
+            let words = source.get(pos.start.offset..pos.end.offset).unwrap_or("");
+            let Some(map) = source_offsets(&t.value, words) else {
+                return;
+            };
+            for m in found {
+                out.push(
+                    pos.start.offset + map[m.range.start].1..pos.start.offset + map[m.range.end].0,
+                );
+            }
+        }
+        other => {
+            for child in other.children().into_iter().flatten() {
+                collect_spans(child, source, names, out);
+            }
+        }
+    }
+}
+
+/// Where each char of a text node's value sits in its source, as (before its escape, after it).
+/// The value drops backslash escapes and, around a line break, spaces and quote markers. `None`
+/// when the source says more than that (an entity), so the node gets no chip.
+fn source_offsets(value: &str, source: &str) -> Option<Vec<(usize, usize)>> {
+    let mut map = vec![(0, 0); value.len() + 1];
+    let mut at = 0;
+    for (i, c) in value.char_indices() {
+        if c == '\n' {
+            at += source[at..].len() - source[at..].trim_start_matches([' ', '\t', '\r']).len();
+        }
+        let before = at;
+        if c.is_ascii_punctuation()
+            && let Some(escaped) = source[at..].strip_prefix('\\')
+            && escaped.starts_with(c)
+        {
+            at += 1;
+        }
+        map[i] = (before, at);
+        if !source[at..].starts_with(c) {
+            return None;
+        }
+        at += c.len_utf8();
+        if c == '\n' {
+            // The next line's indent and quote markers.
+            at += source[at..].len() - source[at..].trim_start_matches([' ', '\t', '>']).len();
+        }
+    }
+    map[value.len()] = (at, at);
+    Some(map)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -541,6 +636,7 @@ pub(crate) fn longest_run(text: &str, c: char) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::message_text::{MENTION_SCHEME, MessageText};
 
     #[test]
     fn enter_sends_continues_lists_and_stays_in_fences() {
@@ -596,16 +692,83 @@ mod tests {
 
         let members = [name("Alice"), name("alan"), name("bob"), name("amy")];
         let (alice, bob) = (&members[0], &members[2]);
+        let member = |i: usize| MentionTarget::Member(members[i].clone());
         let found = mention_matches("A", &members, Some(alice));
-        assert_eq!(found, [&members[1], &members[3]]);
-        assert_eq!(mention_matches("", &members, Some(bob)).len(), 3);
+        assert_eq!(found, [member(1), member(3)]);
+        assert_eq!(mention_matches("", &members, Some(bob)).len(), 4);
         assert_eq!(mention_matches("zz", &members, None).len(), 0);
+        assert_eq!(
+            mention_matches("EV", &members, None),
+            [MentionTarget::Everyone]
+        );
+
+        let many: Vec<Username> = (0..9).map(|i| name(&format!("mem{i}"))).collect();
+        let all = mention_matches("", &many, None);
+        assert_eq!(all.len(), MENTION_MENU_MAX);
+        assert_eq!(all.last(), Some(&MentionTarget::Everyone));
+        assert_eq!(mention_matches("m", &many, None).len(), MENTION_MENU_MAX);
 
         let q = mention_query("hi @al and", 6).unwrap();
-        let e = complete_mention("hi @al and", &q, alice);
+        let e = complete_mention("hi @al and", &q, &member(0));
         assert_eq!((e.text.as_str(), e.selection), ("hi @Alice and", 10..10));
         let q = mention_query("hi @al", 6).unwrap();
-        let e = complete_mention("hi @al", &q, alice);
+        let e = complete_mention("hi @al", &q, &member(0));
         assert_eq!((e.text.as_str(), e.selection), ("hi @Alice ", 10..10));
+        let q = mention_query("@ev", 3).unwrap();
+        let e = complete_mention("@ev", &q, &MentionTarget::Everyone);
+        assert_eq!((e.text.as_str(), e.selection), ("@everyone ", 10..10));
+    }
+
+    #[test]
+    fn mention_spans_are_what_a_sent_message_shows_as_chips() {
+        let names = MentionNames::of(&[Username::parse("bob").unwrap()]);
+        fn words<'a>(text: &'a str, names: &MentionNames) -> Vec<&'a str> {
+            mention_spans(text, names)
+                .into_iter()
+                .map(|r| &text[r])
+                .collect()
+        }
+        let spans = |text: &'static str| words(text, &names);
+        assert_eq!(spans("hi @bob and @EVERYONE!"), ["@bob", "@EVERYONE"]);
+        assert_eq!(spans("one\n  two @bob"), ["@bob"]);
+        assert_eq!(spans("é @bob"), ["@bob"]);
+        assert_eq!(spans("**@bob** > @bob"), ["@bob", "@bob"]);
+        assert_eq!(spans("\\*x\\* \\@bob a  \n  @bob"), ["@bob", "@bob"]);
+        assert_eq!(
+            mention_spans("\\@bob", &names),
+            [1..5],
+            "an escape stays outside the chip"
+        );
+        for none in [
+            "@nobody",
+            "@bobby",
+            "me@bob.com",
+            "`@bob`",
+            "```\n@bob\n```",
+            "[@bob](https://e.x)",
+            "see https://e.x/@bob",
+            "a_@bob",
+        ] {
+            assert!(spans(none).is_empty(), "{none:?}");
+        }
+
+        for content in [
+            "hey @bob",
+            "> quoted\n> @bob and @everyone",
+            "- @bob\n- @nobody",
+            "# @bob",
+            "x ~~@bob~~ _@everyone_",
+            "| a | @bob |\n|---|---|\n| @bob | b |",
+        ] {
+            assert_eq!(
+                mention_spans(content, &names).len(),
+                MessageText::of_in(content, &names)
+                    .markdown
+                    .matches(MENTION_SCHEME)
+                    .count(),
+                "{content:?}"
+            );
+        }
+        assert!(mention_spans(&(">".repeat(1000) + " @bob"), &names).is_empty());
     }
 }

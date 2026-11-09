@@ -27,10 +27,10 @@ use gpui_kit::{
 use lobby_client::{
     AttachError, DraftId, DraftSource, DraftState, Intent, Issue, IssueKind, PastedFormat,
     SendBlock,
-    compose::{self, Enter, Format},
+    compose::{self, Enter, Format, MentionTarget},
     copy,
 };
-use lobby_protocol::{MessageId, Username};
+use lobby_protocol::MessageId;
 
 use super::{NARROW_BELOW, forward};
 use crate::scale::{design_viewport, device_in, u};
@@ -378,21 +378,18 @@ impl ComposerView {
     }
 
     /// The `@name` the caret is in and the Members it offers, unless Esc closed that menu.
-    fn mention_offer(&self, cx: &App) -> Option<(compose::MentionQuery, Vec<Username>)> {
+    fn mention_offer(&self, cx: &App) -> Option<(compose::MentionQuery, Vec<MentionTarget>)> {
         let c = self.input.read(cx);
         let query = compose::mention_query(&c.value(), c.cursor())?;
         if self.mention_dismissed == Some(query.range.start) {
             return None;
         }
         let state = self.session.read(cx).state()?;
-        let matches: Vec<Username> = compose::mention_matches(
+        let matches = compose::mention_matches(
             &query.typed,
             state.members.values().map(|m| &m.username),
             state.my_username(),
-        )
-        .into_iter()
-        .cloned()
-        .collect();
+        );
         (!matches.is_empty()).then_some((query, matches))
     }
 

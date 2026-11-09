@@ -1,15 +1,19 @@
-//! The Members offered while an `@name` is typed in the composer: a small sheet that floats over
-//! the feed above the composer, so nothing moves when it comes and goes.
+//! What is offered while an `@name` is typed in the composer: a small sheet that floats over the
+//! feed above the composer, so nothing moves when it comes and goes.
 
 use gpui_kit::{
     App, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, SharedString,
-    Styled as _, TestSupportExt as _, component::ActiveTheme as _, div,
+    Styled as _, TestSupportExt as _,
+    assets::IconName,
+    component::{ActiveTheme as _, Icon},
+    div,
     prelude::FluentBuilder as _,
 };
-use lobby_protocol::Username;
+use lobby_client::compose::MentionTarget;
 
 use super::{
-    Avatar, AvatarSize, Callback, LINE_H, floating_sheet,
+    Avatar, AvatarSize, Callback, ICON_SM, LINE_H, floating_sheet,
+    mention_chip::fill,
     tokens::{BORDER, nested_radius},
 };
 use crate::scale::u;
@@ -19,15 +23,17 @@ const PAD: f32 = 4.;
 const RADIUS: f32 = 11.;
 const SELECTED_WASH: f32 = 0.1;
 
-/// The sheet over `matches`, the `selected` one lit. A press on a row calls `on_pick` with its
-/// place in `matches`.
+/// The sheet over `targets`, the `selected` one lit. A press on a row calls `on_pick` with its
+/// place in `targets`.
 pub fn mention_menu(
-    matches: &[Username],
+    targets: &[MentionTarget],
     selected: usize,
     on_pick: Callback<usize>,
     cx: &App,
 ) -> impl IntoElement {
     let fg = cx.theme().foreground;
+    let everyone_fill = fill(cx);
+    let accent = cx.theme().primary;
     floating_sheet(cx)
         .id("mention-menu")
         .test_support()
@@ -36,10 +42,26 @@ pub fn mention_menu(
         .rounded(u(RADIUS))
         .flex()
         .flex_col()
-        .children(matches.iter().enumerate().map(|(i, name)| {
+        .children(targets.iter().enumerate().map(|(i, target)| {
             let on_pick = on_pick.clone();
+            let mark = match target {
+                MentionTarget::Member(name) => Avatar::member(name.to_string())
+                    .size(AvatarSize::Bar)
+                    .into_any_element(),
+                MentionTarget::Everyone => div()
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .flex_shrink_0()
+                    .size(u(AvatarSize::Bar.px()))
+                    .rounded_full()
+                    .bg(everyone_fill)
+                    .text_color(accent)
+                    .child(Icon::new(IconName::Users).size(u(ICON_SM)))
+                    .into_any_element(),
+            };
             div()
-                .id(SharedString::from(format!("mention-{name}")))
+                .id(SharedString::from(format!("mention-{}", target.name())))
                 .test_support()
                 .flex()
                 .items_center()
@@ -51,8 +73,8 @@ pub fn mention_menu(
                 .text_color(fg)
                 .when(i == selected, |d| d.bg(fg.opacity(SELECTED_WASH)))
                 .hover(move |d| d.bg(fg.opacity(SELECTED_WASH)))
-                .child(Avatar::member(name.to_string()).size(AvatarSize::Bar))
-                .child(name.to_string())
+                .child(mark)
+                .child(target.name().to_owned())
                 .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     cx.stop_propagation();
                     on_pick(i, window, cx);

@@ -139,6 +139,9 @@ impl fmt::Debug for Email {
     }
 }
 
+/// The name `@everyone` mentions every Member by. No Member may take it as a username.
+pub const EVERYONE: &str = "everyone";
+
 /// Trimmed, 3–32 characters of `[A-Za-z0-9_-]`. Uniqueness is case-insensitive; display is as
 /// typed.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -164,6 +167,12 @@ impl Username {
 
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    /// A name no one may be given, though `parse` accepts it: a stored row or a wire frame that
+    /// already holds it must still decode.
+    pub fn is_reserved(&self) -> bool {
+        self.0.eq_ignore_ascii_case(EVERYONE)
     }
 }
 

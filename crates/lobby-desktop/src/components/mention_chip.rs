@@ -3,7 +3,7 @@
 //! link of it, so a chip is never clickable and a Member cannot write one.
 
 use gpui_kit::{
-    App, FontWeight, ParentElement as _, Styled as _, Window,
+    App, FontWeight, Hsla, ParentElement as _, Styled as _, Window,
     component::{
         ActiveTheme as _,
         text::{
@@ -22,7 +22,14 @@ const NAME: &str = "lobby-mention";
 const PAD_X: f32 = 4.;
 /// How much shorter the chip is than the line, so chips on two lines do not touch.
 const LINE_INSET: f32 = 3.;
-const FILL_OPACITY: f32 = 0.16;
+pub(crate) const FILL_OPACITY: f32 = 0.16;
+/// The chip's corner radius, also the composer's.
+pub(crate) const RADIUS: f32 = PAD_X;
+
+/// The chip's fill, behind its words.
+pub(crate) fn fill(cx: &App) -> Hsla {
+    cx.theme().primary.opacity(FILL_OPACITY)
+}
 
 pub struct MentionChip;
 
@@ -60,8 +67,8 @@ impl MarkdownPlugin for MentionChip {
                 .items_center()
                 .h(height)
                 .px(u(PAD_X))
-                .rounded(u(PAD_X))
-                .bg(lavender.opacity(FILL_OPACITY))
+                .rounded(u(RADIUS))
+                .bg(fill(cx))
                 .text_color(lavender)
                 .text_size(context.font_size())
                 .line_height(context.line_height())

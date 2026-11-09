@@ -35,7 +35,7 @@ pub use ids::{
 };
 pub use secret::{AccessToken, JoinTicket, MagicChallenge, MagicCode, RefreshToken, WaitToken};
 pub use time::UnixMs;
-pub use values::{Email, Presence, RequestLabel, Username, ValueError};
+pub use values::{EVERYONE, Email, Presence, RequestLabel, Username, ValueError};
 pub use voice::{
     RestartPolicy, RtcAnswer, RtcOffer, RtcRestart, RtcTrack, SPEAKING_HANGOVER, Sdp, ShareSource,
     ShareStart, ShareWatch, SourceSize, TrackPurpose, VoiceEndReason, VoiceEnded, VoiceFlags,
