@@ -1,0 +1,42 @@
+{"scenario": "A Member is told of a Message that names them, or @everyone, and that toast stays beside the next ordinary Message", "clients": ["a", "b"], "members": ["alice", "bob"]}
+{"on": "a", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "alice@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:alice@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+{"on": "b", "type": "{lobby}", "into": "lobby-url"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Email"}}
+{"type": "bob@lobby.test", "into": "email"}
+{"press": "enter"}
+{"wait": {"path": "/auth/step", "eq": "Code"}, "timeout_ms": 5000}
+{"type": "{code:bob@lobby.test}", "into": "code-input"}
+{"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
+// Typing @bo offers bob, Tab completes him, and the Message names him.
+{"on": "a", "type": "hey @bo", "into": "composer"}
+{"wait": {"visible": "mention-bob"}}
+{"expect": {"gone": "mention-everyone"}}
+{"press": "tab"}
+{"expect": {"path": "/lobby/composer", "eq": "hey @bob "}}
+{"type": "look"}
+{"press": "enter"}
+{"on": "b", "wait": {"path": "/lobby/os_toasts", "contains": {"title": "alice mentioned you", "body": "hey @bob look"}}, "timeout_ms": 2000}
+// An ordinary Message gets its own toast and leaves the mention's alone.
+{"on": "a", "type": "just chatting", "into": "composer"}
+{"press": "enter"}
+{"on": "b", "wait": {"path": "/lobby/os_toasts", "contains": {"title": "alice", "body": "just chatting"}}, "timeout_ms": 2000}
+{"expect": {"path": "/lobby/os_toasts", "contains": {"title": "alice mentioned you", "body": "hey @bob look"}}}
+{"expect": {"path": "/lobby/os_toasts", "len": 2}}
+// @everyone is offered after the Members and picked with a click; it reaches bob.
+{"on": "a", "type": "@e", "into": "composer"}
+{"wait": {"visible": "mention-everyone"}}
+{"click": "mention-everyone"}
+{"expect": {"path": "/lobby/composer", "eq": "@everyone "}}
+{"type": "dinner"}
+{"press": "enter"}
+{"on": "b", "wait": {"path": "/lobby/os_toasts", "contains": {"title": "alice mentioned you", "body": "@everyone dinner"}}, "timeout_ms": 2000}
+{"expect": {"path": "/lobby/os_toasts", "count": 2, "where": {"title": "alice mentioned you"}}}
+{"expect": {"path": "/lobby/os_toasts", "len": 3}}

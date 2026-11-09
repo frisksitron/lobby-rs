@@ -656,6 +656,15 @@ pub fn message_toast_title(author: &str, lobby: Option<&str>) -> String {
     }
 }
 
+/// The title of the toast for a Message that names this Member, in which Lobby when the person
+/// has more than one.
+pub fn mention_toast_title(author: &str, lobby: Option<&str>) -> String {
+    match lobby {
+        Some(lobby) => format!("{author} mentioned you in {lobby}"),
+        None => format!("{author} mentioned you"),
+    }
+}
+
 pub fn asks_to_join(name: &str) -> String {
     format!("{name} asks to join")
 }

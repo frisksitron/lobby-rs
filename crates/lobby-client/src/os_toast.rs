@@ -18,12 +18,20 @@ pub struct Moment {
     pub dnd: bool,
     /// The Notification Center is open: it already shows it.
     pub center_open: bool,
+    /// The Message names this Member, with `@name` or `@everyone`.
+    pub mentioned: bool,
+    /// The window is in front but not on the chat: Settings, or a Screen Share filling it.
+    pub feed_hidden: bool,
 }
 
 /// A toast is for what the person cannot see: the window is behind others or hidden to the tray.
-/// Do Not Disturb silences it, and so does an open Center.
+/// A mention is also for when the window is in front but the chat is not on it. Do Not Disturb
+/// silences it, and so does an open Center.
 pub fn should_os_toast(m: Moment) -> bool {
-    !m.mine && !m.dnd && !m.center_open && (!m.window_active || m.hidden_to_tray)
+    !m.mine
+        && !m.dnd
+        && !m.center_open
+        && (!m.window_active || m.hidden_to_tray || (m.mentioned && m.feed_hidden))
 }
 
 /// The Message's plain text on one line, cut to [`BODY_MAX_CHARS`], or what it carries.
@@ -53,6 +61,8 @@ mod tests {
         hidden_to_tray: false,
         dnd: false,
         center_open: false,
+        mentioned: false,
+        feed_hidden: false,
     };
 
     #[test]
@@ -101,6 +111,75 @@ mod tests {
                     ..QUIET
                 },
                 false,
+            ),
+            (
+                "in front on the chat, mentioned",
+                Moment {
+                    window_active: true,
+                    mentioned: true,
+                    ..QUIET
+                },
+                false,
+            ),
+            (
+                "in front on Settings, not mentioned",
+                Moment {
+                    window_active: true,
+                    feed_hidden: true,
+                    ..QUIET
+                },
+                false,
+            ),
+            (
+                "in front on Settings, mentioned",
+                Moment {
+                    window_active: true,
+                    feed_hidden: true,
+                    mentioned: true,
+                    ..QUIET
+                },
+                true,
+            ),
+            (
+                "mentioned on Settings, but Do Not Disturb",
+                Moment {
+                    window_active: true,
+                    feed_hidden: true,
+                    mentioned: true,
+                    dnd: true,
+                    ..QUIET
+                },
+                false,
+            ),
+            (
+                "mentioned on Settings, but the Center is open",
+                Moment {
+                    window_active: true,
+                    feed_hidden: true,
+                    mentioned: true,
+                    center_open: true,
+                    ..QUIET
+                },
+                false,
+            ),
+            (
+                "mentioned on Settings, but my own",
+                Moment {
+                    window_active: true,
+                    feed_hidden: true,
+                    mentioned: true,
+                    mine: true,
+                    ..QUIET
+                },
+                false,
+            ),
+            (
+                "mentioned behind other windows",
+                Moment {
+                    mentioned: true,
+                    ..QUIET
+                },
+                true,
             ),
         ];
         for (what, moment, toast) in cases {

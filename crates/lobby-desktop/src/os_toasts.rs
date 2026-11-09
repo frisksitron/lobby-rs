@@ -11,6 +11,7 @@ use gpui_kit::{
 };
 use lobby_client::{
     LobbyOrigin, copy,
+    message_text::MessageText,
     os_toast::{Moment, message_body, should_os_toast},
 };
 use lobby_protocol::{AccessRequest, AccessRequestId, Message};
@@ -51,25 +52,39 @@ pub(crate) fn message_arrived(
         .state()
         .and_then(|s| s.me.as_ref())
         .is_some_and(|me| *me == message.author.id);
+    let mentioned = session.state().is_some_and(|s| {
+        s.my_username()
+            .is_some_and(|me| MessageText::of_in(&message.content, &s.mention_names()).mentions(me))
+    });
     let moment = Moment {
         mine,
         window_active: window.is_window_active(),
         hidden_to_tray: shell.hidden_to_tray(),
         dnd: session.dnd(),
         center_open: view.read(cx).center_open,
+        mentioned,
+        feed_hidden: shell.settings.is_some() || view.read(cx).viewing.is_fullscreen(),
     };
     if !should_os_toast(moment) {
         return;
     }
     let many = shell.lobbies.read(cx).list().len() > 1;
     let lobby = view.read(cx).lobby_name(cx);
-    let toast = OsToast {
-        tag: format!("message/{origin}/{}", message.author.id.as_str()),
-        title: copy::message_toast_title(
-            &message.author.username,
-            many.then_some(lobby.as_str()).filter(|n| !n.is_empty()),
-        ),
-        body: message_body(message),
+    let lobby = many.then_some(lobby.as_str()).filter(|n| !n.is_empty());
+    let author = &message.author.username;
+    // A mention keeps its own toast, so the author's next Message does not replace it.
+    let toast = if mentioned {
+        OsToast {
+            tag: format!("mention/{origin}/{}", message.id.get()),
+            title: copy::mention_toast_title(author, lobby),
+            body: message_body(message),
+        }
+    } else {
+        OsToast {
+            tag: format!("message/{origin}/{}", message.author.id.as_str()),
+            title: copy::message_toast_title(author, lobby),
+            body: message_body(message),
+        }
     };
     let (shell, view, origin) = (cx.weak_entity(), view.downgrade(), origin.clone());
     post(
@@ -106,6 +121,8 @@ pub(crate) fn access_requested(
         hidden_to_tray: shell.hidden_to_tray(),
         dnd: session.read(cx).dnd(),
         center_open: view.read(cx).center_open,
+        mentioned: false,
+        feed_hidden: false,
     };
     if !should_os_toast(moment) {
         return;
