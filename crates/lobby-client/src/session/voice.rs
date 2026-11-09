@@ -355,7 +355,11 @@ impl Session {
                     .filter(|s| s.id == share);
                 if let Some(local) = local {
                     local.strain.on_share_load(now, &load);
+                    let stalled = local.strain.take_exclusive_fullscreen();
                     self.publish_strain();
+                    if stalled {
+                        self.raise(IssueKind::ShareFailed, copy::SHARE_EXCLUSIVE_FULLSCREEN);
+                    }
                 }
             }
         }

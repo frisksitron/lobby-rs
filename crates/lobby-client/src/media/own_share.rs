@@ -39,6 +39,8 @@ pub struct ShareLoad {
     pub offered: u32,
     /// New pictures out of the encoder; repeats of the last are not counted.
     pub encoded: u32,
+    /// A game covered the shared source in exclusive fullscreen when the window ended.
+    pub exclusive_fullscreen: bool,
 }
 
 impl ShareLoad {

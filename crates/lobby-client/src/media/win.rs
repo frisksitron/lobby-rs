@@ -11,7 +11,8 @@ use windows::Win32::{
         Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute},
         Gdi::{
             BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, CreateDIBSection,
-            DIB_RGB_COLORS, DeleteDC, DeleteObject, GdiFlush, GetDC, ReleaseDC, SelectObject,
+            DIB_RGB_COLORS, DeleteDC, DeleteObject, GdiFlush, GetDC, MONITOR_DEFAULTTONULL,
+            MonitorFromWindow, ReleaseDC, SelectObject,
         },
     },
     Media::{
@@ -29,8 +30,12 @@ use windows::Win32::{
     System::Com::{
         CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx, CoTaskMemFree,
     },
-    UI::WindowsAndMessaging::{
-        GetWindowDisplayAffinity, GetWindowRect, IsIconic, PW_RENDERFULLCONTENT,
+    UI::{
+        Shell::{QUNS_RUNNING_D3D_FULL_SCREEN, SHQueryUserNotificationState},
+        WindowsAndMessaging::{
+            GetForegroundWindow, GetWindowDisplayAffinity, GetWindowRect, IsIconic,
+            PW_RENDERFULLCONTENT,
+        },
     },
 };
 use windows::core::{GUID, HSTRING, implement};
@@ -67,6 +72,21 @@ pub(crate) fn blocks_capture(hwnd: *mut c_void) -> bool {
 pub(crate) fn is_minimized(hwnd: *mut c_void) -> bool {
     // SAFETY: a stale handle only makes the call answer false.
     unsafe { IsIconic(HWND(hwnd)) }.as_bool()
+}
+
+/// The foreground window and its monitor, while Windows says a Direct3D game holds the display in
+/// exclusive fullscreen. It also says so of some games that are not, so a capture that still
+/// makes pictures is fine whatever this answers.
+pub(crate) fn exclusive_fullscreen() -> Option<(isize, isize)> {
+    // SAFETY: plain calls that borrow nothing; a window that is gone only gives a null monitor.
+    unsafe {
+        if SHQueryUserNotificationState().ok()? != QUNS_RUNNING_D3D_FULL_SCREEN {
+            return None;
+        }
+        let window = GetForegroundWindow();
+        let monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONULL);
+        Some((window.0 as isize, monitor.0 as isize))
+    }
 }
 
 /// A window's picture as `width * height * 4` bytes of BGRA without row padding, drawn by the

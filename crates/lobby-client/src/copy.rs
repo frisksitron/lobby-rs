@@ -170,6 +170,8 @@ pub fn strain_detail(warning: &StrainWarning) -> Option<String> {
         mbps(s.needs)
     ))
 }
+pub const SHARE_EXCLUSIVE_FULLSCREEN: &str = "Screen Share doesn't support exclusive fullscreen \
+    yet, so Viewers see a frozen picture. Set the game to Borderless.";
 /// A window that keeps itself out of captures (Signal's does): a share of it would show nothing.
 pub fn window_blocks_sharing(window: &str) -> String {
     format!("{window} doesn't allow its window to be shared.")

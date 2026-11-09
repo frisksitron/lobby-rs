@@ -62,6 +62,19 @@ impl SourceId {
             _ => false,
         }
     }
+
+    /// A game in exclusive fullscreen is this window, or is on this monitor.
+    #[cfg(windows)]
+    pub(super) fn under_exclusive_fullscreen(&self) -> bool {
+        let Some((window, monitor)) = super::win::exclusive_fullscreen() else {
+            return false;
+        };
+        match self {
+            SourceId::Window { hwnd } => *hwnd == window,
+            SourceId::Monitor { hmonitor } => *hmonitor == monitor,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

@@ -263,6 +263,7 @@ fn run(
     let wake = slot.clone();
     link.keyframes.wake_with(move || wake.wake());
     let mut share = Share {
+        source,
         slot,
         link,
         events,
@@ -290,6 +291,7 @@ fn run(
 }
 
 struct Share<'a> {
+    source: &'a ScreenSource,
     slot: &'a Arc<FrameSlot>,
     link: &'a ShareLink,
     events: &'a VoiceEvents,
@@ -416,6 +418,7 @@ impl Share<'_> {
             window,
             offered: (offered - self.load.offered_then) as u32,
             encoded: self.load.encoded,
+            exclusive_fullscreen: self.source.id.under_exclusive_fullscreen(),
         };
         self.load = LoadWindow {
             since: now,

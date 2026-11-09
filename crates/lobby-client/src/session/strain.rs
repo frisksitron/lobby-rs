@@ -21,6 +21,8 @@ const UPLINK_FULL_PERCENT: u64 = 80;
 /// is judged only then, because a still screen makes few.
 const MOVING_FPS: u32 = 50;
 const ENCODER_MIN_FPS: u32 = 50;
+/// A game in front of a working capture draws far more than this, even on a menu.
+const STALLED_FPS: u32 = 5;
 
 #[derive(Debug, Default)]
 struct Gauge {
@@ -52,6 +54,8 @@ pub(super) struct Strain {
     role: StrainRole,
     network: Gauge,
     computer: Gauge,
+    exclusive_fullscreen: Gauge,
+    told_exclusive_fullscreen: bool,
     shortfall: Option<Shortfall>,
     dropped: u32,
     downlink_bps: Option<u64>,
@@ -71,6 +75,8 @@ impl Strain {
             role,
             network: Gauge::default(),
             computer: Gauge::default(),
+            exclusive_fullscreen: Gauge::default(),
+            told_exclusive_fullscreen: false,
             shortfall: None,
             dropped: 0,
             downlink_bps: None,
@@ -143,6 +149,16 @@ impl Strain {
     pub fn on_share_load(&mut self, now: Instant, load: &ShareLoad) {
         let behind = load.offered_fps() >= MOVING_FPS && load.encoded_fps() < ENCODER_MIN_FPS;
         self.computer.feed(now, behind);
+        let stalled = load.exclusive_fullscreen && load.offered_fps() < STALLED_FPS;
+        self.exclusive_fullscreen.feed(now, stalled);
+    }
+
+    /// True once a share, when a game in exclusive fullscreen has stopped its pictures. The
+    /// Sharer is in that game, so this is for somewhere that lasts until they come back.
+    pub fn take_exclusive_fullscreen(&mut self) -> bool {
+        let news = self.exclusive_fullscreen.on && !self.told_exclusive_fullscreen;
+        self.told_exclusive_fullscreen |= news;
+        news
     }
 }
 
@@ -275,7 +291,27 @@ mod tests {
             window: Duration::from_secs(1),
             offered,
             encoded,
+            exclusive_fullscreen: false,
         };
+        let covered = |offered| ShareLoad {
+            exclusive_fullscreen: true,
+            ..encoding(offered, offered)
+        };
+        let mut sharer = Strain::sharer();
+        for s in 0..SHOW_AT as u64 {
+            sharer.on_share_load(at(s), &covered(60));
+        }
+        assert!(
+            !sharer.take_exclusive_fullscreen(),
+            "pictures still come, whatever Windows reports"
+        );
+        let mut sharer = Strain::sharer();
+        for s in 0..SHOW_AT as u64 {
+            sharer.on_share_load(at(s), &covered(0));
+        }
+        assert!(sharer.take_exclusive_fullscreen());
+        assert!(!sharer.take_exclusive_fullscreen(), "told once a share");
+
         let mut sharer = Strain::sharer();
         for s in 0..SHOW_AT as u64 {
             sharer.on_share_load(at(s), &encoding(60, 31));
