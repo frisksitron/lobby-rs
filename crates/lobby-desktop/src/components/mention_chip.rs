@@ -13,7 +13,7 @@ use gpui_kit::{
             markdown_ast::Node,
         },
     },
-    div, point, px, quad, size,
+    div, point, quad, size,
 };
 use lobby_client::{
     compose::mention_spans,
@@ -66,7 +66,8 @@ pub(crate) fn paint_in_field(
             ) else {
                 continue;
             };
-            if (all.size.height - row.size.height).abs() > px(0.5) || all.size.width <= px(0.) {
+            let taller = f32::from(all.size.height - row.size.height).abs() > 0.5;
+            if taller || f32::from(all.size.width) <= 0. {
                 continue;
             }
             let chip = Bounds::new(

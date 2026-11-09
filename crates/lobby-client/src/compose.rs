@@ -734,9 +734,10 @@ mod tests {
         assert_eq!(spans("é @bob"), ["@bob"]);
         assert_eq!(spans("**@bob** > @bob"), ["@bob", "@bob"]);
         assert_eq!(spans("\\*x\\* \\@bob a  \n  @bob"), ["@bob", "@bob"]);
+        let escaped = mention_spans("\\@bob", &names);
         assert_eq!(
-            mention_spans("\\@bob", &names),
-            [1..5],
+            (escaped[0].start, escaped[0].end),
+            (1, 5),
             "an escape stays outside the chip"
         );
         for none in [

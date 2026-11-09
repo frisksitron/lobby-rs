@@ -73,18 +73,21 @@ pub(crate) fn message_arrived(
     let lobby = many.then_some(lobby.as_str()).filter(|n| !n.is_empty());
     let author = &message.author.username;
     // A mention keeps its own toast, so the author's next Message does not replace it.
-    let toast = if mentioned {
-        OsToast {
-            tag: format!("mention/{origin}/{}", message.id.get()),
-            title: copy::mention_toast_title(author, lobby),
-            body: message_body(message),
-        }
+    let (tag, title) = if mentioned {
+        (
+            format!("mention/{origin}/{}", message.id.get()),
+            copy::mention_toast_title(author, lobby),
+        )
     } else {
-        OsToast {
-            tag: format!("message/{origin}/{}", message.author.id.as_str()),
-            title: copy::message_toast_title(author, lobby),
-            body: message_body(message),
-        }
+        (
+            format!("message/{origin}/{}", message.author.id.as_str()),
+            copy::message_toast_title(author, lobby),
+        )
+    };
+    let toast = OsToast {
+        tag,
+        title,
+        body: message_body(message),
     };
     let (shell, view, origin) = (cx.weak_entity(), view.downgrade(), origin.clone());
     post(
