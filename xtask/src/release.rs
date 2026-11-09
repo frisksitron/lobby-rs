@@ -1,22 +1,27 @@
-//! Publishing the Windows app. `cargo xtask release <version>` bumps the workspace version,
-//! commits, tags `v<version>` and pushes; the tag's CI run (`.github/workflows/release.yml`)
-//! then runs `cargo xtask dist` and attaches its two files to a GitHub Release, which every
-//! published app reads within the hour:
+//! Publishing the Windows app. `cargo xtask release <version>` refuses a commit subject that
+//! breaks the rules in `changelog.rs`, writes the release's entry into `CHANGELOG.md`, bumps the
+//! workspace version, commits, tags `v<version>` and pushes; the tag's CI run
+//! (`.github/workflows/release.yml`) then runs `cargo xtask dist` and attaches its files to a
+//! GitHub Release, which every published app reads within the hour:
 //!
 //! - `LobbySetup.exe`: the release `lobby`, built knowing its repository, so it installs and
 //!   updates itself from that repository's Releases.
 //! - `latest.json`: the version, size and SHA-256 the app checks a download against.
+//! - `release-notes.md`: the newest changelog entry, as the Release's description. It is not an
+//!   asset.
 
 use std::{
     fs,
     path::{Path, PathBuf},
-    process::Command,
 };
 
 use sha2::{Digest as _, Sha256};
 
+use crate::{changelog, git};
+
 const ASSET: &str = "LobbySetup.exe";
 const MANIFEST: &str = "latest.json";
+const NOTES: &str = "release-notes.md";
 const DLL_CRT: &[u8] = b"vcruntime140.dll";
 
 /// Builds the release app for `repo` (`owner/name`) and writes `dist/` at the workspace root.
@@ -27,6 +32,17 @@ pub fn dist(workspace: &Path, repo: &str) -> Result<PathBuf, String> {
     if repo.split('/').filter(|part| !part.is_empty()).count() != 2 {
         return Err(format!("--repo wants owner/name, got {repo:?}"));
     }
+    let entries = changelog::parse(&changelog::read(workspace)?)?;
+    let newest = match entries.first() {
+        Some(entry) if entry.version == env!("CARGO_PKG_VERSION") => entry,
+        _ => {
+            return Err(format!(
+                "{} has no newest entry for {}",
+                changelog::FILE,
+                env!("CARGO_PKG_VERSION")
+            ));
+        }
+    };
     let status = crate::workspace_cargo(env!("CARGO"))
         .args([
             "build",
@@ -69,6 +85,7 @@ pub fn dist(workspace: &Path, repo: &str) -> Result<PathBuf, String> {
     });
     let manifest = serde_json::to_string_pretty(&manifest).expect("JSON");
     fs::write(out.join(MANIFEST), manifest + "\n").map_err(|e| format!("{MANIFEST}: {e}"))?;
+    fs::write(out.join(NOTES), newest.body()).map_err(|e| format!("{NOTES}: {e}"))?;
     Ok(out)
 }
 
@@ -78,33 +95,28 @@ fn target_dir(workspace: &Path) -> PathBuf {
         .unwrap_or_else(|| workspace.join("target"))
 }
 
-/// Bumps the workspace to `version`, commits and tags it, and pushes both when there is an
-/// `origin`.
+/// Writes the release's changelog entry and bumps the workspace to `version`, commits and tags
+/// it, and pushes both when there is an `origin`.
 pub fn release(workspace: &Path, version: &str) -> Result<String, String> {
     let next = parse(version).ok_or_else(|| format!("{version:?} is not major.minor.patch"))?;
     let current = env!("CARGO_PKG_VERSION");
     if next <= parse(current).expect("the workspace version parses") {
         return Err(format!("{version} is not newer than {current}"));
     }
-    let git = |args: &[&str]| -> Result<String, String> {
-        let out = Command::new("git")
-            .args(args)
-            .current_dir(workspace)
-            .output()
-            .map_err(|e| format!("git: {e}"))?;
-        if out.status.success() {
-            Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
-        } else {
-            Err(format!(
-                "git {}: {}",
-                args.join(" "),
-                String::from_utf8_lossy(&out.stderr).trim()
-            ))
-        }
-    };
+    let git = |args: &[&str]| git(workspace, args);
     if !git(&["status", "--porcelain", "--untracked-files=no"])?.is_empty() {
         return Err("commit or drop your changes first: a release is one commit".into());
     }
+    let subjects = changelog::subjects_since_last_tag(workspace)?;
+    let date = changelog::head_date(workspace)?;
+    let entry = changelog::entry(version, &date, &subjects).map_err(|problems| {
+        format!(
+            "reword these commits first (see AGENTS.md, Commits):\n{}",
+            problems.join("\n")
+        )
+    })?;
+    let changelog_path = workspace.join(changelog::FILE);
+    let changelog_text = changelog::prepend(&changelog::read(workspace)?, &entry)?;
     let manifest = workspace.join("Cargo.toml");
     let text = fs::read_to_string(&manifest).map_err(|e| format!("Cargo.toml: {e}"))?;
     let from = format!("[workspace.package]\nversion = \"{current}\"");
@@ -113,6 +125,7 @@ pub fn release(workspace: &Path, version: &str) -> Result<String, String> {
     }
     let to = format!("[workspace.package]\nversion = \"{version}\"");
     fs::write(&manifest, text.replacen(&from, &to, 1)).map_err(|e| format!("Cargo.toml: {e}"))?;
+    fs::write(&changelog_path, changelog_text).map_err(|e| format!("{}: {e}", changelog::FILE))?;
     // Cargo.lock names each workspace crate's version.
     let status = crate::workspace_cargo(env!("CARGO"))
         .args(["update", "--workspace", "--offline"])
@@ -123,8 +136,9 @@ pub fn release(workspace: &Path, version: &str) -> Result<String, String> {
         return Err("cargo update --workspace failed".into());
     }
     let tag = format!("v{version}");
-    git(&["commit", "-a", "-m", &format!("Lobby {version}")])?;
-    git(&["tag", "-a", &tag, "-m", &format!("Lobby {version}")])?;
+    let message = format!("build: release {version}");
+    git(&["commit", "-a", "-m", &message])?;
+    git(&["tag", "-a", &tag, "-m", &message])?;
     if git(&["remote", "get-url", "origin"]).is_err() {
         return Ok(format!(
             "tagged {tag}; no `origin` yet, so push it yourself: git push --atomic origin HEAD {tag}"

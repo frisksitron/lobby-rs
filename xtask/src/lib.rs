@@ -1,5 +1,6 @@
 //! Repository gates run by CI, the scenario driver and the Linux package.
 
+pub mod changelog;
 pub mod check_api;
 pub mod check_comments;
 pub mod check_deps;
@@ -28,6 +29,24 @@ pub fn workspace_cargo(cargo: impl AsRef<std::ffi::OsStr>) -> Command {
         }
     }
     command
+}
+
+/// Runs git in `workspace` and returns its trimmed output.
+pub fn git(workspace: &Path, args: &[&str]) -> Result<String, String> {
+    let out = Command::new("git")
+        .args(args)
+        .current_dir(workspace)
+        .output()
+        .map_err(|e| format!("git: {e}"))?;
+    if out.status.success() {
+        Ok(String::from_utf8_lossy(&out.stdout).trim().to_owned())
+    } else {
+        Err(format!(
+            "git {}: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr).trim()
+        ))
+    }
 }
 
 pub fn workspace_root() -> PathBuf {

@@ -87,7 +87,7 @@ jobs:
         run: >
           gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY"
           dist/LobbySetup.exe dist/latest.json dist/THIRD-PARTY-NOTICES.html
-          --title "Lobby ${GITHUB_REF_NAME#v}" --generate-notes --verify-tag
+          --title "Lobby ${GITHUB_REF_NAME#v}" --notes-file dist/release-notes.md --verify-tag
 
   image:
     name: Server image

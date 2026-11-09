@@ -72,6 +72,26 @@ is no separate spec, and the Rust types in `lobby-protocol` are the wire contrac
   `.config/nextest.toml`.
 - Every server integration test ends with `assert!(server.shutdown().await.is_clean())`.
 
+## Commits
+
+A subject is `<type>[(<scope>)][!]: <description>`. The commits since the last release become its
+`CHANGELOG.md` entry and the Release's description. `cargo xtask check-commits` enforces the
+format, and `cargo xtask changelog` previews the entry.
+
+- `feat` adds something a person using Lobby can do. `fix` fixes something that was broken.
+  `perf` makes something faster or lighter. These three reach the changelog.
+- `refactor` changes structure, not behaviour. `style` is formatting. `test` is tests. `docs` is
+  documentation. `build` is the build, dependencies and releases. `ops` is CI, deploy and
+  hosting. `chore` is anything else. None of these reach the changelog.
+- `!` after the type marks a breaking change, and lists it first under Breaking.
+- The scope is optional: 1 to 20 lowercase letters, digits or hyphens, such as `voice`. It is not
+  shown.
+- The description is imperative, starts lowercase and has no period. For a type the changelog
+  shows, write it for someone using Lobby: what changes for them, not which code moved.
+- A follow-up to work not yet released is folded into its commit, or typed `chore`: it is news
+  to no one.
+- A `Revert "..."` subject is valid and never shown.
+
 ## Commands
 
 ```sh
@@ -79,6 +99,7 @@ cargo fmt --all --check
 cargo xtask check-toolchain
 cargo xtask check-comments
 cargo xtask check-px
+cargo xtask check-commits  # the subjects since the last tag
 cargo xtask check-deps
 cargo xtask check-api
 cargo clippy --workspace --all-targets -- -D warnings

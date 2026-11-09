@@ -17,7 +17,10 @@ jobs:
     name: Windows
     runs-on: windows-latest
     steps:
+      # The tags, for check-commits: it reads the subjects since the last one.
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       # rust-toolchain.toml pins the channel and components; rustup installs it on first use.
       - name: Toolchain
@@ -41,7 +44,7 @@ jobs:
         with:
           tool: nextest
 
-      # The checks AGENTS.md lists, in its order: fmt, the five xtask checks, both clippy runs,
+      # The checks AGENTS.md lists, in its order: fmt, the six xtask checks, both clippy runs,
       # nextest and the doc tests.
       - name: Gates
         run: cargo xtask gates
