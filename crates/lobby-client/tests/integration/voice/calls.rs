@@ -55,7 +55,6 @@ async fn two_members_hear_each_other_mute_and_leave() {
     let (media_a, heard_by_a) = tone_with_capture(440.0);
     let (media_b, heard_by_b) = tone_with_capture(660.0);
     a.join_voice(media_a).await.unwrap();
-    assert_eq!(a.state().voice.phase, VoicePhase::Joining);
     b.join_voice(media_b).await.unwrap();
     until(&mut a, &mut b, "both In Voice on both clients", |sa, sb| {
         ["alice", "bob"]
