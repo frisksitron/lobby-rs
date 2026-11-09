@@ -10,7 +10,7 @@ use gpui_kit::{
     Window,
     assets::IconName,
     component::{
-        ActiveTheme as _, Disableable as _,
+        ActiveTheme as _, Disableable as _, Icon,
         button::ButtonVariants as _,
         scroll::{Scrollbar, ScrollbarAxis},
         switch::Switch,
@@ -183,11 +183,22 @@ impl SettingsView {
                 (copy::updates_failed(&version.to_string()), check(false))
             }
         };
+        let url = updates.read(cx).changelog_url().to_owned();
+        let changelog = page_button("update-changelog", cx)
+            .debug_selector(|| "update-changelog".into())
+            .outline()
+            .icon(Icon::new(IconName::ExternalLink))
+            .label(copy::UPDATE_CHANGELOG)
+            .on_click(move |_, _, cx| crate::links::open_external(&url, cx));
         section(
             copy::UPDATES,
             div()
                 .id("updates")
+                .flex()
+                .flex_col()
+                .gap(u(ROW_GAP))
                 .child(row(line, control, cx))
+                .child(div().flex().child(changelog))
                 .test_support(),
             cx,
         )

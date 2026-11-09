@@ -873,6 +873,7 @@ pub fn update_failed(version: &str) -> String {
 /// Settings' Updates section: one line that says where the updater stands.
 pub const UPDATES: &str = "Updates";
 pub const UPDATE_CHECK_NOW: &str = "Check now";
+pub const UPDATE_CHANGELOG: &str = "Changelog";
 
 pub fn updates_local_build(version: &str) -> String {
     format!("Lobby {version}. This build doesn't update itself.")

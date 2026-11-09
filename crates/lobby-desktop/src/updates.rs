@@ -61,6 +61,7 @@ pub struct AppUpdates {
     restarting: bool,
     asked_for_newer: Cell<bool>,
     updater: Updater,
+    changelog_url: String,
     on_exit: OnExit,
     quit: Rc<dyn Fn(&mut App)>,
     _follow: Task<()>,
@@ -81,6 +82,7 @@ impl AppUpdates {
         quit: Rc<dyn Fn(&mut App)>,
         cx: &mut App,
     ) {
+        let changelog_url = feed.changelog_url();
         let updater = client.updater(feed, current_version(), dir, UpdateTiming::default());
         let entity = cx.new(|cx| {
             let mut status = updater.status();
@@ -103,6 +105,7 @@ impl AppUpdates {
                 restarting: false,
                 asked_for_newer: Cell::new(false),
                 updater,
+                changelog_url,
                 on_exit,
                 quit,
                 _follow: follow,
@@ -137,6 +140,11 @@ impl AppUpdates {
     /// The app's updates, unless it is a build that does not update itself.
     pub fn entity(cx: &App) -> Option<Entity<AppUpdates>> {
         cx.try_global::<UpdatesGlobal>().map(|g| g.0.clone())
+    }
+
+    /// The page that says what each release changed.
+    pub fn changelog_url(&self) -> &str {
+        &self.changelog_url
     }
 
     pub fn check_now(&self) {

@@ -112,18 +112,26 @@ pub struct Manifest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReleaseFeed {
     base: Url,
+    changelog: Url,
 }
 
 impl ReleaseFeed {
-    /// `owner/name`'s GitHub Releases.
+    /// `owner/name`'s GitHub Releases, and the `CHANGELOG.md` on its main branch.
     pub fn github(repo: &str) -> Result<ReleaseFeed, url::ParseError> {
-        Self::at(&format!("https://github.com/{repo}/releases"))
+        Ok(ReleaseFeed {
+            base: Url::parse(&format!("https://github.com/{repo}/releases"))?,
+            changelog: Url::parse(&format!("https://github.com/{repo}/blob/main/CHANGELOG.md"))?,
+        })
     }
 
-    /// Any server laid out like GitHub Releases, such as a test's.
+    /// Any server laid out like GitHub Releases, such as a test's, with `CHANGELOG.md` beside
+    /// `latest/`.
     pub fn at(base: &str) -> Result<ReleaseFeed, url::ParseError> {
-        let base = Url::parse(base.trim_end_matches('/'))?;
-        Ok(ReleaseFeed { base })
+        let base = base.trim_end_matches('/');
+        Ok(ReleaseFeed {
+            base: Url::parse(base)?,
+            changelog: Url::parse(&format!("{base}/CHANGELOG.md"))?,
+        })
     }
 
     pub fn manifest_url(&self) -> String {
@@ -134,9 +142,9 @@ impl ReleaseFeed {
         format!("{}/download/v{version}/{ASSET}", self.base)
     }
 
-    /// The page a person reads a release's notes on.
-    pub fn notes_url(&self, version: Version) -> String {
-        format!("{}/tag/v{version}", self.base)
+    /// The page a person reads what each release changed on.
+    pub fn changelog_url(&self) -> String {
+        self.changelog.to_string()
     }
 }
 
