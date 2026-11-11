@@ -175,11 +175,6 @@ impl Decoder {
     }
 
     #[cfg(test)]
-    pub fn software() -> Result<Decoder, MediaError> {
-        Decoder::start(false)
-    }
-
-    #[cfg(test)]
     pub fn cannot_scale_to(&mut self, size: (u32, u32)) {
         if let Some(gpu) = &mut self.gpu {
             gpu.cannot_scale_to = Some(size);
