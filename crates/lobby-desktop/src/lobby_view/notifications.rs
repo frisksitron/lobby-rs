@@ -2,12 +2,13 @@
 //! into the Center with its toast, the Center opening and closing, and what the actions in them
 //! do.
 
-use gpui_kit::{Context, Window, component::WindowExt as _};
+use gpui_kit::{Context, Window};
 use lobby_client::{Intent, Issue, IssueAction, IssueKind};
 
 use super::toasts::{ConnectionToast, DecisionToast, IssueToast, remove_connection_toast};
 use super::{LobbyView, LobbyViewEvent, connection_toast, issue_toast};
 use crate::components::ConnectionAction;
+use crate::kit::WindowExt as _;
 
 impl LobbyView {
     /// A toast for a connection state the person must act on, once per entering it. Do Not

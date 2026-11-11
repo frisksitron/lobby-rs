@@ -8,26 +8,22 @@ compile_error!(
      Build releases without it."
 );
 
+mod controls;
 mod fixtures;
-mod kit;
 mod stories;
 
 use gpui_kit::{
-    AnyElement, AnyWindowHandle, App, AppContext as _, Bounds, ClickEvent, Context, Entity,
+    AnyElement, AnyWindowHandle, App, AppContext as _, Axis, Bounds, ClickEvent, Context, Entity,
     InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
     StatefulInteractiveElement as _, Styled as _, TitlebarOptions, Window, WindowBounds,
-    WindowOptions,
-    component::{
-        ActiveTheme as _, Selectable as _, Sizable as _,
-        button::{Button, ButtonVariants as _},
-        sidebar::{Sidebar, SidebarMenu, SidebarMenuItem},
-    },
-    div, px, size,
+    WindowOptions, base::Toolbar, div, px, size,
 };
 use lobby_client::Settings;
 
 use crate::{
     appearance,
+    kit::ActiveTheme as _,
+    ui,
     window_bounds::{DEFAULT_SIZE, MIN_SIZE},
 };
 
@@ -145,14 +141,24 @@ impl Gallery {
         &STORIES[self.active]
     }
 
-    fn sidebar(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        Sidebar::new("gallery-stories")
+    /// The story list: a button per story, and the arrow keys move along it as along a toolbar.
+    fn stories(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = cx.theme();
+        let (fill, edge, muted) = (theme.sidebar, theme.sidebar_border, theme.muted_foreground);
+        div()
             .w(px(SIDEBAR_W))
+            .h_full()
             .flex_shrink_0()
-            .header(
+            .flex()
+            .flex_col()
+            .gap_2()
+            .py_2()
+            .bg(fill)
+            .border_r_1()
+            .border_color(edge)
+            .child(
                 div()
-                    .px_2()
-                    .pt_1()
+                    .px_4()
                     .flex()
                     .flex_col()
                     .child(
@@ -164,18 +170,31 @@ impl Gallery {
                     .child(
                         div()
                             .text_xs()
-                            .text_color(cx.theme().muted_foreground)
+                            .text_color(muted)
                             .child("Components and their states"),
                     ),
             )
             .child(
-                SidebarMenu::new().children(STORIES.iter().enumerate().map(|(ix, story)| {
-                    SidebarMenuItem::new(story.name)
-                        .active(ix == self.active)
-                        .on_click(
-                            cx.listener(move |this, _: &ClickEvent, _, cx| this.select(ix, cx)),
-                        )
-                })),
+                Toolbar::new("gallery-stories")
+                    .axis(Axis::Vertical)
+                    .flex_1()
+                    .min_h_0()
+                    .flex()
+                    .flex_col()
+                    .gap_0p5()
+                    .px_2()
+                    .overflow_y_scroll()
+                    .children(STORIES.iter().enumerate().map(|(ix, story)| {
+                        ui::Button::new(SharedString::from(format!("story-{}", story.name)))
+                            .size(ui::Size::Bar)
+                            .w_full()
+                            .accessibility_label(story.name)
+                            .selected(ix == self.active)
+                            .child(div().w_full().text_left().child(story.name))
+                            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                                this.select(ix, cx);
+                            }))
+                    })),
             )
     }
 
@@ -187,9 +206,8 @@ impl Gallery {
             .items_center()
             .gap_1()
             .children(Frame::ALL.map(|frame| {
-                Button::new(SharedString::from(format!("frame-{}", frame.label())))
-                    .small()
-                    .ghost()
+                ui::Button::new(SharedString::from(format!("frame-{}", frame.label())))
+                    .size(ui::Size::Inline)
                     .label(frame.label())
                     .selected(self.frame == frame)
                     .on_click(cx.listener(move |this, _, _, cx| this.set_frame(frame, cx)))
@@ -307,7 +325,7 @@ impl Render for Gallery {
             .flex()
             .bg(background)
             .text_color(theme.foreground)
-            .child(self.sidebar(cx))
+            .child(self.stories(cx))
             .child(
                 div()
                     .flex_1()

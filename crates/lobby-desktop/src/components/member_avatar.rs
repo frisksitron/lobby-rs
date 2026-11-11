@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use gpui_kit::{
     Animation, AnimationExt as _, AnyElement, App, ElementId, Hsla, ImageSource, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, component::ActiveTheme as _,
-    div, prelude::FluentBuilder as _, pulsating_between,
+    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div,
+    prelude::FluentBuilder as _, pulsating_between,
 };
 use lobby_protocol::{Presence, VoiceState};
 
@@ -15,6 +15,7 @@ use super::{
     Avatar,
     tokens::{AvatarSize, PULSE_FPS, idle_color, voice_accent},
 };
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
 
 /// The speaking ring sits one pixel outside the avatar.

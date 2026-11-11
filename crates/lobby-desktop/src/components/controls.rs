@@ -1,58 +1,26 @@
-//! Fields, selects and buttons at the heights of the surface they stand on (see
-//! `components/tokens.rs`), so a page never sizes a control by hand. The onboarding screens'
-//! pair is [`FIELD_H`] tall; a page's and a dialog's is [`PAGE_CONTROL_H`].
+//! Fields, selects and dialogs at the heights of the surface they stand on (see `ui::Size`), so a
+//! page never sizes a control by hand. The onboarding screens' pair is
+//! [`FIELD_H`](crate::ui::FIELD_H) tall; a page's and a dialog's is [`PAGE_CONTROL_H`].
 
-use gpui_kit::{
-    App, ElementId, Entity, FontWeight, ParentElement as _, Styled as _, Window,
-    assets::IconName,
-    component::{
-        Icon, Sizable as _, WindowExt as _,
-        button::{Button, ButtonVariants as _},
-        dialog::{AlertDialog, DialogFooter},
-        input::{Input, InputState},
-        searchable_list::{SearchableListDelegate, SearchableListItem},
-        select::{Select, SelectState},
-    },
+use gpui_kit::{App, Entity, ParentElement as _, Styled as _, Window};
+
+use super::{PAGE_CONTROL_H, PAGE_CONTROL_RADIUS, SURFACE_INNER_RADIUS};
+use crate::kit::{
+    Sizable as _, WindowExt as _,
+    dialog::{AlertDialog, DialogFooter},
+    input::{Input, InputState},
+    searchable_list::{SearchableListDelegate, SearchableListItem},
+    select::{Select, SelectState},
 };
+use crate::scale::u;
+use crate::ui;
 
-use super::{FIELD_H, ICON_MD, PAGE_CONTROL_H, PAGE_CONTROL_RADIUS, SURFACE_INNER_RADIUS};
-use crate::scale::{device_in, u};
-
-const STEP_PAD_X: f32 = 16.;
-const PAGE_PAD_X: f32 = 14.;
-
-/// The onboarding step's one field: the kit's large size is [`FIELD_H`] tall.
+/// The onboarding step's one field: the kit's large size is [`FIELD_H`](crate::ui::FIELD_H) tall.
 pub fn step_input(state: &Entity<InputState>, id: &'static str) -> Input {
     Input::new(state)
         .id(id)
         .large()
         .rounded(u(SURFACE_INNER_RADIUS))
-}
-
-/// A step's own button at the field's height, with the column's inner corners.
-pub fn step_button(id: &'static str, cx: &App) -> Button {
-    Button::new(id)
-        .h(u(FIELD_H))
-        .px(u(STEP_PAD_X))
-        .rounded(device_in(SURFACE_INNER_RADIUS, cx))
-        .font_weight(FontWeight::SEMIBOLD)
-}
-
-/// A page's or dialog's button, at the page control height.
-pub fn page_button(id: impl Into<ElementId>, cx: &App) -> Button {
-    Button::new(id)
-        .h(u(PAGE_CONTROL_H))
-        .px(u(PAGE_PAD_X))
-        .rounded(device_in(PAGE_CONTROL_RADIUS, cx))
-        .font_weight(FontWeight::SEMIBOLD)
-}
-
-/// A page's square icon button, such as Back or a stepper's minus.
-pub fn page_icon_button(id: impl Into<ElementId>, icon: IconName, cx: &App) -> Button {
-    page_button(id, cx)
-        .w(u(PAGE_CONTROL_H))
-        .px(u(0.))
-        .icon(Icon::new(icon).size(u(ICON_MD)))
 }
 
 /// An alert that asks before something that cannot be undone: Cancel, then the action in the danger
@@ -65,13 +33,12 @@ pub fn confirm_alert(
     ok_label: &'static str,
     on_cancel: impl Fn(&mut Window, &mut App) + Clone + 'static,
     on_ok: impl Fn(&mut Window, &mut App) + Clone + 'static,
-    cx: &App,
 ) -> AlertDialog {
     let (cancel_key, ok_key) = (on_cancel.clone(), on_ok.clone());
     let footer = DialogFooter::new()
         .child(
-            page_button("confirm-cancel", cx)
-                .ghost()
+            ui::Button::new("confirm-cancel")
+                .size(ui::Size::Page)
                 .label(cancel_label)
                 .on_click(move |_, window, cx| {
                     on_cancel(window, cx);
@@ -79,8 +46,9 @@ pub fn confirm_alert(
                 }),
         )
         .child(
-            page_button("confirm-ok", cx)
-                .danger()
+            ui::Button::new("confirm-ok")
+                .variant(ui::Variant::Danger)
+                .size(ui::Size::Page)
                 .label(ok_label)
                 .on_click(move |_, window, cx| {
                     on_ok(window, cx);

@@ -18,11 +18,6 @@ use gpui_kit::{
     RenderOnce, SharedString, Styled as _, TestSupportExt as _, Window,
     assets::IconName,
     base::{ElementExt as _, POPUP_PRIORITY, Positioner},
-    component::{
-        ActiveTheme as _, Disableable as _, Icon, Selectable as _, Sizable as _, ThemeStyled as _,
-        button::{Button, ButtonVariants as _},
-        menu::{DropdownMenu as _, PopupMenuItem},
-    },
     deferred, div, point,
     prelude::FluentBuilder as _,
 };
@@ -34,7 +29,12 @@ use crate::components::{
     member_panel::{card_line, line_with_end, separator},
     truncated_text,
 };
+use crate::kit::{
+    ActiveTheme as _, ThemeStyled as _,
+    menu::{DropdownMenu as _, PopupMenuItem},
+};
 use crate::scale::{design_viewport, device, u};
+use crate::ui;
 /// Keeps the connection label near the name; narrower windows shrink it further.
 pub const TRIGGER_MAX: f32 = 260.;
 /// The trigger's padding, also kept by the lone app mark so it never moves between routes.
@@ -223,11 +223,12 @@ impl RenderOnce for LobbySwitcher {
             Some(_) => format!("{name} · {}", copy::SWITCHER_SHORTCUT).into(),
             None => format!("{} · {}", copy::LOBBIES, copy::SWITCHER_SHORTCUT).into(),
         };
-        let trigger = BarButton::button("lobby-switcher")
+        let trigger = ui::Button::new("lobby-switcher")
+            .size(ui::Size::Bar)
             .accessibility_label(accessible)
             .debug_selector(|| "lobby-switcher".into())
             .px(u(TRIGGER_PAD_X))
-            // The kit's button never shrinks by default; this one must, for its name to.
+            // A button never shrinks by default; this one must, for its name to.
             .flex_shrink(1.)
             .min_w_0()
             .max_w_full()
@@ -235,7 +236,7 @@ impl RenderOnce for LobbySwitcher {
             .tooltip(copy::SWITCHER_SHORTCUT)
             .child(
                 content.child(
-                    Icon::new(IconName::ChevronsUpDown)
+                    ui::Icon::new(IconName::ChevronsUpDown)
                         .size(u(ICON_XS))
                         .flex_shrink_0()
                         .text_color(muted),
@@ -306,7 +307,7 @@ fn lobby_menu(
         }
     };
     // The lines keep their own colours, so the kit's disabled look does not show on them.
-    let dim = |b: Button| b.disabled(true).opacity(DISABLED_OPACITY);
+    let dim = |b: ui::Button| b.disabled(true).opacity(DISABLED_OPACITY);
     let icon = card_line("lobby-menu-icon", copy::CHANGE_ICON, false, cx)
         .tooltip(if off {
             copy::SIGN_IN_FIRST
@@ -321,7 +322,7 @@ fn lobby_menu(
             }
         });
     let remove = (entry.icon.is_some() && !off).then(|| {
-        Button::new("lobby-menu-icon-remove")
+        ui::Button::new("lobby-menu-icon-remove")
             .debug_selector(|| "lobby-menu-icon-remove".into())
             .accessibility_label("Remove icon")
             .label(copy::REMOVE)
@@ -408,15 +409,15 @@ fn lobby_row(
             }
         };
         let right_click = show.clone();
-        let more = Button::new(("switcher-more", ix))
+        let more = ui::Button::new(("switcher-more", ix))
             .debug_selector(move || format!("switcher-more-{ix}"))
             .accessibility_label(copy::LOBBY_MENU)
-            .ghost()
-            .xsmall()
-            .size(u(MORE_SIZE))
+            .size(ui::Size::Corner)
+            .w(u(MORE_SIZE))
+            .h(u(MORE_SIZE))
             .flex_shrink_0()
             .text_color(muted)
-            .icon(Icon::new(IconName::Ellipsis).size(u(ICON_SM)))
+            .icon(ui::Icon::new(IconName::Ellipsis).size(u(ICON_SM)))
             .tooltip(copy::LOBBY_MENU)
             .selected(open)
             .on_click(move |_, window, cx| {
@@ -467,7 +468,7 @@ fn lobby_row(
                     .when(entry.current, |d| {
                         d.debug_selector(move || format!("switcher-current-{ix}"))
                             .child(
-                                Icon::new(IconName::Check)
+                                ui::Icon::new(IconName::Check)
                                     .size(u(ICON_SM))
                                     .text_color(primary),
                             )
@@ -505,7 +506,11 @@ fn add_row(menu_width: f32) -> PopupMenuItem {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .child(Icon::new(IconName::Plus).size(u(ICON_SM)).text_color(muted)),
+                    .child(
+                        ui::Icon::new(IconName::Plus)
+                            .size(u(ICON_SM))
+                            .text_color(muted),
+                    ),
             )
             .child(div().text_sm().text_color(fg).child(copy::ADD_LOBBY))
             .test_support()

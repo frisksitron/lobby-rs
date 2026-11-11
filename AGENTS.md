@@ -99,6 +99,7 @@ cargo fmt --all --check
 cargo xtask check-toolchain
 cargo xtask check-comments
 cargo xtask check-px
+cargo xtask check-kit
 cargo xtask check-commits  # the subjects since the last tag
 cargo xtask check-deps
 cargo xtask check-api

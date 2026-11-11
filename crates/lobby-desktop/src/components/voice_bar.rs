@@ -10,12 +10,12 @@ use std::time::Instant;
 
 use gpui_kit::{
     App, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    Styled as _, TestSupportExt as _, Window, component::ActiveTheme as _, div, linear_color_stop,
-    linear_gradient,
+    Styled as _, TestSupportExt as _, Window, div, linear_color_stop, linear_gradient,
 };
 use lobby_client::{LobbyState, Phase, VoicePhase};
 
 use super::{FootSize, SURFACE_RADIUS, VoiceFace, VoiceFoot, auth::ClickHandler, nested_radius};
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
 
 pub const STRIP_HEIGHT: f32 = super::voice_face::FACE_H;

@@ -1,7 +1,7 @@
 //! The Notification Center's Decisions on access requests: Vouch, Decline and its Undo. Each row
 //! keeps its place until it folds away, so the next one never slides under the pointer.
 
-use gpui_kit::{Context, Window, component::WindowExt as _};
+use gpui_kit::{Context, Window};
 use lobby_client::Intent;
 use lobby_protocol::{AccessRequest, AccessRequestId, UnixMs};
 
@@ -10,6 +10,7 @@ use super::{
     toasts::{DecisionToast, decision_toast},
 };
 use crate::components::{Decide, DecisionRow, FOLD_FOR, SETTLE_FOR, Settled, decision_rows};
+use crate::kit::WindowExt as _;
 
 impl LobbyView {
     /// A Decision from the Notification Center. Vouch goes out at once and its row waits for the

@@ -1,10 +1,10 @@
 use gpui_kit::{
     AnyElement, App, Div, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
-    RenderOnce, SharedString, Styled as _, Window, component::ActiveTheme as _, div,
-    prelude::FluentBuilder as _,
+    RenderOnce, SharedString, Styled as _, Window, div, prelude::FluentBuilder as _,
 };
 
 use super::{Avatar, AvatarSize, IconDisc, truncated_text};
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
 
 pub const LEAD_SIZE: f32 = AvatarSize::Row.px();

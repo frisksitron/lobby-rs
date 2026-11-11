@@ -44,12 +44,7 @@ use gpui_kit::{
     AnyWindowHandle, App, AppContext as _, Bounds, Context, DisplayId, Entity,
     InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Pixels, Point, Render,
     SharedString, Size, Styled as _, Subscription, Task, Window, WindowBounds, WindowOptions,
-    actions,
-    component::{
-        ActiveTheme as _, TitleBar, WindowExt as _,
-        input::{InputEvent, InputState},
-    },
-    div,
+    actions, div,
 };
 use lobby_client::{
     Client, ClientTask, DeviceSetup, EntryIntent, EntryStep, EntryView, Intent, Issue, Loaded,
@@ -70,6 +65,10 @@ use crate::{
     entry_entity::{EntryChanged, EntryEntity},
     host::{self, single_instance},
     issues::IssueCenter,
+    kit::{
+        ActiveTheme as _, TitleBar, WindowExt as _,
+        input::{InputEvent, InputState},
+    },
     lobbies::{Lobbies, LobbiesEvent},
     lobby_icons::{LobbyIcons, icons_of},
     lobby_view::{LobbyView, LobbyViewEvent, Shared, VoiceDevices},

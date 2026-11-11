@@ -14,10 +14,11 @@ use std::cell::Cell;
 
 use gpui_kit::{
     AnyElement, App, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Styled as _, component::ActiveTheme as _, div, px,
+    SharedString, Styled as _, div, px,
 };
 
-use super::{Story, kit};
+use super::{Story, controls};
+use crate::kit::ActiveTheme as _;
 
 pub const STORIES: &[Story] = &[
     Story {
@@ -35,7 +36,7 @@ pub const STORIES: &[Story] = &[
     Story {
         name: "BarButton",
         description: "The title bar's controls: one height, radius, icon size and hover, each occluding the window drag, with an optional dot.",
-        usage: "BarButton::icon(\"notification-bell\", IconName::Bell)\nBarButton::slot(popover, Some(color))",
+        usage: "ui::Button::new(\"notification-bell\").size(ui::Size::Bar).icon(IconName::Bell)\nBarButton::slot(popover, Some(color))",
         render: title_bar::bar_button,
     },
     Story {
@@ -146,7 +147,7 @@ VoiceStatsList::new(session.state().and_then(|s| s.voice.stats.clone()))",
     },
     Story {
         name: "Composer",
-        description: "The composer's formatting bar (a kit Toolbar): each format's state and the compact bar of a folded window.",
+        description: "The composer's formatting bar (a base Toolbar): each format's state and the compact bar of a folded window.",
         usage: "FormatBar::new(on_format).compact(narrow).active(self.formats_at_caret(value, cx))",
         render: feed::composer,
     },
@@ -181,10 +182,10 @@ VoiceStatsList::new(session.state().and_then(|s| s.voice.stats.clone()))",
         render: viewer::viewer,
     },
     Story {
-        name: "Kit",
-        description: "The gpui-kit components the app uses as they are, in the app's theme.",
-        usage: "Button::new(\"voice-join\").icon(Icon::new(IconName::Phone)).label(\"Join Voice\").primary()\nBadge::new().count(count).max(9).color(color).child(control)\nSwitch::new(\"do-not-disturb\").checked(on).label(\"Do Not Disturb\")",
-        render: kit::kit,
+        name: "Controls",
+        description: "Lobby's controls over gpui-kit's base layer, in the app's theme: its buttons in each variant and state, and the small ones the components share.",
+        usage: "ui::Button::new(\"voice-join\").variant(ui::Variant::Primary).size(ui::Size::Page).icon(IconName::Phone).label(\"Join Voice\")\nui::Switch::new(\"do-not-disturb\").checked(on).accessibility_label(\"Do Not Disturb\").on_change(on_change)\nui::Slider::new(&volume).accessibility_label(\"Volume\")",
+        render: controls::controls,
     },
 ];
 

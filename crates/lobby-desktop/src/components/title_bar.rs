@@ -5,12 +5,11 @@ use std::time::Duration;
 
 use gpui_kit::{
     Animation, AnimationExt as _, AnyElement, App, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, Styled as _, Window,
-    component::{ActiveTheme as _, TitleBar},
-    div, ease_out_quint, hsla,
+    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div, ease_out_quint, hsla,
 };
 
 use super::{avatar::stable_hash, tokens::MARK_COLORS};
+use crate::kit::{ActiveTheme as _, TitleBar};
 use crate::scale::u;
 
 /// Taller than the kit's 34 px, so the Lobby's name and the label breathe;

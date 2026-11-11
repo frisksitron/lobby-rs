@@ -29,12 +29,8 @@ use gpui_kit::{
     AnyElement, AnyView, AppContext as _, ClipboardItem, Context, DragMoveEvent, Entity,
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, KeyDownEvent, MouseDownEvent,
     ParentElement as _, Render, SharedString, StyleRefinement, Styled as _, Subscription, Task,
-    TestSupportExt as _, Window, actions,
-    base::GlobalState,
-    canvas,
-    component::{ActiveTheme as _, Theme, WindowExt as _},
-    div, linear_color_stop, linear_gradient,
-    prelude::FluentBuilder as _,
+    TestSupportExt as _, Window, actions, base::GlobalState, canvas, div, linear_color_stop,
+    linear_gradient, prelude::FluentBuilder as _,
 };
 use lobby_client::{Intent, Issue, IssueKind, LobbyState, Phase, UiEffect, local_time};
 use lobby_protocol::{AccessRequestId, Attachment, MessageId, UnixMs};
@@ -54,6 +50,7 @@ pub use toasts::toast_right_margin;
 pub(crate) use toasts::{connection_toast, issue_toast};
 pub use voice::VoiceDevices;
 
+use crate::kit::{ActiveTheme as _, Theme, WindowExt as _};
 use crate::scale::{design_viewport, device, u, window_scale};
 use crate::{
     components::attachment_dialog::dialog_width,

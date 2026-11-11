@@ -1,6 +1,6 @@
 use gpui_kit::{
     AnyElement, App, Context, Div, Hsla, IntoElement, ParentElement as _, SharedString,
-    Styled as _, Window, assets::IconName, component::ActiveTheme as _, div,
+    Styled as _, Window, assets::IconName, div,
 };
 use lobby_protocol::{Presence, VoiceState};
 
@@ -13,6 +13,7 @@ use crate::gallery::{
     Gallery, Section,
     fixtures::{deafened, joining, member, muted, sharing, speaking, voice},
 };
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
 
 use super::{caption, panel, popover_frame, wrap};

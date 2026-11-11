@@ -4,8 +4,10 @@
 //! entry is not an Issue: it cannot be dismissed, and it goes away by itself once the Lobby is
 //! connected again, which the clearing tint says on its own.
 
-use gpui_kit::{App, Hsla, SharedString, component::ActiveTheme as _};
+use gpui_kit::{App, Hsla, SharedString};
 use lobby_client::{LobbyState, Phase, Severity, copy};
+
+use crate::kit::ActiveTheme as _;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnectionTone {

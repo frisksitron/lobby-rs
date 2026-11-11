@@ -8,25 +8,18 @@
 use std::time::Duration;
 
 use gpui_kit::{
-    Animation, AnimationExt as _, App, ClickEvent, FontWeight, Hsla, InteractiveElement as _,
-    IntoElement, ParentElement as _, RenderOnce, Styled as _, TestSupportExt as _, Window,
-    assets::IconName,
-    component::{
-        ActiveTheme as _, Colorize as _, Disableable as _, Icon, Selectable as _, Sizable as _,
-        Theme,
-        button::{Button, ButtonCustomVariant, ButtonGroup, ButtonVariants as _},
-        spinner::Spinner,
-    },
-    div,
-    prelude::FluentBuilder as _,
-    px,
+    Animation, AnimationExt as _, App, ClickEvent, Div, FontWeight, Hsla, InteractiveElement as _,
+    IntoElement, ParentElement as _, RenderOnce, Stateful, Styled as _, TestSupportExt as _,
+    Window, assets::IconName, base::Selectable as _, div, prelude::FluentBuilder as _, px,
 };
 
 use super::{
     SURFACE_INNER_RADIUS, ShareControl, VoiceBarActions, VoiceBarModel, Waits, auth::ClickHandler,
     voice_bar::STRIP_INNER_RADIUS,
 };
+use crate::kit::{ActiveTheme as _, Colorize as _, Theme};
 use crate::scale::{device_in, u};
+use crate::ui::{self, Spinner};
 
 const FOOT_GAP: f32 = 6.;
 /// In the narrowest sheet Leave is 74 px wide: its icon and word fit only with less padding than
@@ -106,41 +99,40 @@ fn handler(h: &ClickHandler) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 's
     move |e, w, cx| h(e, w, cx)
 }
 
-/// Mute, Deafen and Share Screen. An on state is the kit's selected one, which the group also
-/// says as pressed: Mute and Deafen filled coral, so being muted reads at a glance on either
-/// surface, Share Screen tinted lavender. Each label says what a press does.
+/// Mute, Deafen and Share Screen. An on state is the selected one, which the group also says as
+/// toggled on: Mute and Deafen filled coral, so being muted reads at a glance on either surface,
+/// Share Screen tinted lavender. Each label says what a press does. A switched-off control stays
+/// solid while it waits, as a connecting group does.
 fn voice_group(
     model: &VoiceBarModel,
     actions: &VoiceBarActions,
     waits: Waits,
     size: FootSize,
     cx: &App,
-) -> Option<ButtonGroup> {
+) -> Option<Stateful<Div>> {
     let radius = device_in(size.radius(), cx);
     let theme = cx.theme();
-    let plum = FootSize::Bar.rest(theme);
-    let on_plum = ButtonCustomVariant::new(cx)
-        .color(plum)
-        .foreground(theme.sidebar_primary_foreground)
-        .hover(theme.primary.mix_oklab(plum, BAR_HOVER_TINT))
-        .active(theme.primary.mix_oklab(plum, BAR_ACTIVE_TINT))
-        .shadow(false);
-    let switched_off = ButtonCustomVariant::new(cx)
-        .color(theme.danger)
-        .foreground(theme.danger_foreground)
+    let rest = match size {
+        FootSize::Sheet => {
+            ui::Custom::new(theme.button_secondary, theme.button_secondary_foreground)
+                .hover(theme.button_secondary_hover)
+                .active(theme.button_secondary_active)
+                .disabled(theme.button_secondary)
+        }
+        FootSize::Bar => {
+            let plum = FootSize::Bar.rest(theme);
+            ui::Custom::new(plum, theme.sidebar_primary_foreground)
+                .hover(theme.primary.mix_oklab(plum, BAR_HOVER_TINT))
+                .active(theme.primary.mix_oklab(plum, BAR_ACTIVE_TINT))
+                .disabled(plum)
+        }
+    };
+    let switched_off = ui::Custom::new(theme.danger, theme.danger_foreground)
         .hover(theme.danger_hover)
-        .active(theme.danger)
-        .shadow(false);
-    // A kit custom button draws its colour at a fifth at rest (only hover and pressed are solid),
-    // so each custom colour is also set as the button's own background, which the kit applies
-    // last.
+        .disabled(theme.danger);
     let button = |id: &'static str| {
-        Button::new(id)
-            .map(|b| match size {
-                FootSize::Sheet => b.secondary(),
-                FootSize::Bar => b.custom(on_plum).bg(plum),
-            })
-            .rounded(radius)
+        ui::Button::new(id)
+            .variant(ui::Variant::Custom(rest))
             .w(u(size.button_w()))
             .h(u(size.height()))
             .p_0()
@@ -150,15 +142,15 @@ fn voice_group(
         VoiceBarModel::Connecting => [
             button("voice-mute")
                 .accessibility_label("Mute")
-                .icon(Icon::new(IconName::Mic))
+                .icon(IconName::Mic)
                 .tooltip("Mute"),
             button("voice-deafen")
                 .accessibility_label("Deafen")
-                .icon(Icon::new(IconName::Headphones))
+                .icon(IconName::Headphones)
                 .tooltip("Deafen"),
             button("share-screen")
                 .accessibility_label("Share Screen")
-                .icon(Icon::new(IconName::ScreenShare))
+                .icon(IconName::ScreenShare)
                 .tooltip("Share Screen"),
         ]
         .map(|b| b.disabled(true)),
@@ -172,13 +164,13 @@ fn voice_group(
             let (muted, deafened) = (*muted, *deafened);
             let mute = button("voice-mute")
                 .accessibility_label(if muted { "Unmute" } else { "Mute" })
-                .icon(Icon::new(if muted {
+                .icon(if muted {
                     IconName::MicOff
                 } else {
                     IconName::Mic
-                }))
+                })
                 .when(muted, |b| {
-                    b.custom(switched_off).selected(true).bg(theme.danger)
+                    b.variant(ui::Variant::Custom(switched_off)).selected(true)
                 })
                 .disabled(muted && waits.unmute)
                 .tooltip(match (muted, waits.unmute) {
@@ -190,13 +182,13 @@ fn voice_group(
                 .on_click(handler(&actions.mute));
             let deafen = button("voice-deafen")
                 .accessibility_label(if deafened { "Undeafen" } else { "Deafen" })
-                .icon(Icon::new(if deafened {
+                .icon(if deafened {
                     IconName::HeadphoneOff
                 } else {
                     IconName::Headphones
-                }))
+                })
                 .when(deafened, |b| {
-                    b.custom(switched_off).selected(true).bg(theme.danger)
+                    b.variant(ui::Variant::Custom(switched_off)).selected(true)
                 })
                 .disabled(deafened && waits.unmute)
                 .tooltip(match (deafened, waits.unmute) {
@@ -212,12 +204,21 @@ fn voice_group(
             ]
         }
     };
-    // `children`, not `child`: the kit's `child` overwrites each button's own disabled state.
+    // One segmented control: only the group's outer corners round.
+    let [first, middle, last] = buttons.map(|b| {
+        let on = b.is_selected();
+        b.toggled(on)
+    });
     Some(
-        ButtonGroup::new("voice-group")
+        div()
+            .id("voice-group")
+            .flex()
+            .items_center()
             .flex_shrink_0()
             .gap(px(1.)) // px: the hairline seam between the buttons
-            .children(buttons),
+            .child(first.rounded_l(radius).rounded_r_none())
+            .child(middle.rounded_none())
+            .child(last.rounded_r(radius).rounded_l_none()),
     )
 }
 
@@ -231,7 +232,7 @@ fn mute_nudges(model: &VoiceBarModel) -> u32 {
 /// Talking into a muted microphone rings Mute once, in the danger colour Mute already wears: three
 /// breaths over 2.4 s that end at nothing. The ring is an overlay, so no control moves, and each
 /// nudge is a new animation id, so it plays once per nudge however often the foot redraws.
-fn nudged(group: ButtonGroup, nudges: u32, size: FootSize, cx: &App) -> impl IntoElement {
+fn nudged(group: Stateful<Div>, nudges: u32, size: FootSize, cx: &App) -> impl IntoElement {
     let ring = (nudges > 0).then(|| {
         let theme = cx.theme();
         div()
@@ -262,25 +263,20 @@ fn share_button(
     reconnecting: bool,
     actions: &VoiceBarActions,
     size: FootSize,
-    button: impl Fn(&'static str) -> Button,
+    button: impl Fn(&'static str) -> ui::Button,
     cx: &App,
-) -> Button {
+) -> ui::Button {
     const DROPPED: &str = "The connection dropped. Getting Voice back…";
     let theme = cx.theme();
     let tint = theme
         .primary
         .mix_oklab(size.rest(theme), size.sharing_tint());
-    let sharing = ButtonCustomVariant::new(cx)
-        .color(tint)
-        .foreground(theme.primary)
-        .hover(tint)
-        .active(tint);
-    let spinner = || Spinner::new().xsmall();
-    let stop = |b: Button| {
+    let sharing = ui::Custom::new(tint, theme.primary);
+    let spinner = || Spinner::new().size(u(ui::ICON_XS));
+    let stop = |b: ui::Button| {
         b.accessibility_label("Stop sharing")
-            .custom(sharing)
+            .variant(ui::Variant::Custom(sharing))
             .selected(true)
-            .bg(tint)
             .on_click(handler(&actions.stop_share))
     };
     match share {
@@ -297,7 +293,7 @@ fn share_button(
         ShareControl::Off => {
             let b = button("share-screen")
                 .accessibility_label("Share Screen")
-                .icon(Icon::new(IconName::ScreenShare));
+                .icon(IconName::ScreenShare);
             match lobby_client::share_blocked() {
                 Some(why) => b.disabled(true).tooltip(why.to_string()),
                 None => b.tooltip("Share Screen").on_click(handler(&actions.share)),
@@ -307,7 +303,7 @@ fn share_button(
             .child(spinner())
             .tooltip(format!("Starting {source}. Click to stop.")),
         ShareControl::Live { source } => stop(button("share-stop"))
-            .icon(Icon::new(IconName::ScreenShare))
+            .icon(IconName::ScreenShare)
             .tooltip(format!(
                 "Everyone in Voice can watch {source}. Click to stop."
             )),
@@ -315,16 +311,13 @@ fn share_button(
 }
 
 /// The words on Leave and Join say what they do, so only a reason they wait gets a tooltip.
-fn word_button(id: &'static str, word: &'static str, icon: IconName, size: FootSize) -> Button {
-    Button::new(id)
+fn word_button(id: &'static str, word: &'static str, icon: IconName, size: FootSize) -> ui::Button {
+    ui::Button::new(id)
         .label(word)
         .h(u(size.height()))
         .font_weight(FontWeight::SEMIBOLD)
         .when(size.fills(), |b| {
-            b.icon(Icon::new(icon))
-                .flex_1()
-                .min_w_0()
-                .px(u(SHEET_WORD_PAD))
+            b.icon(icon).flex_1().min_w_0().px(u(SHEET_WORD_PAD))
         })
 }
 
@@ -372,7 +365,7 @@ impl RenderOnce for VoiceFoot {
         match &self.model {
             VoiceBarModel::Idle { can_join } => row.child(
                 word_button("voice-join", "Join Voice", IconName::Phone, size)
-                    .primary()
+                    .variant(ui::Variant::Primary)
                     .rounded(radius)
                     .when(!size.fills(), |b| b.px(u(BAR_JOIN_PAD)))
                     .disabled(!can_join || waits.join.is_some())
@@ -390,7 +383,7 @@ impl RenderOnce for VoiceFoot {
                 .child(
                     word_button("voice-leave", "Leave", IconName::PhoneOff, size)
                         .accessibility_label("Leave Voice")
-                        .danger()
+                        .variant(ui::Variant::Danger)
                         .rounded(radius)
                         .when(!size.fills(), |b| b.px(u(BAR_LEAVE_PAD)))
                         .on_click({

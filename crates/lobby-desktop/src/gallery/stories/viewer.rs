@@ -7,8 +7,8 @@ use std::{
 };
 
 use gpui_kit::{
-    AnyElement, Context, Entity, IntoElement, ParentElement as _, Styled as _, Window,
-    component::ActiveTheme as _, div, prelude::FluentBuilder as _, size,
+    AnyElement, Context, Entity, IntoElement, ParentElement as _, Styled as _, Window, div,
+    prelude::FluentBuilder as _, size,
 };
 use lobby_client::{
     Shortfall, StrainCause, StrainRole, StrainWarning,
@@ -23,6 +23,7 @@ use crate::components::{
     panel_fit, panel_frame, picture_backdrop,
 };
 use crate::gallery::{Gallery, Section, fixtures::user_id};
+use crate::kit::ActiveTheme as _;
 use crate::scale::{device_in, u};
 
 use super::{caption, wrap};

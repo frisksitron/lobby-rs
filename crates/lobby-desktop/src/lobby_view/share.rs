@@ -6,7 +6,7 @@ use std::{rc::Rc, time::Duration};
 use gpui_kit::{
     AnyElement, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
     KeyDownEvent, ParentElement as _, Pixels, Size, Task, TestSupportExt as _, WeakEntity, Window,
-    component::WindowExt as _, px, size,
+    px, size,
 };
 use lobby_client::{
     Intent, LobbyState, ScreenSource, SourceId, StrainWarning, Thumbnails, list_sources,
@@ -19,6 +19,7 @@ use crate::components::{
     PICKER_W, PickerModel, PickerView, Place, Pointer, ShareToolbar, ShareView, Sharer, ToolbarAt,
     Whose, esc_hint, fullscreen_frame, panel_fit, panel_frame,
 };
+use crate::kit::WindowExt as _;
 use crate::scale::device;
 
 /// How long the Esc hint stays up. A second Esc inside it leaves fullscreen.

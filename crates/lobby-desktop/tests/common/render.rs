@@ -107,6 +107,7 @@ pub fn open(rt: &tokio::runtime::Runtime, o: Opening) -> Rendered {
     let (window, shell) = cx.update(|cx| {
         cx.set_global(TokioRuntime::borrowed(handle));
         gpui_kit::init(cx);
+        lobby_desktop::ui::init(cx);
         cx.set_global(lobby_desktop::links::LinkRecorder::default());
         cx.set_global(lobby_desktop::os_toasts::OsToastRecorder::default());
         cx.set_global(lobby_desktop::files::FileRecorder::default());

@@ -1,9 +1,7 @@
 use std::rc::Rc;
 
 use gpui_kit::{
-    AnyElement, Context, IntoElement, ParentElement as _, Styled as _, Window,
-    assets::IconName,
-    component::{ActiveTheme as _, Selectable as _},
+    AnyElement, Context, IntoElement, ParentElement as _, Styled as _, Window, assets::IconName,
     div, px,
 };
 use lobby_client::{HttpPolicy, LobbyOrigin};
@@ -13,6 +11,8 @@ use crate::components::{
     SwitcherEntry, UpdatePill, mark_color,
 };
 use crate::gallery::{Gallery, Section};
+use crate::kit::ActiveTheme as _;
+use crate::ui;
 use lobby_client::update::{UpdateStatus, Version};
 
 use super::{bar, caption, label, wrap};
@@ -50,12 +50,17 @@ pub(super) fn bell(
 
 pub(super) fn members_toggle() -> AnyElement {
     BarButton::slot(
-        BarButton::button("members-toggle")
-            .icon(gpui_kit::component::Icon::new(IconName::Users))
+        ui::Button::new("members-toggle")
+            .size(ui::Size::Bar)
+            .icon(IconName::Users)
             .label("Members"),
         None,
     )
     .into_any_element()
+}
+
+fn bell_button(id: &'static str) -> ui::Button {
+    ui::Button::new(id).size(ui::Size::Bar).icon(IconName::Bell)
 }
 
 pub(super) fn bar_button(
@@ -71,13 +76,14 @@ pub(super) fn bar_button(
             "kinds",
             "Icon, labelled, selected",
             wrap([
-                caption("icon", BarButton::slot(BarButton::icon("b-icon", IconName::Bell).tooltip("Notifications"), None), cx),
+                caption("icon", BarButton::slot(bell_button("b-icon").tooltip("Notifications"), None), cx),
                 caption("labelled", members_toggle(), cx),
                 caption(
                     "selected",
                     BarButton::slot(
-                        BarButton::button("b-selected")
-                            .icon(gpui_kit::component::Icon::new(IconName::Users))
+                        ui::Button::new("b-selected")
+                            .size(ui::Size::Bar)
+                            .icon(IconName::Users)
                             .label("Members")
                             .selected(true),
                         None,
@@ -90,9 +96,9 @@ pub(super) fn bar_button(
             "badges",
             "Badges: a plain dot, never a number",
             wrap([
-                caption("none", BarButton::slot(BarButton::icon("b-none", IconName::Bell), None), cx),
-                caption("something went wrong", BarButton::slot(BarButton::icon("b-danger", IconName::Bell), Some(danger)), cx),
-                caption("not calm", BarButton::slot(BarButton::icon("b-warning", IconName::Bell), Some(warning)), cx),
+                caption("none", BarButton::slot(bell_button("b-none"), None), cx),
+                caption("something went wrong", BarButton::slot(bell_button("b-danger"), Some(danger)), cx),
+                caption("not calm", BarButton::slot(bell_button("b-warning"), Some(warning)), cx),
             ]),
         ),
         Section::new(

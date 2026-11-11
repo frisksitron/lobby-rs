@@ -5,15 +5,12 @@ use std::time::Duration;
 
 use gpui_kit::{
     App, Context, Entity, InteractiveElement as _, IntoElement, ParentElement as _, Render,
-    RenderOnce, SharedString, Styled as _, TestSupportExt as _, Window,
-    component::{
-        ActiveTheme as _, Sizable as _,
-        description_list::{DescriptionItem, DescriptionList},
-    },
-    div,
+    RenderOnce, SharedString, Styled as _, TestSupportExt as _, Window, div,
+    prelude::FluentBuilder as _,
 };
 use lobby_client::{MediaPath, VideoStats, VoiceStats};
 
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
 use crate::session_entity::SessionEntity;
 
@@ -107,15 +104,49 @@ impl RenderOnce for VoiceStatsList {
                 .text_color(muted)
                 .child("Measuring…")
                 .into_any_element(),
-            Some(stats) => DescriptionList::horizontal()
-                .columns(1)
-                .label_width(u(LABEL_W))
-                .small()
-                .children(stats_lines(stats).into_iter().map(|(label, value)| {
-                    let value = div().text_sm().child(SharedString::from(value));
-                    DescriptionItem::new(label).value(value.into_any_element())
-                }))
-                .into_any_element(),
+            Some(stats) => {
+                let theme = cx.theme();
+                let (edge, label_ink) = (theme.border, theme.description_list_label_foreground);
+                let label_fill = theme.tokens.description_list_label;
+                let lines = stats_lines(stats);
+                let last = lines.len().saturating_sub(1);
+                // Two columns in a bordered table: each label on its own fill, its value beside.
+                div()
+                    .flex()
+                    .flex_col()
+                    .overflow_hidden()
+                    .rounded(theme.radius)
+                    .border_1()
+                    .border_color(edge)
+                    .children(lines.into_iter().enumerate().map(|(ix, (label, value))| {
+                        div()
+                            .flex()
+                            .when(ix != last, |row| row.border_b_1().border_color(edge))
+                            .child(
+                                div()
+                                    .w(u(LABEL_W))
+                                    .flex_shrink_0()
+                                    .px_1()
+                                    .py_0p5()
+                                    .text_sm()
+                                    .text_color(label_ink)
+                                    .bg(label_fill)
+                                    .border_r_1()
+                                    .border_color(edge)
+                                    .child(label),
+                            )
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .overflow_hidden()
+                                    .px_1()
+                                    .py_0p5()
+                                    .text_sm()
+                                    .child(SharedString::from(value)),
+                            )
+                    }))
+                    .into_any_element()
+            }
         };
         div()
             .id("voice-stats")

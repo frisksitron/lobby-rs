@@ -4,13 +4,7 @@
 
 use gpui_kit::{
     AnyElement, ClickEvent, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, WeakEntity, Window,
-    component::{
-        WindowExt as _,
-        button::{Button, ButtonVariants as _},
-        notification::Notification,
-    },
-    div,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, WeakEntity, Window, div,
 };
 use lobby_client::{Issue, Severity, Source, copy};
 use lobby_protocol::AccessRequest;
@@ -18,8 +12,10 @@ use lobby_protocol::AccessRequest;
 use super::{LobbyView, SidebarLayout};
 use crate::components::{
     ActionContext, ConnectionNotice, Decide, Detail, Lead, NotificationEntry, action_button,
-    notification_icon, row_action, small_word_button,
+    notification_icon, row_action,
 };
+use crate::kit::{WindowExt as _, notification::Notification};
+use crate::ui;
 
 /// Toasts of Issues, keyed by kind (a repeat replaces its toast).
 pub(super) struct IssueToast;
@@ -76,8 +72,9 @@ pub(crate) fn connection_toast(
         .content(move |_, window, cx| {
             let button = action.map(|a| {
                 let lobby = lobby.clone();
-                small_word_button(format!("toast-{}", a.id()))
-                    .primary()
+                ui::Button::new(SharedString::from(format!("toast-{}", a.id())))
+                    .variant(ui::Variant::Primary)
+                    .size(ui::Size::Word)
                     .label(a.label())
                     .on_click(move |_, window, cx| {
                         cx.stop_propagation();
@@ -110,7 +107,7 @@ pub(crate) fn decision_toast(
         .py_2()
         .px_3()
         .content(move |_, window, cx| {
-            let decide = |what: Decide, button: Button| {
+            let decide = |what: Decide, button: ui::Button| {
                 let (lobby, id) = (lobby.clone(), id.clone());
                 button.on_click(move |_, window, cx| {
                     cx.stop_propagation();
@@ -120,14 +117,16 @@ pub(crate) fn decision_toast(
             let buttons = vec![
                 decide(
                     Decide::Vouch,
-                    small_word_button(format!("toast-vouch-{name}"))
-                        .primary()
+                    ui::Button::new(SharedString::from(format!("toast-vouch-{name}")))
+                        .variant(ui::Variant::Primary)
+                        .size(ui::Size::Word)
                         .label("Vouch"),
                 ),
                 decide(
                     Decide::Decline,
-                    small_word_button(format!("toast-decline-{name}"))
-                        .outline()
+                    ui::Button::new(SharedString::from(format!("toast-decline-{name}")))
+                        .variant(ui::Variant::Outline)
+                        .size(ui::Size::Word)
                         .label("Decline"),
                 ),
             ];
@@ -158,7 +157,7 @@ fn issue_action(
     issue: &Issue,
     lobby: &WeakEntity<LobbyView>,
     cx: &mut gpui_kit::App,
-) -> Option<Button> {
+) -> Option<ui::Button> {
     let ctx = lobby
         .upgrade()
         .map(|v| v.read(cx).action_context(cx))
@@ -201,7 +200,7 @@ struct ToastSpec {
 
 fn toast_body(
     spec: &ToastSpec,
-    actions: Vec<Button>,
+    actions: Vec<ui::Button>,
     window: &mut Window,
     cx: &mut gpui_kit::App,
 ) -> AnyElement {

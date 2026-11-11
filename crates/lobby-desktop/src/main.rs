@@ -149,6 +149,7 @@ fn main() -> anyhow::Result<()> {
             })
             .detach();
             gpui_kit::init(cx);
+            lobby_desktop::ui::init(cx);
             clock.step("gpui-kit");
             lobby_desktop::fonts::install(cx);
             clock.step("fonts");

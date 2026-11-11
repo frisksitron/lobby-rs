@@ -7,21 +7,15 @@ use std::{rc::Rc, time::Duration};
 use gpui_kit::{
     Animation, AnimationExt as _, AnyElement, App, ClickEvent, Div, FontWeight, Hsla,
     InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window,
-    assets::IconName,
-    component::{
-        ActiveTheme as _, Icon, Sizable as _,
-        button::{Button, ButtonVariants as _},
-        spinner::Spinner,
-        tooltip::Tooltip,
-    },
-    div, ease_out_quint,
-    prelude::FluentBuilder as _,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, assets::IconName,
+    div, ease_out_quint, prelude::FluentBuilder as _,
 };
 use lobby_client::{Chip, ChipAt, Stage, copy};
 
-use super::{Avatar, AvatarSize, Callback, ICON_SM, ICON_XS, PULSE_FPS, controls::step_button};
-use crate::scale::u;
+use super::{Avatar, AvatarSize, Callback, ICON_SM, ICON_XS, PULSE_FPS, SURFACE_INNER_RADIUS};
+use crate::kit::{ActiveTheme as _, tooltip::Tooltip};
+use crate::scale::{device_in, u};
+use crate::ui::{self, Icon, Spinner};
 
 /// The default window (680) less 48 of side air each way.
 const COLUMN_W: f32 = 584.;
@@ -124,7 +118,7 @@ pub fn busy_line(text: &'static str, cx: &App) -> impl IntoElement {
                 div()
                     .flex_shrink_0()
                     .pt(u(2.))
-                    .child(Spinner::new().small().color(muted)),
+                    .child(Spinner::new().size(u(ICON_SM)).color(muted)),
             )
             .child(text)
             .into_any_element(),
@@ -199,11 +193,14 @@ pub fn primary_button(
     busy_label: &str,
     busy: bool,
     cx: &App,
-) -> Button {
-    step_button(id, cx)
-        .primary()
+) -> ui::Button {
+    ui::Button::new(id)
+        .variant(ui::Variant::Primary)
+        .size(ui::Size::Step)
+        .rounded(device_in(SURFACE_INNER_RADIUS, cx))
         .label(if busy { busy_label } else { label }.to_owned())
-        .when(busy, |b| b.icon(Icon::new(IconName::LoaderCircle)))
+        // Loading turns an icon into the spinner, so a busy step shows one beside its words.
+        .when(busy, |b| b.icon(IconName::LoaderCircle))
         .loading(busy)
 }
 
@@ -211,9 +208,8 @@ pub fn quiet_link(
     id: &'static str,
     label: impl Into<SharedString>,
     on_click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> Button {
-    Button::new(id)
-        .ghost()
+) -> ui::Button {
+    ui::Button::new(id)
         .h(u(LINK_H))
         .px(u(8.))
         .ml(u(-8.))
@@ -223,10 +219,12 @@ pub fn quiet_link(
 
 /// The one look of every "go back" action on the step screens: a bordered quiet button with an
 /// arrow, at the field's height.
-pub fn back_button(id: &'static str, label: impl Into<SharedString>, cx: &App) -> Button {
-    step_button(id, cx)
-        .outline()
-        .icon(Icon::new(IconName::ArrowLeft))
+pub fn back_button(id: &'static str, label: impl Into<SharedString>, cx: &App) -> ui::Button {
+    ui::Button::new(id)
+        .variant(ui::Variant::Outline)
+        .size(ui::Size::Step)
+        .rounded(device_in(SURFACE_INNER_RADIUS, cx))
+        .icon(IconName::ArrowLeft)
         .label(label)
 }
 

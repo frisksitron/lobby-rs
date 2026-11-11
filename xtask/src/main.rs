@@ -1,8 +1,8 @@
 use std::{fmt::Display, path::PathBuf, process::ExitCode};
 
 use xtask::{
-    changelog, check_api, check_comments, check_deps, check_px, drive, gates, package_linux,
-    release, toolchain, workspace_root,
+    changelog, check_api, check_comments, check_deps, check_kit, check_px, drive, gates,
+    package_linux, release, toolchain, workspace_root,
 };
 
 const USAGE: &str = "usage: cargo xtask <command>
@@ -27,6 +27,9 @@ commands:
   check-px
       Fail on a `px(..)` call in the desktop's view files without a `// px: <why>` comment: layout
       sizes are `u(..)` so they follow the UI scale.
+  check-kit
+      Fail on a `component::` path in lobby-desktop outside src/kit.rs: gpui-kit's styled
+      components are imported only through that file.
   check-toolchain
       Check that cmake (needed by libopus) is on PATH and that
       deploy/Dockerfile builds on the channel rust-toolchain.toml pins.
@@ -36,7 +39,7 @@ commands:
       its automation pipe without focus, mouse or Windows toasts. Output in
       target/drive/<scenario>/out/.
   gates
-      Run fmt, both clippy runs, nextest, the doc tests and the six checks in order, print each
+      Run fmt, both clippy runs, nextest, the doc tests and the seven checks in order, print each
       step's wall time and the total, and stop at the first failure.
   dist --repo <owner/name>
       Build the release `lobby` for that GitHub repository's Releases (it installs and updates
@@ -74,6 +77,7 @@ fn main() -> ExitCode {
             check_comments::check(&workspace_root()),
         ),
         Some("check-px") => report("check-px", "finding", check_px::check(&workspace_root())),
+        Some("check-kit") => report("check-kit", "finding", check_kit::check(&workspace_root())),
         Some("check-commits") => report(
             "check-commits",
             "bad subject",

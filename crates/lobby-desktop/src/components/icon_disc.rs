@@ -2,13 +2,12 @@
 
 use std::time::Duration;
 
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
+use crate::ui::Icon;
 use gpui_kit::{
     Animation, AnimationExt as _, App, Hsla, IntoElement, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, Transformation, Window,
-    assets::IconName,
-    component::{ActiveTheme as _, Icon},
-    div, size,
+    SharedString, Styled as _, Transformation, Window, assets::IconName, div, size,
 };
 
 #[derive(IntoElement)]

@@ -7,19 +7,7 @@ use std::rc::Rc;
 use gpui_kit::{
     AnyElement, App, Context, Entity, InteractiveElement as _, IntoElement, ObjectFit,
     ParentElement as _, SharedString, StatefulInteractiveElement as _, Styled as _,
-    StyledImage as _, TestSupportExt as _, Window,
-    assets::IconName,
-    component::{
-        ActiveTheme as _, Icon, Sizable as _,
-        attachment::{
-            Attachment as KitAttachment, AttachmentContent, AttachmentDescription, AttachmentMedia,
-            AttachmentTitle,
-        },
-        menu::{ContextMenuExt as _, PopupMenu},
-        skeleton::Skeleton,
-        tooltip::Tooltip,
-    },
-    div, img,
+    StyledImage as _, TestSupportExt as _, Window, assets::IconName, div, img,
 };
 use lobby_client::{Variant, copy, files::open_allowed, picture};
 use lobby_protocol::{Attachment, BlobId, Preview};
@@ -31,7 +19,17 @@ use super::{
     media_images::{MediaImages, PictureOf, Slot},
     nested_radius,
 };
+use crate::kit::{
+    ActiveTheme as _, Sizable as _,
+    attachment::{
+        Attachment as KitAttachment, AttachmentContent, AttachmentDescription, AttachmentMedia,
+        AttachmentTitle,
+    },
+    menu::{ContextMenuExt as _, PopupMenu},
+    tooltip::Tooltip,
+};
 use crate::scale::u;
+use crate::ui::{Icon, Skeleton};
 
 /// A picture's frame; the picture inside its border has the nested radius.
 const PICTURE_RADIUS: f32 = 8.;

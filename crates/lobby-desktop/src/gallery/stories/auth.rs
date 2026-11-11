@@ -5,17 +5,20 @@ use std::rc::Rc;
 
 use gpui_kit::{
     AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Window,
-    assets::IconName, component::ActiveTheme as _, div, px,
+    assets::IconName, div, px,
 };
 
 use lobby_client::{Chip, ChipAt, Stage, copy};
 
 use crate::components::{
-    AddressForm, AuthScreen, CONNECT_IDS, CodeInput, Feedback, STEP_MARK, StepRail, back_button,
-    busy_screen, control_row, feedback_line, inline_row, mark_color, primary_button, quiet_link,
-    status_mark, step_button, step_input, voice_accent, waiting_mark,
+    AddressForm, AuthScreen, CONNECT_IDS, CodeInput, Feedback, STEP_MARK, SURFACE_INNER_RADIUS,
+    StepRail, back_button, busy_screen, control_row, feedback_line, inline_row, mark_color,
+    primary_button, quiet_link, status_mark, step_input, voice_accent, waiting_mark,
 };
 use crate::gallery::{Gallery, Section};
+use crate::kit::ActiveTheme as _;
+use crate::scale::device_in;
+use crate::ui;
 
 use super::label;
 
@@ -162,8 +165,10 @@ pub(super) fn auth(
     )
     .lead(waiting_mark(IconName::Hourglass, accent, STEP_MARK))
     .child(inline_row(
-        step_button("check-again", cx)
-            .outline()
+        ui::Button::new("check-again")
+            .variant(ui::Variant::Outline)
+            .size(ui::Size::Step)
+            .rounded(device_in(SURFACE_INNER_RADIUS, cx))
             .icon(IconName::RefreshCw)
             .label(copy::CHECK_NOW),
         back_button("other-email", copy::USE_DIFFERENT_EMAIL, cx),

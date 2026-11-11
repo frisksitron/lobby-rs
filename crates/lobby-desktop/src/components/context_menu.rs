@@ -2,12 +2,9 @@
 //! inside the window (the OS's own menus do not follow the theme). Every item has an id for the
 //! scenarios to click by.
 
-use gpui_kit::{
-    InteractiveElement as _, ParentElement as _, TestSupportExt as _, Window,
-    component::menu::{PopupMenu, PopupMenuItem},
-    div,
-};
+use gpui_kit::{InteractiveElement as _, ParentElement as _, TestSupportExt as _, Window, div};
 
+use crate::kit::menu::{PopupMenu, PopupMenuItem};
 use crate::scale::device;
 
 /// The narrowest a right-click menu is, so a short word does not make a sliver.

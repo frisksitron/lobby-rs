@@ -73,6 +73,7 @@ pub fn open_shell_with_client(
         if !cx.has_global::<TokioRuntime>() {
             cx.set_global(TokioRuntime::borrowed(rt.handle().clone()));
             gpui_kit::init(cx);
+            lobby_desktop::ui::init(cx);
             cx.set_global(lobby_desktop::links::LinkRecorder::default());
             // File prompts are scripted and Open and Show in folder recorded: the test platform
             // hangs on a prompt and panics on both.

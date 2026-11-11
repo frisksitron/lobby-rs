@@ -12,16 +12,14 @@
 
 use std::time::Duration;
 
-use gpui_kit::{
-    AppContext as _, Context, Entity, ParentElement as _, Subscription, Task, Window,
-    component::WindowExt as _,
-};
+use gpui_kit::{AppContext as _, Context, Entity, ParentElement as _, Subscription, Task, Window};
 use lobby_client::{AccountOp, Intent, Issue, IssueKind, LobbyOrigin, Phase, UiEffect, copy};
 use tracing::info;
 
 use super::{LobbyRoute, QuitState, Route, Shell};
 use crate::components::{LobbyAction, confirm_alert};
 use crate::hand_over::HandOverView;
+use crate::kit::WindowExt as _;
 use crate::scale::device;
 use crate::session_entity::{SessionEntity, SessionUiEvent};
 
@@ -350,7 +348,7 @@ impl Shell {
             }
         };
         let Some(heirs) = heirs else {
-            window.open_alert_dialog(cx, move |alert, _, cx| {
+            window.open_alert_dialog(cx, move |alert, _, _| {
                 let (ok, origin, closed) = (ok.clone(), origin.clone(), closed.clone());
                 let alert = alert
                     .title(title.clone())
@@ -365,7 +363,6 @@ impl Shell {
                         let _ =
                             ok.update(cx, |s, cx| s.confirm_leave(&origin, Intent::LeaveLobby, cx));
                     },
-                    cx,
                 )
             });
             return;

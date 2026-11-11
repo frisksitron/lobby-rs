@@ -18,27 +18,23 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Div, ElementId, Entity, FocusHandle,
     InteractiveElement as _, IntoElement, KeyDownEvent, ObjectFit, ParentElement as _, Render,
     RenderImage, ScrollHandle, SharedString, Stateful, StatefulInteractiveElement as _,
-    Styled as _, StyledImage as _, TestSupportExt as _, Window,
-    assets::IconName,
-    base::actions::Cancel,
-    component::{
-        ActiveTheme as _, Icon,
-        button::ButtonVariants as _,
-        scroll::{Scrollbar, ScrollbarAxis},
-        searchable_list::{SearchableListItem, SearchableVec},
-        select::SelectState,
-        spinner::Spinner,
-        tooltip::Tooltip,
-    },
-    div, img,
-    prelude::FluentBuilder as _,
+    Styled as _, StyledImage as _, TestSupportExt as _, Window, assets::IconName,
+    base::actions::Cancel, div, img, prelude::FluentBuilder as _,
 };
 use image::{Frame as ImageFrame, RgbaImage};
 use lobby_client::{ScreenSource, SourceId, SourceKind, Thumbnail, copy};
 use lobby_protocol::{Quality, encoder::QUALITIES};
 
-use super::{page_icon_button, page_select, picture_backdrop, section_label, truncated_text};
+use super::{page_select, picture_backdrop, section_label, truncated_text};
+use crate::kit::{
+    ActiveTheme as _,
+    scroll::{Scrollbar, ScrollbarAxis},
+    searchable_list::{SearchableListItem, SearchableVec},
+    select::SelectState,
+    tooltip::Tooltip,
+};
 use crate::scale::{design_viewport, u};
+use crate::ui::{self, Icon, Spinner};
 
 /// The dialog's width in design pixels; the window's margins can make it narrower.
 pub const PICKER_W: f32 = 620.;
@@ -573,10 +569,11 @@ impl Render for PickerView {
                             .test_support(),
                     )
                     .child(
-                        page_icon_button("picker-close", IconName::Close, cx)
+                        ui::Button::new("picker-close")
                             .debug_selector(|| "picker-close".into())
+                            .size(ui::Size::Page)
+                            .icon(IconName::Close)
                             .accessibility_label("Close")
-                            .ghost()
                             .tooltip("Close")
                             .on_click(|_, window, cx| window.dispatch_action(Box::new(Cancel), cx)),
                     ),

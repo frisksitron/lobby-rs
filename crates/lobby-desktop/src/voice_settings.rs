@@ -20,14 +20,7 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Entity, InteractiveElement as _, IntoElement,
     ParentElement as _, Render, RenderOnce, SharedString, Styled as _, Subscription, Task,
     TestSupportExt as _, Window,
-    component::{
-        ActiveTheme as _,
-        button::ButtonVariants as _,
-        searchable_list::{SearchableListDelegate, SearchableListItem},
-        select::{SelectEvent, SelectState},
-        slider::{Slider, SliderEvent, SliderState},
-        switch::Switch,
-    },
+    base::slider::{SliderEvent, SliderState},
     div,
     prelude::FluentBuilder as _,
 };
@@ -39,18 +32,24 @@ use lobby_client::{
 
 use crate::{
     components::{
-        Meter, MicMeterBar, PERCENT_W, READOUT_GAP, lit_segments, mic_hint, page_button,
-        page_select, truncated_text,
+        Meter, MicMeterBar, PERCENT_W, READOUT_GAP, lit_segments, mic_hint, page_select,
+        truncated_text,
+    },
+    kit::{
+        ActiveTheme as _,
+        searchable_list::{SearchableListDelegate, SearchableListItem, SearchableVec},
+        select::{SelectEvent, SelectState},
     },
     lobbies::Lobbies,
     lobby_view::VoiceDevices,
     scale::u,
     session_entity::SessionEntity,
     settings_view::{GROUP_GAP, group, row, section},
+    ui,
     voice_shared::VoiceShared,
 };
 
-pub type Items = gpui_kit::component::searchable_list::SearchableVec<DeviceOption>;
+pub type Items = SearchableVec<DeviceOption>;
 
 /// How often the meter redraws, about 30 times a second, and the section takes a new device list
 /// from its watch.
@@ -218,7 +217,7 @@ impl SearchableListItem for Strength {
     }
 }
 
-pub type Strengths = gpui_kit::component::searchable_list::SearchableVec<Strength>;
+pub type Strengths = SearchableVec<Strength>;
 
 /// The section's controls that keep a state of their own: the microphone's input level slider in
 /// whole percent, and the selects for noise suppression and the compressor.
@@ -719,12 +718,12 @@ impl VoiceSection {
         label: &'static str,
         on: bool,
         change: fn(bool) -> VoiceChange,
-    ) -> Switch {
+    ) -> ui::Switch {
         let on_change = self.on_change.clone();
-        Switch::new(id)
+        ui::Switch::new(id)
             .checked(on)
             .accessibility_label(label)
-            .on_click(move |on: &bool, window, cx| on_change(change(*on), window, cx))
+            .on_change(move |on, window, cx| on_change(change(on), window, cx))
     }
 
     /// The live meter and the toggle that plays it back, with the line that is kept under them
@@ -732,13 +731,15 @@ impl VoiceSection {
     fn listening(&self, cx: &App) -> AnyElement {
         let on = self.monitor;
         let on_change = self.on_change.clone();
-        let button = page_button("monitor", cx).debug_selector(|| "monitor".into());
-        // The primary variant has no border, so it takes the default one's width: pressing the
+        let button = ui::Button::new("monitor")
+            .debug_selector(|| "monitor".into())
+            .size(ui::Size::Page);
+        // The primary variant has no border, so it takes the secondary one's width: pressing the
         // button moves nothing.
         let button = if on {
-            button.primary().border_1()
+            button.variant(ui::Variant::Primary).border_1()
         } else {
-            button
+            button.variant(ui::Variant::Secondary)
         };
         div()
             .flex()
@@ -782,8 +783,7 @@ impl VoiceSection {
                     .id("input-level")
                     .w(u(SLIDER_W))
                     .child(
-                        Slider::new(&self.controls.gain)
-                            .horizontal()
+                        ui::Slider::new(&self.controls.gain)
                             .disabled(!usable)
                             .accessibility_label(copy::MIC_GAIN),
                     )

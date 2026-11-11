@@ -5,20 +5,19 @@
 use gpui_kit::{
     Anchor, App, IntoElement, KeyDownEvent, ParentElement as _, RenderOnce, Styled as _, Window,
     assets::IconName,
-    component::{
-        ActiveTheme as _, Icon, Selectable as _, Sizable as _,
-        button::{Button, ButtonVariants as _},
-        menu::{DropdownMenu as _, PopupMenuItem},
-        separator::Separator,
-        toolbar::{Toolbar, ToolbarGroup},
-    },
+    base::{Toolbar, ToolbarGroup},
     div,
     prelude::FluentBuilder as _,
 };
 use lobby_client::compose::Format;
 
 use super::{Callback, ICON_SM, SURFACE_INNER_RADIUS};
+use crate::kit::{
+    ActiveTheme as _,
+    menu::{DropdownMenu as _, PopupMenuItem},
+};
 use crate::scale::{device, device_in, u};
+use crate::ui;
 
 pub const FORMAT_BAR_HEIGHT: f32 = 28.;
 
@@ -101,14 +100,13 @@ impl RenderOnce for FormatBar {
             let active = self.active;
             return div()
                 .child(
-                    Button::new("format-menu")
+                    ui::Button::new("format-menu")
                         .accessibility_label("Formatting")
-                        .ghost()
-                        .small()
+                        .size(ui::Size::Inline)
                         // Folded, it stands beside Send and attach in the composer's one row.
                         .rounded(device_in(SURFACE_INNER_RADIUS, cx))
                         .text_color(glyph)
-                        .icon(Icon::new(IconName::Type))
+                        .icon(IconName::Type)
                         .tooltip("Formatting")
                         .selected(has_active)
                         .dropdown_menu_with_anchor(Anchor::BottomRight, move |menu, window, cx| {
@@ -127,7 +125,7 @@ impl RenderOnce for FormatBar {
                                                 .items_center()
                                                 .gap_2()
                                                 .child(
-                                                    Icon::new(format_icon(f))
+                                                    ui::Icon::new(format_icon(f))
                                                         .size(u(ICON_SM))
                                                         .when(lit, |i| i.text_color(primary)),
                                                 )
@@ -159,13 +157,12 @@ impl RenderOnce for FormatBar {
         }
         let button = |format: Format| {
             let on = self.on_format.clone();
-            Button::new(format_id(format))
+            ui::Button::new(format_id(format))
                 .accessibility_label(format.label())
-                .ghost()
-                .small()
+                .size(ui::Size::Inline)
                 .text_color(glyph)
                 .selected(self.active.contains(&format))
-                .icon(Icon::new(format_icon(format)))
+                .icon(format_icon(format))
                 .tooltip(format!("{} ({})", format.label(), format.shortcut()))
                 .on_click(move |_, window, cx| on(format, window, cx))
         };
@@ -183,21 +180,22 @@ impl RenderOnce for FormatBar {
             Format::CodeBlock,
         ];
         let group = |id: &'static str, label: &'static str, formats: &[Format]| {
-            ToolbarGroup::new(id)
-                .label(label)
-                .flex()
-                .items_center()
-                .gap(u(1.))
-                .children(formats.iter().copied().map(button))
+            let group = ToolbarGroup::new(id).label(label).gap(u(1.));
+            formats
+                .iter()
+                .fold(group, |group, &format| group.child(button(format)))
         };
+        // Base's bar owns the arrow keys: Left and Right move the focus along it, round the ends.
         Toolbar::new("format-bar")
+            .flex()
+            .items_center()
+            .flex_shrink_0()
             .h(u(FORMAT_BAR_HEIGHT))
             .min_h(u(FORMAT_BAR_HEIGHT))
-            .p_0()
             .gap(u(1.))
-            .content(group("format-inline", "Text", &inline))
-            .content(Separator::vertical().mx_1().h(u(14.)))
-            .content(group("format-blocks", "Blocks", &blocks))
+            .child(group("format-inline", "Text", &inline))
+            .child(ui::Separator::vertical().mx_1().h(u(14.)))
+            .child(group("format-blocks", "Blocks", &blocks))
             .into_any_element()
     }
 }

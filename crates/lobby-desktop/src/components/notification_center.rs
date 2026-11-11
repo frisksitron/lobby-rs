@@ -10,20 +10,8 @@ use std::time::Duration;
 use gpui_kit::{
     Anchor, Animation, AnimationExt as _, AnyElement, App, Hsla, InteractiveElement as _,
     IntoElement, ParentElement as _, Pixels, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window,
-    assets::IconName,
-    canvas,
-    component::{
-        ActiveTheme as _, Disableable as _, Icon, Sizable as _,
-        button::{Button, ButtonVariants as _},
-        empty::{Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle},
-        popover::Popover,
-        scroll::{Scrollbar, ScrollbarAxis},
-        tooltip::Tooltip,
-    },
-    div,
-    prelude::FluentBuilder as _,
-    relative,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, assets::IconName,
+    canvas, div, prelude::FluentBuilder as _, relative,
 };
 use lobby_client::{
     Issue, IssueAction, IssueKind, LobbyState, Severity, Source, copy, local_date_time, local_time,
@@ -31,12 +19,19 @@ use lobby_client::{
 };
 use lobby_protocol::{AccessRequestId, UnixMs};
 
+use crate::kit::{
+    ActiveTheme as _,
+    popover::Popover,
+    scroll::{Scrollbar, ScrollbarAxis},
+    tooltip::Tooltip,
+};
 use crate::scale::{design_viewport, u};
+use crate::ui::{self, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Icon};
 use crate::{
     components::{
         BAR_CONTROL_H, BarButton, Callback, ConnectionAction, ConnectionNotice, ConnectionTone,
         Detail, ICON_SM, IconDisc, LEAD_SIZE, Lead, NotificationEntry, TITLE_BAR_HEIGHT,
-        auth::Tone, auth::tone_text, section_label, small_word_button, tone_color, voice_accent,
+        auth::Tone, auth::tone_text, section_label, tone_color, voice_accent,
     },
     issues::IssueCenter,
 };
@@ -94,13 +89,19 @@ pub fn row_action(action: IssueAction, ctx: ActionContext) -> RowAction {
     }
 }
 
-pub fn action_button(id: impl Into<SharedString>, action: RowAction) -> Button {
-    let button = small_word_button(id.into())
-        .icon(Icon::new(action.icon))
+pub fn action_button(id: impl Into<SharedString>, action: RowAction) -> ui::Button {
+    let button = ui::Button::new(id.into())
+        .size(ui::Size::Word)
+        .icon(action.icon)
         .label(action.label);
     match action.waits_for {
-        Some(why) if !action.enabled => button.outline().disabled(true).tooltip(why),
-        _ => button.primary().disabled(!action.enabled),
+        Some(why) if !action.enabled => button
+            .variant(ui::Variant::Outline)
+            .disabled(true)
+            .tooltip(why),
+        _ => button
+            .variant(ui::Variant::Primary)
+            .disabled(!action.enabled),
     }
 }
 
@@ -274,7 +275,9 @@ impl RenderOnce for NotificationBell {
             }),
             None => waiting.then_some(accent),
         };
-        let trigger = BarButton::icon("notification-bell", IconName::Bell)
+        let trigger = ui::Button::new("notification-bell")
+            .size(ui::Size::Bar)
+            .icon(IconName::Bell)
             .accessibility_label("Notifications")
             .tooltip("Notifications");
         let rows = Rc::new(self.rows);
@@ -398,9 +401,9 @@ fn decision_row(
                     .child(text)
                     .when(outcome == Settled::Declining && !row.folding, |d| {
                         d.child(
-                            small_word_button(SharedString::from(format!("undo-{key}")))
-                                .ghost()
-                                .icon(Icon::new(IconName::Undo2))
+                            ui::Button::new(SharedString::from(format!("undo-{key}")))
+                                .size(ui::Size::Word)
+                                .icon(IconName::Undo2)
                                 .label("Undo")
                                 .on_click(decide(Decide::Undo)),
                         )
@@ -409,9 +412,10 @@ fn decision_row(
         }
         None => entry
             .action(
-                small_word_button(SharedString::from(format!("vouch-{}", row.username)))
-                    .primary()
-                    .when(row.deciding, |b| b.icon(Icon::new(IconName::LoaderCircle)))
+                ui::Button::new(SharedString::from(format!("vouch-{}", row.username)))
+                    .variant(ui::Variant::Primary)
+                    .size(ui::Size::Word)
+                    .when(row.deciding, |b| b.icon(IconName::LoaderCircle))
                     .label("Vouch")
                     .loading(row.deciding)
                     .disabled(row.deciding)
@@ -419,8 +423,9 @@ fn decision_row(
                     .on_click(decide(Decide::Vouch)),
             )
             .action(
-                small_word_button(SharedString::from(format!("decline-{}", row.username)))
-                    .outline()
+                ui::Button::new(SharedString::from(format!("decline-{}", row.username)))
+                    .variant(ui::Variant::Outline)
+                    .size(ui::Size::Word)
                     .label("Decline")
                     .disabled(row.deciding)
                     .on_click(decide(Decide::Decline)),
@@ -489,13 +494,17 @@ fn connection_entry(
     let accent = tone_color(notice.tone, cx);
     let button = |action: ConnectionAction, primary: bool, enabled: bool| {
         let on_action = on_action.clone();
-        small_word_button(format!("connection-{}", action.id()))
+        ui::Button::new(SharedString::from(format!("connection-{}", action.id())))
+            .size(ui::Size::Word)
             .label(action.label())
             .when(action != ConnectionAction::ChangeLobby, |b| {
-                b.icon(Icon::new(IconName::RotateCw))
+                b.icon(IconName::RotateCw)
             })
-            .when(primary, |b| b.primary())
-            .when(!primary, |b| b.outline())
+            .variant(if primary {
+                ui::Variant::Primary
+            } else {
+                ui::Variant::Outline
+            })
             .disabled(!enabled)
             .loading(primary && !enabled)
             .on_click(move |_, window, cx| on_action(action, window, cx))
@@ -574,8 +583,8 @@ pub fn render_list(
         .when(!rows.is_empty(), |d| {
             let clear = on_dismiss.clone();
             d.child(
-                small_word_button("notifications-clear")
-                    .ghost()
+                ui::Button::new("notifications-clear")
+                    .size(ui::Size::Word)
                     .label("Clear all")
                     .on_click(move |_, window, cx| clear(None, window, cx)),
             )
@@ -655,11 +664,10 @@ pub fn render_list(
                             .opacity(0.6)
                             .group_hover("notification-row", |s| s.opacity(1.))
                             .child(
-                                Button::new(SharedString::from(format!("dismiss-{key}")))
-                                    .icon(Icon::new(IconName::X))
+                                ui::Button::new(SharedString::from(format!("dismiss-{key}")))
+                                    .icon(IconName::X)
                                     .accessibility_label("Dismiss")
-                                    .ghost()
-                                    .xsmall()
+                                    .size(ui::Size::Corner)
                                     .tooltip("Dismiss")
                                     .on_click(move |_, window, cx| dismiss(Some(kind), window, cx)),
                             ),

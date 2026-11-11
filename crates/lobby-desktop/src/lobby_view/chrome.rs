@@ -3,12 +3,7 @@
 
 use std::rc::Rc;
 
-use gpui_kit::{
-    Context, IntoElement, ParentElement as _, SharedString,
-    assets::IconName,
-    component::{Icon, Selectable as _, WindowExt as _},
-    div,
-};
+use gpui_kit::{Context, IntoElement, ParentElement as _, SharedString, assets::IconName, div};
 use lobby_client::{Issue, LobbyState};
 
 use super::{LobbyView, LobbyViewEvent, SidebarLayout, forward};
@@ -16,7 +11,9 @@ use crate::components::{
     AppTitleBar, BarButton, LobbySwitcher, NotificationBell, bar_tint, connection_notice,
     notification_rows,
 };
+use crate::kit::WindowExt as _;
 use crate::lobby_icons::icons_of;
+use crate::ui;
 
 impl LobbyView {
     /// The Lobby and its switcher, the folded sidebar's button and the Notification Center's bell,
@@ -123,8 +120,9 @@ impl LobbyView {
         let open = !put_away && self.sidebar.read(cx).is_open();
         let sidebar = self.sidebar.clone();
         let lobby = cx.weak_entity();
-        let button = BarButton::button("members-toggle")
-            .icon(Icon::new(IconName::Users))
+        let button = ui::Button::new("members-toggle")
+            .size(ui::Size::Bar)
+            .icon(IconName::Users)
             .label("Members")
             .selected(open)
             .on_click(move |_, window, cx| {

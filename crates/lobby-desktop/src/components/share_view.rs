@@ -25,15 +25,8 @@ use gpui_kit::{
     Animation, AnimationExt as _, AnyElement, App, Context, Div, Entity, FocusHandle, FontWeight,
     InteractiveElement as _, IntoElement, MouseMoveEvent, ObjectFit, ParentElement as _, Pixels,
     Render, RenderImage, RenderOnce, SharedString, Size, Stateful, StatefulInteractiveElement as _,
-    Styled as _, StyledImage as _, Task, TestSupportExt as _, Window,
-    assets::IconName,
-    component::{
-        ActiveTheme as _, Disableable as _, Icon, Selectable as _, Sizable as _, spinner::Spinner,
-        switch::Switch, tooltip::Tooltip,
-    },
-    div, ease_out_quint, img,
-    prelude::FluentBuilder as _,
-    px,
+    Styled as _, StyledImage as _, Task, TestSupportExt as _, Window, assets::IconName, div,
+    ease_out_quint, img, prelude::FluentBuilder as _, px,
 };
 use image::{Frame as ImageFrame, RgbaImage};
 use lobby_client::{PaintSize, StrainWarning, VideoFeed, VideoFrame, copy};
@@ -43,12 +36,16 @@ use tokio::sync::mpsc;
 use super::ink::{InkLayer, InkStroke, InkTags, ink_canvas};
 use super::share_controls::{Controls, FADE_IN, FADE_OUT, Look, Pointer};
 use super::{
-    BAR_CONTROL_H, BORDER, BarButton, Callback, ICON_SM, MemberRowModel, SURFACE_RADIUS, live_red,
+    BAR_CONTROL_H, BORDER, Callback, ICON_SM, MemberRowModel, SURFACE_RADIUS, live_red,
     picture_backdrop,
 };
+use crate::kit::{ActiveTheme as _, tooltip::Tooltip};
 use crate::scale::u;
+use crate::ui;
 
 const FPS_WINDOW: Duration = Duration::from_secs(1);
+/// The spinner while a Member's screen connects, beside the words.
+const SPINNER_LG: f32 = 24.;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct ViewerStats {
@@ -547,7 +544,7 @@ fn let_others_draw(on: bool, blocked: Option<&'static str>, draw: Callback<()>, 
             d.cursor_pointer()
                 .on_click(move |_, window, cx| draw((), window, cx))
         });
-    let switch = Switch::new("share-let-draw-switch")
+    let switch = ui::Switch::new("share-let-draw-switch")
         .small()
         .checked(on)
         .disabled(blocked.is_some())
@@ -597,12 +594,13 @@ impl RenderOnce for ShareToolbar {
                 Some(control.into_any_element())
             }
             ToolbarState::Friend { pen: Some(on) } => Some(
-                BarButton::button("share-pen")
+                ui::Button::new("share-pen")
                     .debug_selector(|| "share-pen".into())
+                    .size(ui::Size::Bar)
                     .rounded_full()
                     .selected(on)
                     .toggled(on)
-                    .icon(Icon::new(IconName::Pencil))
+                    .icon(IconName::Pencil)
                     .label("Draw")
                     .font_weight(FontWeight::MEDIUM)
                     .on_click(move |_, window, cx| draw((), window, cx))
@@ -612,7 +610,9 @@ impl RenderOnce for ShareToolbar {
         };
         let mine = matches!(self.state, ToolbarState::Mine { .. });
         let close = self.close;
-        let close = BarButton::icon("share-close", IconName::X)
+        let close = ui::Button::new("share-close")
+            .size(ui::Size::Bar)
+            .icon(IconName::X)
             .debug_selector(|| "share-close".into())
             .accessibility_label(if mine { "Close" } else { "Stop watching" })
             .rounded_full()
@@ -632,7 +632,9 @@ impl RenderOnce for ShareToolbar {
             ("share-fullscreen", IconName::Maximize, "Fullscreen")
         };
         let toggle = self.fullscreen;
-        let fullscreen_button = BarButton::icon(id, icon)
+        let fullscreen_button = ui::Button::new(id)
+            .size(ui::Size::Bar)
+            .icon(icon)
             .debug_selector(move || id.into())
             .accessibility_label(label)
             .rounded_full()
@@ -813,7 +815,7 @@ pub fn strain_notice(warning: &StrainWarning, framed: bool, cx: &App) -> impl In
                 .gap(u(8.))
                 .bg(picture_backdrop(theme).opacity(0.85))
                 .child(
-                    Icon::new(IconName::CircleAlert)
+                    ui::Icon::new(IconName::CircleAlert)
                         .size(u(ICON_SM))
                         .flex_shrink_0()
                         .text_color(theme.warning),
@@ -895,10 +897,10 @@ impl Render for ShareView {
                 .gap_3()
                 .text_color(soft)
                 .when(!self.ended && self.own, |d| {
-                    d.child(Spinner::new().color(soft))
+                    d.child(ui::Spinner::new().color(soft))
                 })
                 .when(!self.ended && !self.own, |d| {
-                    d.child(Spinner::new().large().color(soft))
+                    d.child(ui::Spinner::new().size(u(SPINNER_LG)).color(soft))
                         .child(format!("Connecting to {name}'s screen…"))
                 })
                 .when(self.ended, |d| d.child("The Screen Share ended."))

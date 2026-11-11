@@ -1,10 +1,7 @@
 //! Moving between Lobbies: the switcher's picks and Ctrl+1…9, the ask before leaving Voice, and
 //! the Add Lobby dialog.
 
-use gpui_kit::{
-    App, AppContext as _, Context, Entity, KeyDownEvent, ParentElement as _, Window,
-    component::WindowExt as _,
-};
+use gpui_kit::{App, AppContext as _, Context, Entity, KeyDownEvent, ParentElement as _, Window};
 use lobby_client::{LobbyOrigin, StoredSession, TokenStoreError, VoicePhase, copy};
 use lobby_protocol::LobbyInfo;
 use tracing::info;
@@ -13,6 +10,7 @@ use super::{QuitState, Route, Shell, StartedSession};
 use crate::add_lobby::{AddLobbyEvent, AddLobbyView};
 use crate::components::{Avatar, AvatarSize, SwitcherPick, confirm_alert};
 use crate::entry_entity::EntryEntity;
+use crate::kit::WindowExt as _;
 use crate::scale::device;
 
 const ADD_LOBBY_WIDTH: f32 = 400.;
@@ -131,7 +129,7 @@ impl Shell {
             copy::switch_leaves_voice(&from, sharing),
         );
         let shell = cx.weak_entity();
-        window.open_alert_dialog(cx, move |alert, _, cx| {
+        window.open_alert_dialog(cx, move |alert, _, _| {
             let (ok, cancel, close) = (shell.clone(), shell.clone(), shell.clone());
             let alert = alert
                 .icon(Avatar::lobby(to.clone(), color).size(AvatarSize::Alert))
@@ -150,7 +148,6 @@ impl Shell {
                 move |window, cx| {
                     let _ = ok.update(cx, |s, cx| s.confirm_switch(window, cx));
                 },
-                cx,
             )
         });
         cx.notify();

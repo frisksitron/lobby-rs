@@ -1,35 +1,25 @@
-//! The title bar's controls: kit ghost buttons in a wrapper that occludes, because the title bar
-//! drags the window everywhere else.
+//! The title bar's controls: `ui::Size::Bar` buttons in a wrapper that occludes, because the
+//! title bar drags the window everywhere else.
 
 use gpui_kit::{
-    App, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    Styled as _, Window,
-    assets::IconName,
-    component::{
-        Icon, Selectable as _, Sizable as _,
-        badge::Badge,
-        button::{Button, ButtonVariants as _},
-    },
-    div,
+    App, Div, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, Styled as _, Window,
+    assets::IconName, div,
 };
 
-use super::tokens::BAR_CONTROL_H;
 use crate::scale::u;
+use crate::ui;
+
+/// The dot on a control's corner, at 100%.
+const BADGE: f32 = 6.;
 
 pub struct BarButton;
 
 impl BarButton {
-    pub fn button(id: impl Into<ElementId>) -> Button {
-        Button::new(id).ghost().small().h(u(BAR_CONTROL_H))
-    }
-
-    pub fn icon(id: impl Into<ElementId>, icon: IconName) -> Button {
-        Self::button(id).w(u(BAR_CONTROL_H)).icon(Icon::new(icon))
-    }
-
     /// The cog that opens Settings, and closes them again while they are open.
     pub fn settings(open: bool, on_click: impl Fn(&mut Window, &mut App) + 'static) -> Div {
-        let button = Self::icon("settings-toggle", IconName::Settings)
+        let button = ui::Button::new("settings-toggle")
+            .size(ui::Size::Bar)
+            .icon(IconName::Settings)
             .accessibility_label("Settings")
             .selected(open)
             .tooltip("Settings (Ctrl+,)")
@@ -39,13 +29,22 @@ impl BarButton {
             .flex_shrink_0()
     }
 
+    /// `control` in its occluding wrapper, with a dot of `badge` on its top right corner.
     pub fn slot(control: impl IntoElement, badge: Option<Hsla>) -> Div {
         let control = match badge {
             None => control.into_any_element(),
-            Some(color) => Badge::new()
-                .dot()
-                .color(color)
+            Some(color) => div()
+                .relative()
                 .child(control)
+                .child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .right_0()
+                        .size(u(BADGE))
+                        .rounded_full()
+                        .bg(color),
+                )
                 .into_any_element(),
         };
         div().occlude().child(control)

@@ -2,20 +2,19 @@
 
 use gpui_kit::{
     Context, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
-    Styled as _, TestSupportExt as _, Window,
-    assets::IconName,
-    component::{ActiveTheme as _, Disableable as _, Icon, button::Button},
-    div,
-    prelude::FluentBuilder as _,
+    Styled as _, TestSupportExt as _, Window, assets::IconName, div, prelude::FluentBuilder as _,
 };
 use lobby_client::{Closed, EntryStep, NamePath, Resend, copy};
 
 use super::AuthView;
 use crate::components::{
-    AuthScreen, CodeInput, Feedback, STEP_MARK, StepRail, back_button, busy_line, control_row,
-    feedback_line, inline_row, primary_button, quiet_link, status_mark, step_button, step_input,
-    tag, voice_accent, waiting_mark,
+    AuthScreen, CodeInput, Feedback, STEP_MARK, SURFACE_INNER_RADIUS, StepRail, back_button,
+    busy_line, control_row, feedback_line, inline_row, primary_button, quiet_link, status_mark,
+    step_input, tag, voice_accent, waiting_mark,
 };
+use crate::kit::ActiveTheme as _;
+use crate::scale::device_in;
+use crate::ui::{self, Icon};
 
 /// What every step's screen shares, read once per render.
 struct Step {
@@ -34,7 +33,7 @@ impl Step {
         label: &str,
         busy_label: &str,
         cx: &gpui_kit::App,
-    ) -> Button {
+    ) -> ui::Button {
         primary_button(id, label, busy_label, self.busy, cx).disabled(self.held && !self.busy)
     }
 
@@ -137,7 +136,7 @@ impl AuthView {
                 copy::SEND_NEW_CODE,
                 cx.listener(|this, _, window, cx| this.resend_code(window, cx)),
             )
-            .icon(Icon::new(IconName::RotateCw))
+            .icon(IconName::RotateCw)
             .disabled(busy || resend != Resend::Ready)
             .into_any_element()
         };
@@ -195,13 +194,15 @@ impl AuthView {
         } else {
             copy::WAITING_TITLE
         };
-        let check = step_button("check-again", cx)
-            .outline()
-            .icon(Icon::new(if busy {
+        let check = ui::Button::new("check-again")
+            .variant(ui::Variant::Outline)
+            .size(ui::Size::Step)
+            .rounded(device_in(SURFACE_INNER_RADIUS, cx))
+            .icon(if busy {
                 IconName::LoaderCircle
             } else {
                 IconName::RefreshCw
-            }))
+            })
             .label(if admitted {
                 copy::OPENING_LOBBY
             } else if busy {

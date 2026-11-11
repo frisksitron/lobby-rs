@@ -6,20 +6,20 @@ use std::rc::Rc;
 
 use gpui_kit::{
     App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window,
-    assets::IconName,
-    component::{ActiveTheme as _, Icon, button::ButtonVariants as _, tooltip::Tooltip},
-    div,
-    prelude::FluentBuilder as _,
-    relative,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, assets::IconName,
+    div, prelude::FluentBuilder as _, relative,
 };
 use lobby_client::{copy, update::UpdateStatus};
 
-use super::{BAR_CONTROL_H, BarButton, ICON_SM, small_word_button};
+use super::{BAR_CONTROL_H, BarButton, ICON_SM};
+use crate::kit::{ActiveTheme as _, tooltip::Tooltip};
 use crate::scale::u;
+use crate::ui::{self, Icon};
 
 /// Room for "100%", so the pill keeps its width as the number grows.
 const PERCENT_W: f32 = 30.;
+/// The retry's width with no word beside its icon, a little under the bar's height.
+const RETRY_ICON_W: f32 = 24.;
 
 #[derive(IntoElement)]
 pub struct UpdatePill {
@@ -106,9 +106,10 @@ impl RenderOnce for UpdatePill {
                 } else {
                     copy::UPDATE_RESTART_SHORT
                 };
-                let button = small_word_button("update-restart")
+                let button = ui::Button::new("update-restart")
                     .debug_selector(|| "update-restart".into())
-                    .primary()
+                    .variant(ui::Variant::Primary)
+                    .size(ui::Size::Word)
                     .label(label)
                     .tooltip(copy::update_ready(&version.to_string()))
                     .on_click(move |_, _, cx| on_restart(cx));
@@ -116,10 +117,17 @@ impl RenderOnce for UpdatePill {
             }
             UpdateStatus::Failed { version, .. } => {
                 let on_retry = self.on_retry;
-                let button = BarButton::button("update-retry")
+                let button = ui::Button::new("update-retry")
                     .debug_selector(|| "update-retry".into())
-                    .icon(Icon::new(IconName::CircleAlert))
-                    .when(self.wide, |b| b.label(copy::UPDATE_FAILED))
+                    .size(ui::Size::Bar)
+                    .icon(IconName::CircleAlert)
+                    .map(|b| {
+                        if self.wide {
+                            b.label(copy::UPDATE_FAILED)
+                        } else {
+                            b.w(u(RETRY_ICON_W))
+                        }
+                    })
                     .tooltip(copy::update_failed(&version.to_string()))
                     .on_click(move |_, _, cx| on_retry(cx));
                 BarButton::slot(button, None).into_any_element()

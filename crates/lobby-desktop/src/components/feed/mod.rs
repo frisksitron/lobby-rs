@@ -23,23 +23,9 @@ use gpui_kit::{
     Animation, AnimationExt as _, AnyElement, App, AppContext as _, Context, Entity, Hsla,
     ImageSource, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
     StatefulInteractiveElement as _, StyleRefinement, Styled as _, Subscription,
-    TestSupportExt as _, Window,
-    assets::IconName,
-    base::TextSelection,
-    component::{
-        ActiveTheme as _, Icon, Sizable as _,
-        button::ButtonVariants as _,
-        menu::{ContextMenuExt as _, PopupMenu},
-        message::{Message, MessageAvatar, MessageContent, MessageHeader},
-        message_scroller::{MessageScroller, MessageScrollerState},
-        separator::Separator,
-        spinner::Spinner,
-        text::{SelectionFormat, TextView, TextViewStyle},
-        tooltip::Tooltip,
-    },
-    div, linear_color_stop, linear_gradient,
-    prelude::FluentBuilder as _,
-    pulsating_between, px, relative, rems, transparent_black,
+    TestSupportExt as _, Window, assets::IconName, base::TextSelection, div, linear_color_stop,
+    linear_gradient, prelude::FluentBuilder as _, pulsating_between, px, relative, rems,
+    transparent_black,
 };
 use lobby_client::{History, LobbyState, Older, Phase, copy};
 use lobby_protocol::MessageId;
@@ -48,15 +34,23 @@ use rows::{Change, Conversions, Fingerprint, first_unread};
 pub use rows::{FeedRow, GROUP_WITHIN_MS, MessageRow, Pending, feed_rows, with_new_divider};
 
 use super::{
-    Avatar, AvatarSize, ICON_XS, PULSE_FPS,
+    Avatar, AvatarSize, ICON_SM, ICON_XS, PULSE_FPS,
     attachment_card::{Cards, attachment_cards},
     context_menu::{menu_frame, menu_item},
     mention_chip::MentionChip,
-    small_word_button,
 };
 use crate::{
     clipboard,
+    kit::{
+        ActiveTheme as _,
+        menu::{ContextMenuExt as _, PopupMenu},
+        message::{Message, MessageAvatar, MessageContent, MessageHeader},
+        message_scroller::{MessageScroller, MessageScrollerState},
+        text::{SelectionFormat, TextView, TextViewStyle},
+        tooltip::Tooltip,
+    },
     scale::{device_in, u},
+    ui::{self, Icon, Separator, Spinner},
 };
 
 /// The avatar beside a Message.
@@ -406,15 +400,17 @@ impl Feed {
         let foot = scrolled_up.then(|| {
             let jump = on_jump;
             let solid = PILL_BAND / (PILL_BAND + FOOT_ROOM);
-            let pill = small_word_button("feed-jump")
+            let pill = ui::Button::new("feed-jump")
                 .debug_selector(|| "feed-jump".into())
+                .size(ui::Size::Word)
                 .rounded_full()
-                .icon(Icon::new(IconName::ArrowDown))
+                .icon(IconName::ArrowDown)
                 .map(|b| {
                     if unseen > 0 {
-                        b.primary().label(copy::new_messages(unseen))
+                        b.variant(ui::Variant::Primary)
+                            .label(copy::new_messages(unseen))
                     } else {
-                        b.outline().label(copy::JUMP_TO_LATEST)
+                        b.variant(ui::Variant::Outline).label(copy::JUMP_TO_LATEST)
                     }
                 })
                 .on_click(move |_, window, cx| jump(window, cx));
@@ -503,9 +499,9 @@ fn chat_text_style(cx: &App) -> TextViewStyle {
 fn history_row(older: Older, on_load: FeedAction, cx: &App) -> AnyElement {
     let muted = cx.theme().muted_foreground;
     let inner = match older {
-        Older::Available | Older::Unknown => small_word_button("load-older")
-            .ghost()
-            .icon(Icon::new(IconName::ArrowUp))
+        Older::Available | Older::Unknown => ui::Button::new("load-older")
+            .size(ui::Size::Word)
+            .icon(IconName::ArrowUp)
             .label(copy::LOAD_OLDER)
             .on_click(move |_, window, cx| on_load(window, cx))
             .into_any_element(),
@@ -516,7 +512,7 @@ fn history_row(older: Older, on_load: FeedAction, cx: &App) -> AnyElement {
             .gap_2()
             .text_xs()
             .text_color(muted)
-            .child(Spinner::new().small().color(muted))
+            .child(Spinner::new().size(u(ICON_SM)).color(muted))
             .child("Loading…")
             .into_any_element(),
         Older::Beginning => div()
@@ -647,7 +643,7 @@ fn message_row(
             .items_center()
             .justify_center();
         match m.pending {
-            Some(p) => slot.child(pending_mark(&m.key, p, muted, cx)),
+            Some(p) => slot.child(pending_mark(&m.key, p, muted)),
             None => {
                 let full = m.full_time.clone();
                 slot.child(
@@ -704,7 +700,7 @@ fn message_row(
                         .gap_1()
                         .text_xs()
                         .text_color(muted)
-                        .child(pending_mark(&m.key, p, muted, cx))
+                        .child(pending_mark(&m.key, p, muted))
                         .when(p == Pending::Waiting, |d| {
                             d.child(div().min_w_0().truncate().child(copy::WAITING_TO_SEND))
                         }),
@@ -857,7 +853,7 @@ fn message_menu(
     }
 }
 
-fn pending_mark(key: &SharedString, p: Pending, muted: Hsla, cx: &App) -> AnyElement {
+fn pending_mark(key: &SharedString, p: Pending, muted: Hsla) -> AnyElement {
     match p {
         Pending::Waiting => div()
             .id(SharedString::from(format!("{key}-waiting")))
@@ -882,8 +878,8 @@ fn pending_mark(key: &SharedString, p: Pending, muted: Hsla, cx: &App) -> AnyEle
                         .flex()
                         .child(
                             Spinner::new()
-                                .icon(Icon::new(IconName::LoaderCircle))
-                                .with_size(device_in(ICON_XS, cx))
+                                .icon(IconName::LoaderCircle)
+                                .size(u(ICON_XS))
                                 .color(muted),
                         )
                         .with_animation(

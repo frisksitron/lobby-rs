@@ -5,9 +5,10 @@ use std::{cell::Cell, rc::Rc};
 
 use gpui_kit::{
     AppContext as _, Div, ElementId, EmptyView, InteractiveElement as _, ParentElement as _,
-    SharedString, StatefulInteractiveElement as _, Styled as _, component::tooltip::Tooltip, div,
-    px,
+    SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
 };
+
+use crate::kit::tooltip::Tooltip;
 
 pub fn truncated_text(id: impl Into<ElementId>, text: SharedString) -> Div {
     let cut = Rc::new(Cell::new(false));

@@ -13,20 +13,17 @@ use super::{
     Callback, FIELD_H,
     context_menu::{menu_frame, menu_item},
 };
+use crate::kit::{
+    ActiveTheme as _,
+    input::OtpState,
+    menu::{ContextMenuExt as _, PopupMenu},
+};
 use crate::scale::u;
 use gpui_kit::{
     Animation, AnimationExt as _, App, Bounds, Context, ElementInputHandler, Entity,
     EntityInputHandler, EventEmitter, Focusable as _, InteractiveElement as _, IntoElement,
     MouseButton, ParentElement as _, Pixels, RenderOnce, SharedString, Styled as _,
-    TestSupportExt as _, UTF16Selection, Window,
-    base::OtpInput,
-    canvas,
-    component::{
-        ActiveTheme as _,
-        input::OtpState,
-        menu::{ContextMenuExt as _, PopupMenu},
-    },
-    div,
+    TestSupportExt as _, UTF16Selection, Window, base::OtpInput, canvas, div,
     prelude::FluentBuilder as _,
 };
 use lobby_client::copy;

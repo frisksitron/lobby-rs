@@ -8,27 +8,21 @@ use std::rc::Rc;
 use gpui_kit::{
     AnyElement, App, Hsla, ImageSource, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, Pixels, Point, RenderOnce, SharedString, StatefulInteractiveElement as _,
-    Styled as _, TestSupportExt as _, Window,
-    assets::IconName,
-    component::{
-        ActiveTheme as _, Icon, Selectable as _,
-        button::{Button, ButtonCustomVariant, ButtonVariants as _},
-        tooltip::Tooltip,
-    },
-    div,
-    prelude::FluentBuilder as _,
+    Styled as _, TestSupportExt as _, Window, assets::IconName, div, prelude::FluentBuilder as _,
 };
 use lobby_protocol::{BlobId, Presence, UserId, VoiceState};
 
 use super::{
     AvatarState, Callback, MemberAvatar, Sharer, Tile, TilePress, WatchTile,
     tokens::{
-        AvatarSize, BORDER, ICON_MD, MEMBER_ROW_GAP, ROW_HEIGHT, SURFACE_INNER_RADIUS, SURFACE_PAD,
+        AvatarSize, BORDER, ICON_MD, MEMBER_ROW_GAP, SURFACE_INNER_RADIUS, SURFACE_PAD,
         SURFACE_RADIUS, nested_radius,
     },
     truncated_text, watch_tile,
 };
+use crate::kit::{ActiveTheme as _, tooltip::Tooltip};
 use crate::scale::{device_in, u};
+use crate::ui::{self, Icon};
 
 /// The row's air at its sides, which a watch tile at its end sits in.
 pub const ROW_PAD_X: f32 = 4.;
@@ -230,7 +224,7 @@ impl RenderOnce for MemberRow {
             .children(muted_token)
             .children(tile);
         let name = row.name.clone();
-        let trigger = Button::new(SharedString::from(format!("member-{name}")))
+        let trigger = ui::Button::new(SharedString::from(format!("member-{name}")))
             .accessibility_label(if row.is_me {
                 format!("{name} (you)")
             } else {
@@ -242,20 +236,16 @@ impl RenderOnce for MemberRow {
             })
             // A wash of the text colour, so hover and the open panel read the same on the sidebar
             // and in the purple Voice box.
-            .custom(
-                ButtonCustomVariant::new(cx)
-                    .color(gpui_kit::transparent_black())
-                    .foreground(fg)
+            .variant(ui::Variant::Custom(
+                ui::Custom::new(gpui_kit::transparent_black(), fg)
                     .hover(fg.opacity(0.06))
-                    .active(fg.opacity(0.09))
-                    .shadow(false),
-            )
+                    .active(fg.opacity(0.09)),
+            ))
             .rounded(device_in(SURFACE_INNER_RADIUS, cx))
             .w_full()
-            .h(u(ROW_HEIGHT))
             .px(u(ROW_PAD_X))
             .justify_start()
-            .open(self.open)
+            .selected(self.open)
             .child(content);
         let id = row.id.clone();
         div()

@@ -5,13 +5,13 @@ use gpui_kit::{
     App, FontWeight, Hsla, ImageSource, InteractiveElement as _, IntoElement, ParentElement as _,
     RenderOnce, SharedString, Styled as _, Window,
     base::{Avatar as BaseAvatar, AvatarFallback, AvatarImage},
-    component::{ActiveTheme as _, oklch},
     div,
     prelude::FluentBuilder as _,
     relative,
 };
 
 use super::tokens::{AvatarSize, mark_on_dark};
+use crate::kit::{ActiveTheme as _, oklch};
 use crate::scale::u;
 
 const STOP_WORDS: [&str; 5] = ["the", "a", "an", "our", "my"];

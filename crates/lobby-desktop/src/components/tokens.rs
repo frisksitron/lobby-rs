@@ -1,9 +1,7 @@
 //! The sizes and colours the Lobby UI shares, by name. The kit theme has the rest.
 
-use gpui_kit::{
-    Hsla,
-    component::{Colorize as _, Theme},
-};
+use crate::kit::{Colorize as _, Theme};
+use gpui_kit::Hsla;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum AvatarSize {
@@ -37,31 +35,14 @@ impl AvatarSize {
     }
 }
 
-pub const ICON_XS: f32 = 12.;
-pub const ICON_SM: f32 = 14.;
-pub const ICON_MD: f32 = 16.;
-
-// Four control heights, each for one kind of surface. A control takes its height from here and
-// never from the kit's size, whose steps do not match (`Button::large` is still 32).
-
-/// The onboarding screens' fields, the button beside a field and the code's cells.
-pub const FIELD_H: f32 = 44.;
-
-/// Every control of a page (Settings) and of a dialog: selects, buttons, the Back arrow.
-pub const PAGE_CONTROL_H: f32 = 36.;
-pub const PAGE_CONTROL_RADIUS: f32 = 8.;
-
-/// Every title-bar control has this height, so their hover boxes line up. So do a toast's and a
-/// card's word buttons and the quiet link.
-pub const BAR_CONTROL_H: f32 = 28.;
-
-/// Dense surfaces: the composer, a rename field and the buttons at a line's end.
-pub const INLINE_H: f32 = 24.;
+// The control and icon sizes belong to `ui`, whose controls take them.
+pub use crate::ui::{
+    BAR_CONTROL_H, FIELD_H, ICON_MD, ICON_SM, ICON_XS, INLINE_H, PAGE_CONTROL_H,
+    PAGE_CONTROL_RADIUS, ROW_HEIGHT,
+};
 
 /// A line of a Member card and of the mention menu.
 pub const LINE_H: f32 = 30.;
-
-pub const ROW_HEIGHT: f32 = 40.;
 
 /// The width of a percent readout (a stepper's or a slider's), and the gap between a control and
 /// its readout.

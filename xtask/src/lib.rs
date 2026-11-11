@@ -4,6 +4,7 @@ pub mod changelog;
 pub mod check_api;
 pub mod check_comments;
 pub mod check_deps;
+pub mod check_kit;
 pub mod check_px;
 pub mod drive;
 pub mod gates;

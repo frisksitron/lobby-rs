@@ -7,15 +7,7 @@ use gpui_kit::{
     AppContext as _, Context, Entity, EventEmitter, FocusHandle, FontWeight,
     InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render, ScrollHandle,
     SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _,
-    Window,
-    assets::IconName,
-    component::{
-        ActiveTheme as _, Disableable as _, Icon,
-        button::ButtonVariants as _,
-        scroll::{Scrollbar, ScrollbarAxis},
-        switch::Switch,
-    },
-    div,
+    Window, assets::IconName, div,
 };
 use lobby_client::{
     UI_SCALE_MAX, UI_SCALE_MIN, copy, step_ui_scale,
@@ -24,13 +16,15 @@ use lobby_client::{
 
 use crate::scale::u;
 use crate::{
-    components::{
-        ICON_MD, PAGE_CONTROL_H, PERCENT_W, READOUT_GAP, page_button, page_icon_button,
-        section_label,
+    components::{ICON_MD, PAGE_CONTROL_H, PERCENT_W, READOUT_GAP, section_label},
+    kit::{
+        ActiveTheme as _,
+        scroll::{Scrollbar, ScrollbarAxis},
     },
     lobbies::Lobbies,
     lobby_view::VoiceDevices,
     session_entity::SessionEntity,
+    ui,
     updates::AppUpdates,
     voice_settings::VoiceSettingsView,
 };
@@ -145,9 +139,10 @@ impl SettingsView {
         };
         let check = |checking: bool| {
             let updates = updates.clone();
-            page_button("update-check", cx)
+            ui::Button::new("update-check")
                 .debug_selector(|| "update-check".into())
-                .outline()
+                .variant(ui::Variant::Outline)
+                .size(ui::Size::Page)
                 .label(copy::UPDATE_CHECK_NOW)
                 .loading(checking)
                 .disabled(checking)
@@ -171,9 +166,10 @@ impl SettingsView {
                 let updates = updates.clone();
                 (
                     copy::updates_ready(&version.to_string()),
-                    page_button("settings-update-restart", cx)
+                    ui::Button::new("settings-update-restart")
                         .debug_selector(|| "settings-update-restart".into())
-                        .primary()
+                        .variant(ui::Variant::Primary)
+                        .size(ui::Size::Page)
                         .label(copy::UPDATE_RESTART)
                         .on_click(move |_, _, cx| updates.update(cx, |u, cx| u.restart(cx)))
                         .into_any_element(),
@@ -184,10 +180,11 @@ impl SettingsView {
             }
         };
         let url = updates.read(cx).changelog_url().to_owned();
-        let changelog = page_button("update-changelog", cx)
+        let changelog = ui::Button::new("update-changelog")
             .debug_selector(|| "update-changelog".into())
-            .outline()
-            .icon(Icon::new(IconName::ExternalLink))
+            .variant(ui::Variant::Outline)
+            .size(ui::Size::Page)
+            .icon(IconName::ExternalLink)
             .label(copy::UPDATE_CHANGELOG)
             .on_click(move |_, _, cx| crate::links::open_external(&url, cx));
         section(
@@ -212,11 +209,10 @@ impl SettingsView {
         let tray_row = self.tray.then(|| {
             row(
                 CLOSE_TO_TRAY,
-                Switch::new("close-to-tray")
+                ui::Switch::new("close-to-tray")
                     .checked(close_to_tray)
                     .accessibility_label(CLOSE_TO_TRAY)
-                    .on_click(move |on: &bool, _, cx| {
-                        let on = *on;
+                    .on_change(move |on, _, cx| {
                         lobbies.update(cx, |l, cx| l.update_settings(|s| s.close_to_tray = on, cx));
                     }),
                 cx,
@@ -230,7 +226,7 @@ impl SettingsView {
                 .gap(u(ROW_GAP))
                 .child(row(
                     "Size",
-                    size_stepper(ui_scale, self.lobbies.clone(), cx),
+                    size_stepper(ui_scale, self.lobbies.clone()),
                     cx,
                 ))
                 .children(tray_row),
@@ -279,7 +275,7 @@ pub(crate) fn group(
 }
 
 /// The UI scale as a percent between a Smaller and a Bigger button, each disabled at its end.
-fn size_stepper(percent: u16, lobbies: Entity<Lobbies>, cx: &gpui_kit::App) -> impl IntoElement {
+fn size_stepper(percent: u16, lobbies: Entity<Lobbies>) -> impl IntoElement {
     let button = |id: &'static str, label: &'static str, icon: IconName, bigger: bool| {
         let lobbies = lobbies.clone();
         let at_end = if bigger {
@@ -287,10 +283,12 @@ fn size_stepper(percent: u16, lobbies: Entity<Lobbies>, cx: &gpui_kit::App) -> i
         } else {
             percent <= UI_SCALE_MIN
         };
-        page_icon_button(id, icon, cx)
+        ui::Button::new(id)
             .debug_selector(move || id.into())
+            .variant(ui::Variant::Outline)
+            .size(ui::Size::Page)
+            .icon(icon)
             .accessibility_label(label)
-            .outline()
             .tooltip(label)
             .disabled(at_end)
             .on_click(move |_, _, cx| {
@@ -383,10 +381,11 @@ impl Render for SettingsView {
                 div().h(u(HEADER_H)).flex_shrink_0().child(
                     column().h_full().flex().items_center().child(
                         div().ml(u(-BACK_INSET)).flex_shrink_0().child(
-                            page_icon_button("settings-back", IconName::ArrowLeft, cx)
+                            ui::Button::new("settings-back")
                                 .debug_selector(|| "settings-back".into())
+                                .size(ui::Size::Page)
+                                .icon(IconName::ArrowLeft)
                                 .accessibility_label("Back")
-                                .ghost()
                                 .tooltip("Back")
                                 .on_click(cx.listener(|_, _, _, cx| cx.emit(SettingsEvent::Close))),
                         ),

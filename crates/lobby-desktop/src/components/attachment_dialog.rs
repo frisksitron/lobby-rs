@@ -6,13 +6,7 @@ use std::path::PathBuf;
 use gpui_kit::{
     AnyElement, App, Context, Entity, InteractiveElement as _, IntoElement, ObjectFit,
     ParentElement as _, Render, SharedString, Styled as _, StyledImage as _, Task,
-    TestSupportExt as _, WeakEntity, Window,
-    assets::IconName,
-    component::{
-        ActiveTheme as _, Disableable as _, Icon, button::ButtonVariants as _,
-        dialog::DialogFooter, skeleton::Skeleton,
-    },
-    div, img,
+    TestSupportExt as _, WeakEntity, Window, assets::IconName, div, img,
 };
 use lobby_client::{
     Issue, IssueKind, MediaCacheError, Variant, copy,
@@ -23,10 +17,11 @@ use lobby_protocol::Attachment;
 
 use super::{
     attachment_card::{file_icon, kind_label, size_label},
-    controls::page_button,
     media_images::{MediaImages, Slot},
 };
+use crate::kit::{ActiveTheme as _, dialog::DialogFooter};
 use crate::scale::{design_viewport, u};
+use crate::ui::{self, Icon, Skeleton};
 use crate::{files, lobby_view::LobbyView};
 
 pub fn dialog_width(window_w: f32) -> f32 {
@@ -139,25 +134,27 @@ impl AttachmentDialog {
                 this.update(cx, |d, cx| f(d, window, cx))
             }
         };
-        let save = page_button("preview-save", cx)
-            .primary()
-            .icon(Icon::new(IconName::Download))
+        let save = ui::Button::new("preview-save")
+            .variant(ui::Variant::Primary)
+            .size(ui::Size::Page)
+            .icon(IconName::Download)
             .label(copy::SAVE_FILE)
             .loading(busy && d.saved.is_none())
             .disabled(busy)
             .on_click(act(Self::save));
         let open = d.can_open().then(|| {
-            page_button("preview-open", cx)
-                .outline()
-                .icon(Icon::new(IconName::ExternalLink))
+            ui::Button::new("preview-open")
+                .variant(ui::Variant::Outline)
+                .size(ui::Size::Page)
+                .icon(IconName::ExternalLink)
                 .label(copy::OPEN)
                 .disabled(busy)
                 .on_click(act(Self::open))
         });
         let reveal = d.saved.is_some().then(|| {
-            page_button("preview-reveal", cx)
-                .ghost()
-                .icon(Icon::new(IconName::FolderOpen))
+            ui::Button::new("preview-reveal")
+                .size(ui::Size::Page)
+                .icon(IconName::FolderOpen)
                 .label("Show in folder")
                 .on_click(act(|d, _, cx| d.reveal(cx)))
         });

@@ -16,7 +16,7 @@ use crate::{
 };
 
 pub fn dump(shell: &Entity<Shell>, window: &mut Window, cx: &mut App) -> Value {
-    let dialog = gpui_kit::component::WindowExt::has_active_dialog(window, cx);
+    let dialog = crate::kit::WindowExt::has_active_dialog(window, cx);
     let mut out = model(shell.read(cx), window, cx);
     out["window"]["dialog"] = Value::Bool(dialog);
     out["files"] = files(cx);
@@ -129,9 +129,9 @@ fn settings(shell: &Shell, cx: &App) -> Value {
         "input_device": format!("{:?}", saved.input_device),
         "output_device": format!("{:?}", saved.output_device),
         "shown": {
-            "theme": cx.global::<gpui_kit::component::Theme>().theme_name().as_ref(),
-            "dark": cx.global::<gpui_kit::component::Theme>().is_dark(),
-            "font_size": (f64::from(cx.global::<gpui_kit::component::Theme>().font_size) * 100.).round() / 100.,
+            "theme": cx.global::<crate::kit::Theme>().theme_name().as_ref(),
+            "dark": cx.global::<crate::kit::Theme>().is_dark(),
+            "font_size": (f64::from(cx.global::<crate::kit::Theme>().font_size) * 100.).round() / 100.,
         },
     })
 }

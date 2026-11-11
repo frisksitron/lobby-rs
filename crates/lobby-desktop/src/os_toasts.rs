@@ -5,10 +5,7 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use gpui_kit::{
-    App, Context, Global, Window,
-    component::{WindowExt as _, notification::Notification},
-};
+use gpui_kit::{App, Context, Global, Window};
 use lobby_client::{
     LobbyOrigin, copy,
     message_text::MessageText,
@@ -17,6 +14,7 @@ use lobby_client::{
 use lobby_protocol::{AccessRequest, AccessRequestId, Message};
 
 use crate::Shell;
+use crate::kit::{WindowExt as _, notification::Notification};
 
 /// Marks the toasts this module posts, so their tags never meet another kind's.
 struct OsToastTag;

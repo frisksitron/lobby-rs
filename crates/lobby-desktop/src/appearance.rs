@@ -2,12 +2,9 @@
 //! [`apply`] is the one place that changes the global `Theme`. It does the same thing every time
 //! it is called with the same settings, so the Shell calls it at startup and on every change.
 
+use crate::kit::{Theme, ThemeConfig, ThemeMode, ThemeRegistry};
 use crate::scale::{BASE_MONO, BASE_RADIUS, BASE_RADIUS_LG, BASE_REM};
-use gpui_kit::{
-    App,
-    component::{Theme, ThemeConfig, ThemeMode, ThemeRegistry},
-    px,
-};
+use gpui_kit::{App, px};
 use lobby_client::Settings;
 use std::rc::Rc;
 
@@ -56,7 +53,8 @@ pub fn apply(settings: &Settings, cx: &mut App) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui_kit::{TestAppContext, component::ThemeColor};
+    use crate::kit::ThemeColor;
+    use gpui_kit::TestAppContext;
 
     /// The kit fills a colour the file leaves out from Default Dark, whose cold greys and blues
     /// would then show among the warm ones.

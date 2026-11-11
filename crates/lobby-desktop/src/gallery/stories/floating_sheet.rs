@@ -2,9 +2,8 @@
 //! docked beside the chat and folded over a dimmed small window.
 
 use gpui_kit::{
-    AnyElement, App, Context, Div, IntoElement as _, ParentElement as _, Styled as _, Window,
-    component::ActiveTheme as _, div, linear_color_stop, linear_gradient,
-    prelude::FluentBuilder as _,
+    AnyElement, App, Context, Div, IntoElement as _, ParentElement as _, Styled as _, Window, div,
+    linear_color_stop, linear_gradient, prelude::FluentBuilder as _,
 };
 use lobby_protocol::VoiceState;
 
@@ -17,6 +16,7 @@ use crate::gallery::{
     Gallery, Section,
     fixtures::{joining, member, muted, sharing, speaking},
 };
+use crate::kit::ActiveTheme as _;
 use crate::lobby_view::{BODY_TOP, FOLDED_SHEET_W, SHEET_INSET, SIDEBAR_SLIM_W, SIDEBAR_W};
 use crate::scale::u;
 

@@ -13,16 +13,7 @@ use gpui_kit::{
     App, AppContext as _, ClipboardEntry, ClipboardItem, Context, DragMoveEvent, Entity,
     EventEmitter, ExternalPaths, Focusable as _, ImageFormat, InteractiveElement as _, IntoElement,
     KeyDownEvent, Keystroke, MouseButton, ParentElement as _, Render, SharedString, Styled as _,
-    Subscription, Task, TestSupportExt as _, Window,
-    assets::IconName,
-    canvas,
-    component::{
-        ActiveTheme as _, Disableable as _, Icon, Sizable as _,
-        button::{Button, ButtonVariants as _},
-        input::{self, Cut, InputEvent, Paste, SelectAll, Textarea, TextareaState},
-        menu::{ContextMenuExt as _, PopupMenu},
-    },
-    div,
+    Subscription, Task, TestSupportExt as _, Window, assets::IconName, canvas, div,
     prelude::FluentBuilder as _,
 };
 use lobby_client::{
@@ -42,8 +33,14 @@ use crate::{
         context_menu::{menu_frame, menu_item},
         draft_strip, format_for, mention_chip, mention_menu,
     },
+    kit::{
+        ActiveTheme as _,
+        input::{self, Cut, InputEvent, Paste, SelectAll, Textarea, TextareaState},
+        menu::{ContextMenuExt as _, PopupMenu},
+    },
     lobbies::Lobbies,
     session_entity::SessionEntity,
+    ui,
 };
 
 /// The mention menu floats this far above the composer's frame.
@@ -877,11 +874,10 @@ impl ComposerView {
             .test_support()
             .context_menu(input_menu(self.input.clone()));
         let corner = device_in(SURFACE_INNER_RADIUS, cx);
-        let attach = Button::new("attach-button")
+        let attach = ui::Button::new("attach-button")
             .accessibility_label("Attach files")
-            .icon(Icon::new(IconName::Paperclip))
-            .small()
-            .ghost()
+            .icon(IconName::Paperclip)
+            .size(ui::Size::Inline)
             .rounded(corner)
             .tooltip("Attach files")
             .on_click(cx.listener(|this, _, window, cx| this.pick_files(window, cx)));
@@ -890,21 +886,20 @@ impl ComposerView {
         }))
         .compact(narrow)
         .active(self.formats_at_caret(cx));
-        let send = Button::new("send")
+        let send = ui::Button::new("send")
             .accessibility_label("Send")
             .debug_selector(|| "send".into())
             // A filled, nearly round button wants a smaller glyph than the ghost buttons beside it.
             // The plane's weight is in its wide tail, so its box sits a little right of centre.
             .icon(
-                Icon::new(IconName::SendHorizontal)
+                ui::Icon::new(IconName::SendHorizontal)
                     .size(u(ICON_XS))
                     .relative()
                     .left(u(SEND_NUDGE)),
             )
-            .small()
+            .size(ui::Size::Inline)
             .rounded(corner)
-            .when(can_send, |b| b.primary())
-            .when(!can_send, |b| b.ghost())
+            .when(can_send, |b| b.variant(ui::Variant::Primary))
             .disabled(!can_send)
             .tooltip(match blocked {
                 _ if editing => SharedString::from("Save (Enter)"),

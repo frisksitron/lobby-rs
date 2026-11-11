@@ -1,6 +1,5 @@
 use gpui_kit::{
-    AnyElement, App, Context, IntoElement as _, ParentElement as _, Styled as _, Window,
-    component::ActiveTheme as _, div, px,
+    AnyElement, App, Context, IntoElement as _, ParentElement as _, Styled as _, Window, div, px,
 };
 
 use lobby_client::{
@@ -9,6 +8,7 @@ use lobby_client::{
 
 use crate::components::Meter;
 use crate::gallery::{Gallery, Section};
+use crate::kit::ActiveTheme as _;
 use crate::voice_settings::VoiceSection;
 
 /// The small window's column, and the default window's.

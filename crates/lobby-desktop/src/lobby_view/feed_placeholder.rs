@@ -3,25 +3,21 @@
 
 use gpui_kit::{
     AnyElement, App, Hsla, InteractiveElement as _, IntoElement, ParentElement as _, SharedString,
-    Styled as _, TestSupportExt as _, WeakEntity,
-    assets::IconName,
-    component::{
-        ActiveTheme as _, Disableable as _, Icon,
-        button::ButtonVariants as _,
-        empty::{Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle},
-        skeleton::Skeleton,
-    },
-    div,
-    prelude::FluentBuilder as _,
-    relative,
+    Styled as _, TestSupportExt as _, WeakEntity, assets::IconName, div,
+    prelude::FluentBuilder as _, relative,
 };
 
 use super::LobbyView;
 use crate::components::{
     Avatar, AvatarSize, BORDER, ConnectionAction, ConnectionNotice, ICON_SM, IconDisc,
-    nested_radius, small_word_button, voice_accent,
+    nested_radius, voice_accent,
 };
+use crate::kit::ActiveTheme as _;
 use crate::scale::{device_in, u};
+use crate::ui::{
+    self, Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Icon,
+    Skeleton,
+};
 
 const EMPTY_TEXT_MAX: f32 = 420.;
 
@@ -82,13 +78,14 @@ fn unreached_lobby(
     let button = |action: ConnectionAction, primary: bool, enabled: bool| {
         let view = view.clone();
         let id = format!("feed-{}", action.id());
-        small_word_button(id.clone())
+        ui::Button::new(SharedString::from(id.clone()))
             .debug_selector(move || id.clone())
+            .variant(ui::Variant::Outline)
+            .size(ui::Size::Word)
             .label(action.label())
             .when(action != ConnectionAction::ChangeLobby, |b| {
-                b.icon(Icon::new(IconName::RotateCw))
+                b.icon(IconName::RotateCw)
             })
-            .outline()
             .disabled(!enabled)
             .loading(primary && !enabled)
             .on_click(move |_, window, cx| {
@@ -211,15 +208,15 @@ fn invite_people(
                             .child(address),
                     )
                     .child(
-                        small_word_button("copy-invite")
+                        ui::Button::new("copy-invite")
+                            .size(ui::Size::Word)
                             .rounded(device_in(COPY_RADIUS, cx))
-                            .when(!copied, |b| b.outline())
-                            .when(copied, |b| b.ghost())
-                            .icon(Icon::new(if copied {
+                            .when(!copied, |b| b.variant(ui::Variant::Outline))
+                            .icon(if copied {
                                 IconName::Check
                             } else {
                                 IconName::Copy
-                            }))
+                            })
                             .label(if copied { "Copied" } else { "Copy" })
                             .on_click(move |_, _, cx| {
                                 let _ = view.update(cx, |v, cx| v.copy_invite(cx));

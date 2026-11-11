@@ -16,7 +16,6 @@ use gpui_kit::{
     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, SharedString,
     Styled as _, TestSupportExt as _, Window,
     base::{POPUP_PRIORITY, Positioner},
-    component::{ActiveTheme as _, ThemeStyled as _, skeleton::Skeleton},
     deferred, div, ease_out_quint, relative,
 };
 use lobby_client::{Intent, LobbyState, Phase, Volume, local_date};
@@ -33,7 +32,9 @@ use crate::components::{
     MemberRowModel, OwnerAction, PanelActions, PanelStep, ROW_HEIGHT, Rename, Sharer, Tile,
     WatchLine, picture, voice_box,
 };
+use crate::kit::{ActiveTheme as _, ThemeStyled as _};
 use crate::scale::{device, u};
+use crate::ui::Skeleton;
 
 /// The sidebar's groups. The signed-in Member is first in whichever group they are in. While
 /// not connected the last known groups stay (`known` is false and the sidebar dims them), so

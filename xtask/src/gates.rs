@@ -16,11 +16,12 @@ enum Step {
 /// The checks that take seconds come first, so a long comment line or a banned dependency is
 /// reported before the minutes of clippy and tests. `check-toolchain` leads them because the
 /// builds after it need cmake.
-const STEPS: [(&str, Step); 11] = [
+const STEPS: [(&str, Step); 12] = [
     ("fmt", Step::Cargo(&["fmt", "--all", "--check"])),
     ("check-toolchain", Step::Xtask("check-toolchain")),
     ("check-comments", Step::Xtask("check-comments")),
     ("check-px", Step::Xtask("check-px")),
+    ("check-kit", Step::Xtask("check-kit")),
     ("check-commits", Step::Xtask("check-commits")),
     ("check-deps", Step::Xtask("check-deps")),
     ("check-api", Step::Xtask("check-api")),

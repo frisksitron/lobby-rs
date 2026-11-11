@@ -4,12 +4,7 @@ use std::{rc::Rc, sync::Arc, time::Duration};
 
 use gpui_kit::{
     AppContext as _, Context, Entity, ImageSource, RenderImage, ScrollHandle, Window,
-    component::{
-        input::{InputState, OtpState},
-        notification::Notification,
-        select::SelectState,
-        slider::SliderState,
-    },
+    base::slider::SliderState,
 };
 use image::{Frame, RgbaImage};
 use lobby_client::{Issue, IssueKind, ScreenSource, SourceId, TestMotion, VideoFrame};
@@ -21,6 +16,11 @@ use super::Gallery;
 use crate::components::{
     CodeTyping, ConnectionNotice, MemberRowModel, PickerModel, PickerView, ShareView,
     connection_notice,
+};
+use crate::kit::{
+    input::{InputState, OtpState},
+    notification::Notification,
+    select::SelectState,
 };
 use lobby_client::Phase;
 

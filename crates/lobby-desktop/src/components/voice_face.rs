@@ -6,15 +6,7 @@
 use gpui_kit::{
     AnyElement, App, Div, Hsla, InteractiveElement as _, IntoElement, MouseButton,
     ParentElement as _, Pixels, Point, RenderOnce, SharedString, StatefulInteractiveElement as _,
-    Styled as _, TestSupportExt as _, Window,
-    assets::IconName,
-    component::{
-        ActiveTheme as _, Disableable as _, Icon,
-        button::{Button, ButtonCustomVariant, ButtonVariants as _},
-        tooltip::Tooltip,
-    },
-    div,
-    prelude::FluentBuilder as _,
+    Styled as _, TestSupportExt as _, Window, assets::IconName, div, prelude::FluentBuilder as _,
 };
 
 use lobby_protocol::UserId;
@@ -23,7 +15,9 @@ use super::{
     AvatarState, Callback, MemberAvatar, MemberRowModel, PictureOf, Sharer, Tile, TilePaint,
     TilePress, tokens::AvatarSize, voice_bar::STRIP_INNER_RADIUS,
 };
+use crate::kit::{ActiveTheme as _, tooltip::Tooltip};
 use crate::scale::{device_in, u};
+use crate::ui::{self, Icon};
 
 pub const FACE_W: f32 = 40.;
 pub const FACE_H: f32 = 44.;
@@ -243,16 +237,13 @@ impl RenderOnce for VoiceFace {
         };
         let press = tile.press(sharer);
         let wash = cx.theme().foreground;
-        Button::new(id.clone())
+        ui::Button::new(id.clone())
             .group(id.clone())
-            .custom(
-                ButtonCustomVariant::new(cx)
-                    .color(gpui_kit::transparent_black())
-                    .foreground(wash)
+            .variant(ui::Variant::Custom(
+                ui::Custom::new(gpui_kit::transparent_black(), wash)
                     .hover(wash.opacity(0.06))
-                    .active(wash.opacity(0.09))
-                    .shadow(false),
-            )
+                    .active(wash.opacity(0.09)),
+            ))
             .rounded(device_in(STRIP_INNER_RADIUS, cx))
             .w(u(FACE_W))
             .h(u(FACE_H))

@@ -3,12 +3,7 @@
 //! box never moves or covers another row. The box is the app's own [`voice_box`].
 
 use gpui_kit::{
-    App, Context, Div, IntoElement, ParentElement as _, SharedString, Styled as _, Window,
-    component::{
-        ActiveTheme as _, Sizable as _,
-        button::{Button, ButtonVariants as _},
-    },
-    div, px,
+    App, Context, Div, IntoElement, ParentElement as _, SharedString, Styled as _, Window, div, px,
 };
 use lobby_protocol::Presence;
 
@@ -17,6 +12,8 @@ use crate::gallery::{
     Gallery, Section,
     fixtures::{member, muted, speaking, voice},
 };
+use crate::kit::ActiveTheme as _;
+use crate::ui;
 
 use super::{caption, members::row, panel, wrap};
 
@@ -184,19 +181,19 @@ fn playground(g: &Gallery, cx: &mut Context<Gallery>) -> Div {
             (_, false) => format!("{name} joins"),
             (_, true) => format!("{name} leaves"),
         };
-        let button = Button::new(SharedString::from(format!("play-{name}")))
-            .small()
+        ui::Button::new(SharedString::from(format!("play-{name}")))
+            .size(ui::Size::Inline)
+            .variant(if joined {
+                ui::Variant::Primary
+            } else {
+                ui::Variant::Outline
+            })
             .label(label)
             .on_click(cx.listener(move |this, _, _, cx| {
                 this.held.in_voice[i] = !this.held.in_voice[i];
                 cx.notify();
-            }));
-        if joined {
-            button.primary()
-        } else {
-            button.outline()
-        }
-        .into_any_element()
+            }))
+            .into_any_element()
     });
     div()
         .flex()

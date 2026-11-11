@@ -5,11 +5,12 @@
 
 use gpui_kit::{
     App, InteractiveElement as _, IntoElement, ParentElement as _, RenderOnce, SharedString,
-    Styled as _, TestSupportExt as _, Window, component::ActiveTheme as _, div,
+    Styled as _, TestSupportExt as _, Window, div,
 };
 use lobby_client::{MicQuality, MicReading, Zone, copy};
 
 use super::truncated_text;
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
 
 pub const SEGMENTS: usize = 20;

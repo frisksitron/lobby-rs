@@ -1,10 +1,11 @@
 //! The Settings page over the current route: opening and closing it and following the route, and
 //! moving on once the Lobby the window is in let the Member leave.
 
-use gpui_kit::{AppContext as _, Context, Window, component::WindowExt as _};
+use gpui_kit::{AppContext as _, Context, Window};
 use tracing::info;
 
 use super::{LobbyRoute, QuitState, Route, Shell, SwitchTarget};
+use crate::kit::WindowExt as _;
 use crate::settings_view::{SettingsEvent, SettingsView};
 
 impl Shell {

@@ -20,6 +20,7 @@ fn main() -> anyhow::Result<()> {
         .with_assets(LobbyAssets)
         .run(move |cx| {
             gpui_kit::init(cx);
+            lobby_desktop::ui::init(cx);
             cx.activate(true);
             if let Err(e) = Gallery::open(initial, cx) {
                 eprintln!("cannot open the gallery window: {e}");

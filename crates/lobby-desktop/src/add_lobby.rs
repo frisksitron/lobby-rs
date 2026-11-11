@@ -7,18 +7,17 @@
 
 use gpui_kit::{
     AppContext as _, Context, Entity, EventEmitter, InteractiveElement as _, IntoElement,
-    ParentElement as _, Render, Styled as _, Subscription, TestSupportExt as _, Window,
-    component::{
-        ActiveTheme as _,
-        input::{InputEvent, InputState},
-    },
-    div,
+    ParentElement as _, Render, Styled as _, Subscription, TestSupportExt as _, Window, div,
 };
 use lobby_client::{Client, EntryIntent, EntryStep, LobbyOrigin, copy};
 use lobby_protocol::LobbyInfo;
 
 use crate::components::{ADD_LOBBY_IDS, AddressForm, Feedback, quiet_link};
 use crate::entry_entity::{EntryChanged, EntryEntity};
+use crate::kit::{
+    ActiveTheme as _,
+    input::{InputEvent, InputState},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AddLobbyEvent {

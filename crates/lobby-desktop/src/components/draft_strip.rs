@@ -3,18 +3,7 @@
 
 use gpui_kit::{
     AnyElement, App, Entity, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Styled as _, TestSupportExt as _,
-    assets::IconName,
-    component::{
-        Icon, Sizable as _,
-        attachment::{
-            Attachment as KitAttachment, AttachmentActions, AttachmentContent,
-            AttachmentDescription, AttachmentGroup, AttachmentMedia, AttachmentStatus,
-            AttachmentTitle,
-        },
-        button::{Button, ButtonVariants as _},
-    },
-    div,
+    SharedString, Styled as _, TestSupportExt as _, assets::IconName, div,
 };
 use lobby_client::{DraftAttachment, DraftId, DraftState, Variant, picture};
 
@@ -24,7 +13,15 @@ use super::{
     media_images::{MediaImages, Slot},
     nested_radius,
 };
+use crate::kit::{
+    Sizable as _,
+    attachment::{
+        Attachment as KitAttachment, AttachmentActions, AttachmentContent, AttachmentDescription,
+        AttachmentGroup, AttachmentMedia, AttachmentStatus, AttachmentTitle,
+    },
+};
 use crate::scale::{device_in, u};
+use crate::ui::{self, Icon};
 
 /// The kit's extra-small chip is this high, with this much air above and under it in its group,
 /// and this much padding before its picture.
@@ -146,20 +143,18 @@ fn chip(
     let mut actions = AttachmentActions::new();
     if can_retry {
         actions = actions.child(
-            Button::new(SharedString::from(format!("draft-{i}-retry")))
-                .xsmall()
-                .ghost()
-                .icon(Icon::new(IconName::RefreshCw))
+            ui::Button::new(SharedString::from(format!("draft-{i}-retry")))
+                .size(ui::Size::Corner)
+                .icon(IconName::RefreshCw)
                 .accessibility_label("Retry")
                 .tooltip("Retry")
                 .on_click(move |_, window, cx| retry(id, window, cx)),
         );
     }
     actions = actions.child(
-        Button::new(SharedString::from(format!("draft-{i}-remove")))
-            .xsmall()
-            .ghost()
-            .icon(Icon::new(IconName::Close))
+        ui::Button::new(SharedString::from(format!("draft-{i}-remove")))
+            .size(ui::Size::Corner)
+            .icon(IconName::Close)
             .accessibility_label("Remove")
             .tooltip("Remove")
             .on_click(move |_, window, cx| remove(id, window, cx)),

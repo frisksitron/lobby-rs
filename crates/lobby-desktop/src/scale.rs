@@ -3,7 +3,8 @@
 //! `appearance::apply`). Only what must not scale stays in `px(..)`: hairlines and borders, the
 //! OS window's size, and values that go to the OS.
 
-use gpui_kit::{App, Pixels, Rems, Window, component::ActiveTheme as _, px, rems};
+use crate::kit::ActiveTheme as _;
+use gpui_kit::{App, Pixels, Rems, Window, px, rems};
 
 /// The rem size at 100%.
 pub const BASE_REM: f32 = 16.;

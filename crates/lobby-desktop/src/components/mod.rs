@@ -38,7 +38,6 @@ pub mod voice_face;
 pub mod voice_foot;
 pub mod voice_stats;
 pub mod watch_tile;
-pub mod word_button;
 
 use std::rc::Rc;
 
@@ -63,9 +62,7 @@ pub use composer::{FORMAT_BAR_HEIGHT, FormatBar, format_for};
 pub use connection_notice::{
     ConnectionAction, ConnectionNotice, ConnectionTone, bar_tint, connection_notice, tone_color,
 };
-pub use controls::{
-    confirm_alert, page_button, page_icon_button, page_select, step_button, step_input,
-};
+pub use controls::{confirm_alert, page_select, step_input};
 pub use draft_strip::{DRAFT_STRIP_H, draft_strip};
 pub use feed::{
     ChangeMessage, Feed, FeedAction, FeedRow, MessageChange, MessageRow, Pending, card_max_w,
@@ -115,4 +112,3 @@ pub use voice_stats::{
     STATS_DIALOG_W, VoiceStatsDialog, VoiceStatsList, stats_dialog_width, stats_lines,
 };
 pub use watch_tile::{Tile, TilePaint, TilePress, WatchTile};
-pub use word_button::small_word_button;

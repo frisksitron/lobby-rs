@@ -14,7 +14,7 @@ use gpui_kit::{
     App, Bounds, CursorStyle, DispatchPhase, Hitbox, HitboxBehavior, Hsla, InteractiveElement as _,
     IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement as _,
     Path, PathBuilder, PathStyle, Pixels, Point, SharedString, Size, StrokeOptions, Styled as _,
-    TestSupportExt as _, Window, canvas, component::oklch, div, hsla, point, px,
+    TestSupportExt as _, Window, canvas, div, hsla, point, px,
 };
 use lobby_client::ink::{InkBoard, PenPoint};
 use lobby_protocol::{DrawingEpoch, ShareId, StrokeId, UserId};
@@ -25,6 +25,7 @@ use super::{
     avatar::{IDENTITY_HUES, identity_slot},
     ink_overlay::InkSpot,
 };
+use crate::kit::oklch;
 use crate::scale::u;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

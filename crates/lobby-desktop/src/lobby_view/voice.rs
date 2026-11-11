@@ -3,10 +3,7 @@
 
 use std::sync::Arc;
 
-use gpui_kit::{
-    AppContext as _, Context, ParentElement as _, Styled as _, Window, component::WindowExt as _,
-    div,
-};
+use gpui_kit::{AppContext as _, Context, ParentElement as _, Styled as _, Window, div};
 use lobby_client::{
     DeviceSource, DspControl, FakeDevices, Intent, IssueKind, LobbyState, MediaConfig, MicLevel,
     MonitorControl, Settings, SystemDevices,
@@ -17,6 +14,7 @@ use crate::components::{
     TilePress, VoiceFace, VoiceStatsDialog, VoiceStrip, Waits, card_surface, pictures,
     stats_dialog_width, voice_bar_model,
 };
+use crate::kit::WindowExt as _;
 use crate::scale::{design_viewport, device, u};
 use crate::voice_shared::VoiceShared;
 

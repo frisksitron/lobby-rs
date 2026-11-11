@@ -8,27 +8,22 @@
 use gpui_kit::{
     AnyElement, App, Entity, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
     RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window,
-    assets::IconName,
-    base::FocusableExt as _,
-    component::{
-        ActiveTheme as _, Disableable as _, Icon, Sizable as _,
-        button::{Button, ButtonVariants as _},
-        input::{Input, InputState},
-        slider::{Slider, SliderState},
-        switch::Switch,
-        tooltip::Tooltip,
-    },
-    div,
-    prelude::FluentBuilder as _,
+    assets::IconName, base::slider::SliderState, div, prelude::FluentBuilder as _,
 };
 use lobby_client::{Volume, copy};
 
 use super::{
     Callback, INLINE_H, LINE_H, MemberRowModel, PERCENT_W, READOUT_GAP, Tile,
     auth::{Tone, tone_text},
-    nested_radius, small_word_button,
+    nested_radius,
+};
+use crate::kit::{
+    ActiveTheme as _, Sizable as _,
+    input::{Input, InputState},
+    tooltip::Tooltip,
 };
 use crate::scale::{BASE_RADIUS, device_in, u};
+use crate::ui;
 
 /// Wide enough for the longest line, whatever the sidebar's width: the card may reach over the
 /// feed.
@@ -188,13 +183,12 @@ pub(crate) fn card_line(
     label: impl Into<SharedString>,
     danger: bool,
     cx: &App,
-) -> Button {
+) -> ui::Button {
     let label = label.into();
     let theme = cx.theme();
-    Button::new(id)
+    ui::Button::new(id)
         .debug_selector(move || id.into())
         .accessibility_label(label.clone())
-        .ghost()
         .rounded(device_in(LINE_RADIUS, cx))
         .w_full()
         .h(u(LINE_H))
@@ -219,7 +213,7 @@ pub(crate) fn card_line(
 
 /// `line` with `end`, a small worded button, over its end. `end` blocks the mouse, so a press on
 /// it is not a press on the line.
-pub(crate) fn line_with_end(line: Button, end: Option<Button>, cx: &App) -> AnyElement {
+pub(crate) fn line_with_end(line: ui::Button, end: Option<ui::Button>, cx: &App) -> AnyElement {
     div()
         .relative()
         .child(line)
@@ -232,9 +226,7 @@ pub(crate) fn line_with_end(line: Button, end: Option<Button>, cx: &App) -> AnyE
                 .flex()
                 .items_center()
                 .child(
-                    end.ghost()
-                        .small()
-                        .h(u(INLINE_H))
+                    end.size(ui::Size::Inline)
                         .text_color(cx.theme().muted_foreground)
                         .occlude(),
                 )
@@ -389,10 +381,10 @@ fn head(
                     )
                 }))
                 .child(
-                    Button::new("rename-save")
+                    ui::Button::new("rename-save")
                         .debug_selector(|| "rename-save".into())
                         .accessibility_label("Save name")
-                        .primary()
+                        .variant(ui::Variant::Primary)
                         .h(u(INLINE_H))
                         .px_2p5()
                         .text_xs()
@@ -431,12 +423,12 @@ fn head(
                 .when(model.is_me, |d| {
                     d.child(
                         div().ml_auto().flex_shrink_0().child(
-                            Button::new("rename-open")
+                            ui::Button::new("rename-open")
                                 .debug_selector(|| "rename-open".into())
                                 .accessibility_label(copy::RENAME)
-                                .ghost()
-                                .size(u(INLINE_H))
-                                .icon(Icon::new(IconName::Pencil))
+                                .w(u(INLINE_H))
+                                .h(u(INLINE_H))
+                                .icon(IconName::Pencil)
                                 .tooltip(copy::RENAME)
                                 .when_some(start, |b, start| {
                                     b.on_click(move |_, window, cx| start(window, cx))
@@ -495,20 +487,20 @@ fn watch_block(
         WatchLine::StopWatching => pressing(actions.map(|a| &a.stop_watching), || ()),
         WatchLine::Hidden | WatchLine::NeedsVoice => None,
     };
-    let button = Button::new(id)
+    let button = ui::Button::new(id)
         .debug_selector(move || id.into())
         .accessibility_label(match line {
             WatchLine::StopWatching => format!("Stop watching {name}"),
             _ => format!("Watch {name}'s screen"),
         })
-        .small()
+        .size(ui::Size::Inline)
         .w_full()
         .h(u(LINE_H))
-        .icon(Icon::new(icon))
+        .icon(icon)
         .label(label)
-        .map(|b| match line {
-            WatchLine::Watch => b.primary(),
-            _ => b.outline(),
+        .variant(match line {
+            WatchLine::Watch => ui::Variant::Primary,
+            _ => ui::Variant::Outline,
         })
         .when(line == WatchLine::NeedsVoice, |b| {
             b.disabled(true).tooltip(copy::SHARE_NEEDS_VOICE_TIP)
@@ -556,12 +548,12 @@ fn volume_block(slider: &Entity<SliderState>, reset: Option<Press>, cx: &App) ->
                                 .child(format!("{percent}%")),
                         )
                         .child(
-                            Button::new("volume-reset")
+                            ui::Button::new("volume-reset")
                                 .debug_selector(|| "volume-reset".into())
                                 .accessibility_label("Reset volume to 100%")
-                                .ghost()
-                                .size(u(INLINE_H))
-                                .icon(Icon::new(IconName::RotateCcw))
+                                .w(u(INLINE_H))
+                                .h(u(INLINE_H))
+                                .icon(IconName::RotateCcw)
                                 .tooltip("Reset to 100%")
                                 .disabled(!off_default)
                                 .when_some(reset, |b, reset| {
@@ -574,11 +566,7 @@ fn volume_block(slider: &Entity<SliderState>, reset: Option<Press>, cx: &App) ->
             div()
                 .id("volume-slider")
                 .debug_selector(|| "volume-slider".into())
-                .child(
-                    Slider::new(slider)
-                        .horizontal()
-                        .accessibility_label("Volume"),
-                )
+                .child(ui::Slider::new(slider).accessibility_label("Volume"))
                 .test_support(),
         )
 }
@@ -594,7 +582,7 @@ fn picture_line(model: &MemberPanelModel, actions: Option<&PanelActions>, cx: &A
             b.on_click(move |_, window, cx| change(window, cx))
         });
     let end = model.has_picture.then(|| {
-        Button::new("picture-remove")
+        ui::Button::new("picture-remove")
             .debug_selector(|| "picture-remove".into())
             .accessibility_label("Remove picture")
             .label(copy::REMOVE)
@@ -609,10 +597,9 @@ fn picture_line(model: &MemberPanelModel, actions: Option<&PanelActions>, cx: &A
 /// Do Not Disturb as a line whose end is the switch; the line is what takes the press.
 fn dnd_line(dnd: bool, press: Option<Press>, cx: &App) -> impl IntoElement {
     let theme = cx.theme();
-    Button::new("presence-dnd")
+    ui::Button::new("presence-dnd")
         .debug_selector(|| "presence-dnd".into())
         .accessibility_label(copy::DO_NOT_DISTURB)
-        .ghost()
         .rounded(device_in(LINE_RADIUS, cx))
         .w_full()
         .h(u(LINE_H))
@@ -627,14 +614,7 @@ fn dnd_line(dnd: bool, press: Option<Press>, cx: &App) -> impl IntoElement {
                 .text_sm()
                 .font_weight(FontWeight::NORMAL)
                 .child(copy::DO_NOT_DISTURB)
-                // The line takes the press and the focus; a switch with its own would draw a
-                // second ring, which the line clips.
-                .child(
-                    Switch::new("dnd-switch")
-                        .checked(dnd)
-                        .tab_stop(false)
-                        .focus_ring(false),
-                ),
+                .child(ui::Switch::new("dnd-switch").checked(dnd).embedded()),
         )
         .when_some(press, |b, press| {
             b.on_click(move |_, window, cx| press(window, cx))
@@ -753,9 +733,9 @@ fn others_lines(
                 .justify_end()
                 .gap_2()
                 .child(
-                    small_word_button("panel-cancel")
+                    ui::Button::new("panel-cancel")
                         .debug_selector(|| "panel-cancel".into())
-                        .ghost()
+                        .size(ui::Size::Word)
                         .label("Cancel")
                         .disabled(busy)
                         .when_some(cancel, |b, cancel| {
@@ -763,12 +743,13 @@ fn others_lines(
                         }),
                 )
                 .child(
-                    small_word_button(confirm_id)
+                    ui::Button::new(confirm_id)
                         .debug_selector(move || confirm_id.into())
+                        .size(ui::Size::Word)
                         .label(confirm_label)
-                        .map(|b| match action {
-                            OwnerAction::Remove => b.danger(),
-                            OwnerAction::MakeOwner => b.primary(),
+                        .variant(match action {
+                            OwnerAction::Remove => ui::Variant::Danger,
+                            OwnerAction::MakeOwner => ui::Variant::Primary,
                         })
                         .loading(busy)
                         .when_some(confirm, move |b, confirm| {

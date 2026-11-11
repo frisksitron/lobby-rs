@@ -15,13 +15,13 @@ use common::{
 };
 use gpui_kit::{
     AppContext as _, Bounds, MouseButton, MouseDownEvent, MouseUpEvent, Pixels, PlatformInput,
-    TestAppContext, VisualTestContext, component::WindowExt as _, px, size,
-    test::TestWindowExt as _,
+    TestAppContext, VisualTestContext, px, size, test::TestWindowExt as _,
 };
 use lobby_client::testing::{FakeBehavior, FakeLobby, frames};
 use lobby_desktop::{
     automation::{self, WindowStep},
     components::{BAR_CONTROL_H, FootSize, ROW_HEIGHT, TITLE_BAR_HEIGHT},
+    kit::{Theme, WindowExt as _},
     lobby_view::{self, NARROW_BELOW},
 };
 use lobby_protocol::{ClientMsg, ErrorBody, ErrorCode, PROTOCOL_VERSION, Presence, ServerMsg};
@@ -618,12 +618,7 @@ fn the_sidebar_is_dragged_within_the_window(cx: &mut TestAppContext) {
         "the feed gives way"
     );
     assert_eq!(saved_width(cx, o), Some(320.));
-    let toasts = cx.read(|cx| {
-        gpui_kit::component::Theme::global(cx)
-            .notification
-            .margins
-            .right
-    });
+    let toasts = cx.read(|cx| Theme::global(cx).notification.margins.right);
     assert_eq!(
         toasts,
         px(320. + lobby_view::SHEET_INSET + 16.),
@@ -705,7 +700,7 @@ fn the_size_keys_step_the_scale_to_its_ends_and_back_to_100(cx: &mut TestAppCont
         press(cx, o, "ctrl--");
     }
     assert_eq!(ui_scale(cx, o), 80, "and so does the bottom");
-    let font = cx.read(|cx| gpui_kit::component::Theme::global(cx).font_size);
+    let font = cx.read(|cx| Theme::global(cx).font_size);
     assert_eq!(
         font,
         px(12.8),

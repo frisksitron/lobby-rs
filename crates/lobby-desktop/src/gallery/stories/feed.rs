@@ -1,8 +1,7 @@
 use std::{rc::Rc, time::Duration};
 
 use gpui_kit::{
-    AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Window,
-    component::ActiveTheme as _, div, px,
+    AnyElement, App, Context, IntoElement, ParentElement as _, Styled as _, Window, div, px,
 };
 use lobby_client::{
     History, Older, Phase,
@@ -18,6 +17,7 @@ use crate::gallery::{
     Gallery, Section,
     fixtures::{attachment, notice},
 };
+use crate::kit::ActiveTheme as _;
 
 use super::caption;
 

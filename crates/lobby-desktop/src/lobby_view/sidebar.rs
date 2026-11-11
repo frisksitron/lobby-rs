@@ -15,11 +15,7 @@ use gpui_kit::{
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _, Render,
     SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled as _, Subscription,
     TestSupportExt as _, Window,
-    component::{
-        ActiveTheme as _, InteractiveElementExt as _,
-        resizable::{HandleEdge, resize_handle},
-        slider::{SliderEvent, SliderState},
-    },
+    base::slider::{SliderEvent, SliderState},
     div, ease_out_quint, linear_color_stop, linear_gradient,
     prelude::FluentBuilder as _,
 };
@@ -33,6 +29,10 @@ use crate::{
     components::{
         BORDER, MEMBER_ROW_GAP, MediaImages, SURFACE_PAD, SURFACE_RADIUS, Sharer, VoiceBarActions,
         VoiceFoot, Waits, card_surface, floating_sheet, nested_radius, voice_bar_model,
+    },
+    kit::{
+        ActiveTheme as _, InteractiveElementExt as _,
+        resizable::{HandleEdge, resize_handle},
     },
     lobbies::Lobbies,
     session_entity::{SessionEntity, SessionUiEvent},

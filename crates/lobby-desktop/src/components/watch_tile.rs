@@ -3,21 +3,16 @@
 
 use gpui_kit::{
     App, Hsla, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, RenderOnce,
-    SharedString, Styled as _, Window,
-    assets::IconName,
-    component::{
-        ActiveTheme as _, Colorize as _, Disableable as _, Icon, Theme,
-        button::{Button, ButtonCustomVariant, ButtonVariants as _},
-    },
-    div,
-    prelude::FluentBuilder as _,
+    SharedString, Styled as _, Window, assets::IconName, div, prelude::FluentBuilder as _,
 };
 use lobby_client::copy;
 
 use super::{
     Callback, ROW_HEIGHT, SURFACE_INNER_RADIUS, Sharer, Whose, member_row::ROW_PAD_X, nested_radius,
 };
+use crate::kit::{ActiveTheme as _, Colorize as _, Theme};
 use crate::scale::u;
+use crate::ui::{self, Icon};
 
 /// The drawn tile. The press lands on its slot, which is as tall as the row.
 const TILE_W: f32 = 44.;
@@ -193,15 +188,12 @@ impl RenderOnce for WatchTile {
                 }
             });
         let press = self.tile.press(self.sharer);
-        Button::new(self.id)
+        ui::Button::new(self.id)
             .group(group)
-            .custom(
-                ButtonCustomVariant::new(cx)
-                    .color(clear)
-                    .hover(clear)
-                    .active(clear)
-                    .shadow(false),
-            )
+            .variant(ui::Variant::Custom(ui::Custom::new(
+                clear,
+                theme.foreground,
+            )))
             .w(u(SLOT_W))
             .h(u(ROW_HEIGHT))
             .p_0()

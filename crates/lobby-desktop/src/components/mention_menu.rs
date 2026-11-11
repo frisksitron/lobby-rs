@@ -3,11 +3,7 @@
 
 use gpui_kit::{
     App, InteractiveElement as _, IntoElement, MouseButton, ParentElement as _, SharedString,
-    Styled as _, TestSupportExt as _,
-    assets::IconName,
-    component::{ActiveTheme as _, Icon},
-    div,
-    prelude::FluentBuilder as _,
+    Styled as _, TestSupportExt as _, assets::IconName, div, prelude::FluentBuilder as _,
 };
 use lobby_client::compose::MentionTarget;
 
@@ -16,7 +12,9 @@ use super::{
     mention_chip::fill,
     tokens::{BORDER, nested_radius},
 };
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
+use crate::ui::Icon;
 
 const WIDTH: f32 = 200.;
 const PAD: f32 = 4.;
