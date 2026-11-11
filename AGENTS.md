@@ -14,8 +14,14 @@ is no separate spec, and the Rust types in `lobby-protocol` are the wire contrac
   Issue, Magic Code. The Lobbies a person has added on this device are "Lobbies", never
   "Known Lobbies".
 - Make the desktop app delightful, and keep it usable in the small window (480×400). Build UI from
-  the shared components in `lobby-desktop/src/components` and gpui-kit's components before writing
-  new ones.
+  `lobby-desktop/src/components` and the controls in `lobby-desktop/src/ui` before writing new
+  ones. `ui` draws Lobby's look on gpui-kit's unstyled `base` layer, and a control enters it once
+  two components use it. `ui` imports nothing from `components`, `lobby_client` or
+  `lobby_protocol`.
+- gpui-kit's styled layer (`gpui_kit::component`) is reached only through
+  `lobby-desktop/src/kit.rs`, which keeps what `base` has no primitive for: the theme, menus, the
+  select, dialogs, toasts, the title bar and the message scroller. `cargo xtask check-kit`
+  enforces this.
 - Never copy code from other projects into this repository. They are for ideas only.
 
 ## Dependency rules

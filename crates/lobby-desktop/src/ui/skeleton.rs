@@ -9,9 +9,7 @@ use gpui_kit::{
 
 use crate::kit::ActiveTheme as _;
 
-/// One breath, out and back.
 const BREATH: Duration = Duration::from_secs(2);
-/// How far the placeholder fades at the bottom of the breath.
 const FADE: f32 = 0.5;
 
 #[derive(Default, IntoElement)]

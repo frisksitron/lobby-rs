@@ -8,7 +8,7 @@ use gpui_kit::{
     SharedString, StatefulInteractiveElement as _, Styled as _, div, px,
 };
 
-use crate::kit::tooltip::Tooltip;
+use crate::ui;
 
 pub fn truncated_text(id: impl Into<ElementId>, text: SharedString) -> Div {
     let cut = Rc::new(Cell::new(false));
@@ -29,9 +29,9 @@ pub fn truncated_text(id: impl Into<ElementId>, text: SharedString) -> Div {
                 .min_w_0()
                 .truncate()
                 .child(text.clone())
-                .tooltip(move |window, cx| {
+                .tooltip(move |_, cx| {
                     if cut.get() {
-                        Tooltip::new(whole.clone()).build(window, cx)
+                        ui::tooltip(whole.clone(), cx)
                     } else {
                         cx.new(|_| EmptyView).into()
                     }

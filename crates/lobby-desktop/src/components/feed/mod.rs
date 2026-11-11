@@ -1,7 +1,8 @@
-//! The Chat feed: group-chat rows built from gpui-kit's `message` components, day dividers, "Load
-//! Older Messages" at the top, and the typing line, "Jump to latest" and "New Messages" pill
-//! floating over the foot, so nothing moves when they come and go. A Message on its way changes
-//! colour only: its row has its final height from the first frame.
+//! The Chat feed: group-chat rows (the avatar column, then the author's header and the Message's
+//! Markdown), day dividers, "Load Older Messages" at the top, and the typing line, "Jump to
+//! latest" and "New Messages" pill floating over the foot, so nothing moves when they come and
+//! go. A Message on its way changes colour only: its row has its final height from the first
+//! frame.
 //!
 //! The list is gpui-kit's `MessageScroller`. Rows are diffed against the last frame's (common
 //! prefix and suffix), so a Message arriving, a pending one confirmed or a page prepended
@@ -20,12 +21,15 @@ use std::{
 
 use chrono::NaiveDate;
 use gpui_kit::{
-    Animation, AnimationExt as _, AnyElement, App, AppContext as _, Context, Entity, Hsla,
-    ImageSource, InteractiveElement as _, IntoElement, ParentElement as _, Role, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled as _, Subscription,
-    TestSupportExt as _, Window, assets::IconName, base::TextSelection, div, linear_color_stop,
-    linear_gradient, prelude::FluentBuilder as _, pulsating_between, px, relative, rems,
-    transparent_black,
+    Animation, AnimationExt as _, AnyElement, App, AppContext as _, Context, Entity, FontWeight,
+    HighlightStyle, Hsla, ImageSource, InteractiveElement as _, IntoElement, ParentElement as _,
+    Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled as _,
+    Subscription, TestSupportExt as _, Window,
+    assets::IconName,
+    base::{SelectionFormat, TextSelection, TextView, TextViewStyle, v_flex},
+    div, linear_color_stop, linear_gradient,
+    prelude::FluentBuilder as _,
+    pulsating_between, px, relative, rems,
 };
 use lobby_client::{History, LobbyState, Older, Phase, copy};
 use lobby_protocol::MessageId;
@@ -44,10 +48,7 @@ use crate::{
     kit::{
         ActiveTheme as _,
         menu::{ContextMenuExt as _, PopupMenu},
-        message::{Message, MessageAvatar, MessageContent, MessageHeader},
         message_scroller::{MessageScroller, MessageScrollerState},
-        text::{SelectionFormat, TextView, TextViewStyle},
-        tooltip::Tooltip,
     },
     scale::{device_in, u},
     ui::{self, Icon, Separator, Spinner},
@@ -69,7 +70,7 @@ const MENTION_BAR_INSET: f32 = 4.;
 pub const HEADER_HEIGHT: f32 = 20.;
 
 pub const GUTTER_X: f32 = 16.;
-/// The kit's gap after the avatar column.
+const AVATAR_COLUMN: f32 = 32.;
 const AVATAR_GAP: f32 = 8.;
 pub const TEXT_SIZE: f32 = 16.;
 pub const LINE_HEIGHT: f32 = 1.4;
@@ -84,7 +85,7 @@ pub const FOOT_ROOM: f32 = 22.;
 const PILL_BAND: f32 = 44.;
 
 pub fn card_max_w(column_w: f32) -> f32 {
-    column_w - (GUTTER_X + MESSAGE_AVATAR.px() + AVATAR_GAP) - GUTTER_X
+    column_w - (GUTTER_X + AVATAR_COLUMN + AVATAR_GAP) - GUTTER_X
 }
 
 pub type FeedAction = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -474,26 +475,48 @@ pub fn feed_row(
     }
 }
 
+/// Passed to every view rather than installed as the default, which the kit's theme rewrites on
+/// each change.
 fn chat_text_style(cx: &App) -> TextViewStyle {
-    let mut code = StyleRefinement::default();
-    code.padding.left = Some(u(10.).into());
-    code.padding.right = Some(u(10.).into());
-    code.padding.top = Some(u(6.).into());
-    code.padding.bottom = Some(u(6.).into());
-    code.max_size.height = Some(u(300.).into());
+    let theme = cx.theme();
+    let radius = theme.semantic_tokens().radius.md;
+    let mut code = StyleRefinement::default()
+        .rounded(radius)
+        .px(u(10.))
+        .py(u(6.))
+        .max_h(u(300.));
     code.overflow.y = Some(gpui_kit::Overflow::Scroll);
-    let mut style = TextViewStyle::default()
-        .paragraph_gap(rems(0.25))
-        .heading_font_size(|level, base| match level {
-            1 => base * 1.4,
-            2 => base * 1.25,
-            3 => base * 1.12,
-            _ => base,
+    let body = device_in(TEXT_SIZE, cx);
+    TextViewStyle::default()
+        .with_foreground(theme.foreground)
+        .with_muted_foreground(theme.muted_foreground)
+        .with_link(theme.link)
+        .with_selection(theme.selection)
+        .with_code_background(theme.muted)
+        .with_border(theme.border)
+        .with_paragraph_gap(rems(0.25))
+        .with_heading(move |level| {
+            let scale = match level {
+                1 => 1.4,
+                2 => 1.25,
+                3 => 1.12,
+                _ => 1.,
+            };
+            StyleRefinement::default().text_size(body * scale)
         })
-        .code_block(code);
-    style.heading_base_font_size = device_in(TEXT_SIZE, cx);
-    style.is_dark = true;
-    style
+        .with_code_block(code)
+        .with_inline_code(HighlightStyle {
+            background_color: Some(theme.accent),
+            ..Default::default()
+        })
+        .with_table(StyleRefinement::default().rounded(radius))
+        .with_table_head(
+            StyleRefinement::default()
+                .bg(theme.table_head)
+                .text_color(theme.table_head_foreground),
+        )
+        .with_table_row_hover(theme.table_hover)
+        .with_dark(true)
 }
 
 fn history_row(older: Older, on_load: FeedAction, cx: &App) -> AnyElement {
@@ -558,7 +581,7 @@ fn divider(
             div()
                 .flex_shrink_0()
                 .text_xs()
-                .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                .font_weight(FontWeight::SEMIBOLD)
                 .text_color(text)
                 .child(label),
         )
@@ -574,7 +597,7 @@ fn day_divider(key: &SharedString, label: &SharedString) -> AnyElement {
         .child(
             Separator::horizontal()
                 .label(label.clone())
-                .font_weight(gpui_kit::FontWeight::SEMIBOLD),
+                .font_weight(FontWeight::SEMIBOLD),
         )
         .test_support()
         .into_any_element()
@@ -622,11 +645,14 @@ fn message_row(
         theme.primary,
     );
     let avatar_w = MESSAGE_AVATAR.px();
-    let gutter = MessageAvatar::new()
+    let gutter = div()
+        .relative()
+        .flex()
+        .flex_none()
+        .items_center()
+        .justify_center()
         .self_start()
-        .w(u(avatar_w))
-        .bg(transparent_black())
-        .rounded(u(0.))
+        .w(u(AVATAR_COLUMN))
         .overflow_hidden();
     let avatar = if m.first {
         gutter.h(u(avatar_w)).child(
@@ -637,11 +663,7 @@ fn message_row(
             ),
         )
     } else {
-        let slot = gutter
-            .h(u(TEXT_SIZE * LINE_HEIGHT))
-            .flex()
-            .items_center()
-            .justify_center();
+        let slot = gutter.h(u(TEXT_SIZE * LINE_HEIGHT));
         match m.pending {
             Some(p) => slot.child(pending_mark(&m.key, p, muted)),
             None => {
@@ -656,7 +678,7 @@ fn message_row(
                         .text_size(u(10.5))
                         .text_color(muted)
                         .child(m.time.clone())
-                        .tooltip(move |window, cx| Tooltip::new(full.clone()).build(window, cx))
+                        .tooltip(move |_, cx| ui::tooltip(full.clone(), cx))
                         .test_support(),
                 )
             }
@@ -664,17 +686,23 @@ fn message_row(
     };
     let header = m.first.then(|| {
         let full = m.full_time.clone();
-        MessageHeader::new()
-            .content_inset(false)
+        div()
+            .flex()
+            .items_center()
+            .max_w_full()
+            .min_w_0()
             .h(u(HEADER_HEIGHT))
             .gap_2()
-            .items_center()
+            .text_xs()
+            .line_height(relative(1.25))
+            .font_weight(FontWeight::MEDIUM)
+            .text_color(muted)
             .child(
                 div()
                     .min_w_0()
                     .truncate()
                     .text_sm()
-                    .font_weight(gpui_kit::FontWeight::SEMIBOLD)
+                    .font_weight(FontWeight::SEMIBOLD)
                     .text_color(fg)
                     .when(m.deactivated, |d| d.text_color(muted))
                     .child(m.author.clone()),
@@ -684,10 +712,10 @@ fn message_row(
                     .id(SharedString::from(format!("{}-time", m.key)))
                     .flex_shrink_0()
                     .text_xs()
-                    .font_weight(gpui_kit::FontWeight::NORMAL)
+                    .font_weight(FontWeight::NORMAL)
                     .text_color(muted)
                     .child(m.time.clone())
-                    .tooltip(move |window, cx| Tooltip::new(full.clone()).build(window, cx))
+                    .tooltip(move |_, cx| ui::tooltip(full.clone(), cx))
                     .test_support(),
             )
             .when(m.edited, |h| h.child(edited_mark(&m.key, muted)))
@@ -730,34 +758,42 @@ fn message_row(
     });
     let files =
         (!m.attachments.is_empty()).then(|| attachment_cards(&m.key, &m.attachments, cards, cx));
-    let content = MessageContent::new().child(
-        div()
-            .debug_selector({
-                let key = m.key.clone();
-                move || format!("message-text-{key}")
-            })
-            .w_full()
-            .min_w_0()
-            .max_w(u(MEASURE))
-            .text_size(u(TEXT_SIZE))
-            .line_height(relative(LINE_HEIGHT))
-            .text_color(fg)
-            .when(m.pending.is_some(), |d| d.text_color(muted))
-            .children(text)
-            // A later row has no header to carry the mark.
-            .when(m.edited && !m.first, |d| {
-                d.child(div().flex().child(edited_mark(&m.key, muted)))
-            })
-            .children(files.map(|f| div().when(m.pending.is_some(), |d| d.opacity(0.7)).child(f))),
-    );
-    let message = Message::new()
+    let content = div()
+        .debug_selector({
+            let key = m.key.clone();
+            move || format!("message-text-{key}")
+        })
+        .w_full()
+        .min_w_0()
+        .max_w(u(MEASURE))
+        .text_size(u(TEXT_SIZE))
+        .line_height(relative(LINE_HEIGHT))
+        .text_color(fg)
+        .when(m.pending.is_some(), |d| d.text_color(muted))
+        .children(text)
+        .when(m.edited && !m.first, |d| {
+            d.child(div().flex().child(edited_mark(&m.key, muted)))
+        })
+        .children(files.map(|f| div().when(m.pending.is_some(), |d| d.opacity(0.7)).child(f)));
+    let message = div()
         .id(SharedString::from(format!("message-{}", m.key)))
         .role(Role::ListItem)
-        .gap(u(2.))
-        .with_stack_style(StyleRefinement::default().gap(u(1.)))
-        .avatar_slot(avatar)
-        .when_some(header, |msg, h| msg.header(h))
-        .content(content);
+        .relative()
+        .flex()
+        .items_end()
+        .w_full()
+        .min_w_0()
+        .gap(u(AVATAR_GAP))
+        .child(avatar)
+        .child(
+            v_flex()
+                .items_start()
+                .w_full()
+                .min_w_0()
+                .gap(u(1.))
+                .children(header)
+                .child(content),
+        );
     let top = match (m.first, after_divider) {
         (true, false) => GROUP_GAP,
         (true, true) => GROUP_GAP_AFTER_DIVIDER,
@@ -863,7 +899,7 @@ fn pending_mark(key: &SharedString, p: Pending, muted: Hsla) -> AnyElement {
                     .size(u(ICON_XS))
                     .text_color(muted),
             )
-            .tooltip(|window, cx| Tooltip::new(copy::WAITING_TO_SEND).build(window, cx))
+            .tooltip(|_, cx| ui::tooltip(copy::WAITING_TO_SEND, cx))
             .test_support()
             .into_any_element(),
         Pending::Sending => {
@@ -888,7 +924,7 @@ fn pending_mark(key: &SharedString, p: Pending, muted: Hsla) -> AnyElement {
                             move |d, delta| d.opacity(((delta - from) / (1. - from)).clamp(0., 1.)),
                         ),
                 )
-                .tooltip(|window, cx| Tooltip::new(copy::SENDING).build(window, cx))
+                .tooltip(|_, cx| ui::tooltip(copy::SENDING, cx))
                 .test_support()
                 .into_any_element()
         }
@@ -897,7 +933,6 @@ fn pending_mark(key: &SharedString, p: Pending, muted: Hsla) -> AnyElement {
 
 pub fn typing_indicator(line: SharedString, cx: &App) -> AnyElement {
     let muted = cx.theme().muted_foreground;
-    let avatar_w = MESSAGE_AVATAR.px();
     let dot = |i: usize| {
         div().size(u(4.)).rounded_full().bg(muted).with_animation(
             ("typing-dot", i),
@@ -926,7 +961,7 @@ pub fn typing_indicator(line: SharedString, cx: &App) -> AnyElement {
         .child(
             div()
                 .flex_shrink_0()
-                .w(u(avatar_w))
+                .w(u(AVATAR_COLUMN))
                 .flex()
                 .items_center()
                 .justify_center()

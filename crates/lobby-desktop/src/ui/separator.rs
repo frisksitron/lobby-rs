@@ -15,7 +15,6 @@ pub struct Separator {
 }
 
 impl Separator {
-    /// A line running across, between rows.
     pub fn horizontal() -> Self {
         Self {
             axis: Axis::Horizontal,
@@ -24,7 +23,7 @@ impl Separator {
         }
     }
 
-    /// A line running down, between items of a row. It takes the row's height.
+    /// It takes the row's height.
     pub fn vertical() -> Self {
         Self {
             axis: Axis::Vertical,
@@ -32,7 +31,6 @@ impl Separator {
         }
     }
 
-    /// Words on the line, such as a day.
     pub fn label(mut self, label: impl Into<SharedString>) -> Self {
         self.label = Some(label.into());
         self

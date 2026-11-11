@@ -1,7 +1,8 @@
 //! `cargo xtask check-kit`: the desktop draws its controls on gpui-kit's unstyled base layer and
 //! keeps only a few of the kit's styled components. Those reach the crate through one file,
 //! `crates/lobby-desktop/src/kit.rs`, so a new use of the styled layer shows up there in review.
-//! A `component::` path anywhere else in the crate, inline paths included, is a finding.
+//! The word `component` in code anywhere else in the crate is a finding: a path that names the
+//! module, however it is split, aliased or grouped, has to spell it.
 
 use std::{
     fs, io,
@@ -10,7 +11,7 @@ use std::{
 
 const ROOT: &str = "crates/lobby-desktop";
 const FACADE: &str = "src/kit.rs";
-const PATTERN: &str = "component::";
+const WORD: &str = "component";
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Finding {
@@ -63,13 +64,22 @@ fn collect(dir: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
     Ok(())
 }
 
-/// The 1-based lines whose code, comments left out, names a `component::` path.
+/// The 1-based lines whose code, comments left out, has the word `component`.
 fn check_text(text: &str) -> Vec<usize> {
     text.lines()
         .enumerate()
-        .filter(|(_, line)| line.split("//").next().unwrap_or(line).contains(PATTERN))
+        .filter(|(_, line)| has_word(line.split("//").next().unwrap_or(line)))
         .map(|(ix, _)| ix + 1)
         .collect()
+}
+
+fn has_word(code: &str) -> bool {
+    let is_ident = |c: char| c.is_alphanumeric() || c == '_';
+    code.match_indices(WORD).any(|(at, _)| {
+        let before = code[..at].chars().next_back();
+        let after = code[at + WORD.len()..].chars().next();
+        !before.is_some_and(is_ident) && !after.is_some_and(is_ident)
+    })
 }
 
 #[cfg(test)]
@@ -82,5 +92,20 @@ mod tests {
                     let t = cx.global::<gpui_kit::component::Theme>();\n\
                     //! Built on `component::Avatar`'s idea\nuse crate::kit::Icon;\n";
         assert_eq!(check_text(text), vec![2, 4]);
+    }
+
+    #[test]
+    fn an_aliased_split_or_grouped_path_is_found_too() {
+        let aliased = "use gpui_kit::component as styled;\nuse styled::button::Button;\n";
+        let split = "use gpui_kit::component\n    ::button::Button;\n";
+        let grouped = "use gpui_kit::{\n    component,\n    px,\n};\n";
+        assert_eq!(check_text(aliased), vec![1]);
+        assert_eq!(check_text(split), vec![1]);
+        assert_eq!(check_text(grouped), vec![2]);
+    }
+
+    #[test]
+    fn a_longer_word_is_not_the_module() {
+        assert!(check_text("let components = 1;\nfn component_id() {}\n").is_empty());
     }
 }

@@ -28,7 +28,6 @@
 {"click": "switcher-more-0"}
 {"click": "lobby-menu-leave"}
 {"wait": {"visible": "hand-over"}, "timeout_ms": 2000}
-// Enter before a pick names no one, so it does nothing.
 {"press": "enter"}
 {"expect": {"visible": "hand-over"}}
 {"press": "escape"}

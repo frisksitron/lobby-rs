@@ -13,7 +13,10 @@ use gpui_kit::{
     App, AppContext as _, ClipboardEntry, ClipboardItem, Context, DragMoveEvent, Entity,
     EventEmitter, ExternalPaths, Focusable as _, ImageFormat, InteractiveElement as _, IntoElement,
     KeyDownEvent, Keystroke, MouseButton, ParentElement as _, Render, SharedString, Styled as _,
-    Subscription, Task, TestSupportExt as _, Window, assets::IconName, canvas, div,
+    Subscription, Task, TestSupportExt as _, Window,
+    assets::IconName,
+    base::input::{self, Cut, InputEvent, Paste, SelectAll, TextareaState},
+    canvas, div,
     prelude::FluentBuilder as _,
 };
 use lobby_client::{
@@ -28,14 +31,13 @@ use super::{NARROW_BELOW, forward};
 use crate::scale::{design_viewport, device_in, u};
 use crate::{
     components::{
-        FORMAT_BAR_HEIGHT, FormatBar, ICON_XS, INLINE_H, MediaImages, SURFACE_INNER_RADIUS,
-        SURFACE_PAD, SURFACE_RADIUS,
+        FORMAT_BAR_HEIGHT, FormatBar, INLINE_H, MediaImages, SURFACE_INNER_RADIUS, SURFACE_PAD,
+        SURFACE_RADIUS,
         context_menu::{menu_frame, menu_item},
         draft_strip, format_for, mention_chip, mention_menu,
     },
     kit::{
         ActiveTheme as _,
-        input::{self, Cut, InputEvent, Paste, SelectAll, Textarea, TextareaState},
         menu::{ContextMenuExt as _, PopupMenu},
     },
     lobbies::Lobbies,
@@ -191,7 +193,6 @@ impl ComposerView {
                 .auto_grow(1, 6)
                 .submit_on_enter(true)
                 .placeholder(placeholder.clone())
-                // The kit's own menu is the OS's; the field's menu is `input_menu`.
                 .context_menu(false)
         });
         let focus = input.read(cx).focus_handle(cx);
@@ -854,22 +855,25 @@ impl ComposerView {
             .flex_1()
             .w_full()
             .min_w_0()
-            .child(Textarea::new(&self.input).appearance(false).on_paste({
-                let composer = cx.weak_entity();
-                move |item, window, cx| {
-                    // Text wins on a clipboard that also holds a picture or files.
-                    let text = item
-                        .entries()
-                        .iter()
-                        .any(|e| matches!(e, ClipboardEntry::String(_)));
-                    composer
-                        .update(cx, |v, cx| match item.text().filter(|_| text) {
-                            Some(text) => v.paste_url(&text, window, cx),
-                            None => v.paste_files(item, window, cx),
-                        })
-                        .unwrap_or(false)
-                }
-            }))
+            .child(
+                ui::Field::multi_line(&self.input)
+                    .appearance(false)
+                    .on_paste({
+                        let composer = cx.weak_entity();
+                        move |item, window, cx| {
+                            let text = item
+                                .entries()
+                                .iter()
+                                .any(|e| matches!(e, ClipboardEntry::String(_)));
+                            composer
+                                .update(cx, |v, cx| match item.text().filter(|_| text) {
+                                    Some(text) => v.paste_url(&text, window, cx),
+                                    None => v.paste_files(item, window, cx),
+                                })
+                                .unwrap_or(false)
+                        }
+                    }),
+            )
             .children(self.mention_chips(value, cx))
             .test_support()
             .context_menu(input_menu(self.input.clone()));
@@ -889,11 +893,9 @@ impl ComposerView {
         let send = ui::Button::new("send")
             .accessibility_label("Send")
             .debug_selector(|| "send".into())
-            // A filled, nearly round button wants a smaller glyph than the ghost buttons beside it.
             // The plane's weight is in its wide tail, so its box sits a little right of centre.
             .icon(
                 ui::Icon::new(IconName::SendHorizontal)
-                    .size(u(ICON_XS))
                     .relative()
                     .left(u(SEND_NUDGE)),
             )
@@ -966,6 +968,10 @@ fn input_menu(
     input: Entity<TextareaState>,
 ) -> impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static {
     move |menu, window, cx| {
+        let menu_focus = menu.focus_handle(cx);
+        input.update(cx, |state, cx| {
+            state.set_selection_focus(Some(menu_focus), cx)
+        });
         let state = input.read(cx);
         let selected = !state.selected_range().is_empty();
         let has_text = !state.value().is_empty();
@@ -1026,7 +1032,7 @@ impl Render for ComposerView {
                 v.session
                     .update(cx, |s, cx| s.dispatch(Intent::RemoveAttachment(id), cx));
             });
-            draft_strip(&drafts, &self.images, background, retry, remove, cx)
+            draft_strip(&drafts, &self.images, background, retry, remove, window, cx)
         });
         let controls = self.controls(narrow, &value, cx);
         let offer = self.mention_offer(cx);

@@ -20,15 +20,11 @@ use gpui_kit::{
 use super::focus::{RING_OPACITY, RING_WIDTH};
 use crate::{kit::ActiveTheme as _, scale::u};
 
-/// The thumb's size, and how far its top sits above the bar's.
 const THUMB: f32 = 16.;
 const THUMB_RISE: f32 = 5.;
-/// The bar's thickness and the height of the strip that takes a press.
 const BAR: f32 = 6.;
 const GRIP: f32 = 24.;
 
-/// Pointer and key state of the thumb, written by its own listeners and read on the next frame to
-/// size the ring.
 #[derive(Default)]
 struct Touch {
     hovered: bool,
@@ -59,7 +55,6 @@ impl Slider {
         self
     }
 
-    /// The name a screen reader announces.
     pub fn accessibility_label(mut self, label: impl Into<SharedString>) -> Self {
         self.accessibility_label = Some(label.into());
         self
@@ -72,7 +67,6 @@ impl Styled for Slider {
     }
 }
 
-/// What a key asks of the value: a step either way, or an end of the range.
 fn key_move(key: &str, state: &SliderState) -> Option<f32> {
     let step = state.accessibility_step();
     let range = state.max_value() - state.min_value();
@@ -110,9 +104,6 @@ impl RenderOnce for Slider {
             let touch = touch.read(cx);
             focused || touch.hovered || touch.pressed
         };
-        // The ring grows out of the thumb's edge while the pointer is on it or it is dragged
-        // (dragging moves it from under the pointer, so hover alone would flicker), and while the
-        // slider has the keyboard.
         let grown = spring(
             (key, "ring"),
             if active { 1. } else { 0. },
@@ -135,10 +126,6 @@ impl RenderOnce for Slider {
             move |_: &MouseDownEvent, _: &mut Window, cx: &mut App| set_pressed(true, &touch, cx)
         };
         let up = {
-            let touch = touch.clone();
-            move |_: &MouseUpEvent, _: &mut Window, cx: &mut App| set_pressed(false, &touch, cx)
-        };
-        let up_out = {
             let touch = touch.clone();
             move |_: &MouseUpEvent, _: &mut Window, cx: &mut App| set_pressed(false, &touch, cx)
         };
@@ -174,8 +161,8 @@ impl RenderOnce for Slider {
                     .on_hover(hover)
                     // The base thumb stops a press to own the drag, so it is read on the way down.
                     .capture_any_mouse_down(down)
-                    .capture_any_mouse_up(up)
-                    .on_mouse_up_out(MouseButton::Left, up_out)
+                    .capture_any_mouse_up(up.clone())
+                    .on_mouse_up_out(MouseButton::Left, up)
                     .child(
                         div()
                             .flex_none()

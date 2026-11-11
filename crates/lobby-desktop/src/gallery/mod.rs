@@ -4,7 +4,7 @@
 
 #[cfg(not(debug_assertions))]
 compile_error!(
-    "the `gallery` feature is for dev builds only: the component gallery is not part of the app. \
+    "the `gallery` feature is for dev builds only: the gallery is not part of the app. \
      Build releases without it."
 );
 
@@ -141,7 +141,6 @@ impl Gallery {
         &STORIES[self.active]
     }
 
-    /// The story list: a button per story, and the arrow keys move along it as along a toolbar.
     fn stories(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = cx.theme();
         let (fill, edge, muted) = (theme.sidebar, theme.sidebar_border, theme.muted_foreground);

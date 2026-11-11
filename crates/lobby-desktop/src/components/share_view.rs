@@ -39,12 +39,11 @@ use super::{
     BAR_CONTROL_H, BORDER, Callback, ICON_SM, MemberRowModel, SURFACE_RADIUS, live_red,
     picture_backdrop,
 };
-use crate::kit::{ActiveTheme as _, tooltip::Tooltip};
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
 use crate::ui;
 
 const FPS_WINDOW: Duration = Duration::from_secs(1);
-/// The spinner while a Member's screen connects, beside the words.
 const SPINNER_LG: f32 = 24.;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -588,7 +587,7 @@ impl RenderOnce for ShareToolbar {
                     .id("share-let-draw")
                     .debug_selector(|| "share-let-draw".into())
                     .when_some(blocked, |c, why| {
-                        c.tooltip(move |window, cx| Tooltip::new(why).build(window, cx))
+                        c.tooltip(move |_, cx| ui::tooltip(why, cx))
                     })
                     .test_support();
                 Some(control.into_any_element())

@@ -21,10 +21,7 @@ use crate::kit::ActiveTheme as _;
 
 const ENTER: Duration = Duration::from_millis(150);
 const SLIDE: Duration = Duration::from_millis(200);
-/// How far a tooltip rises as it fades in.
 const RISE: Pixels = px(4.); // px: the transition takes pixels
-/// Neighbours whose tops lie this close share a row, so their tooltip slides between them; across
-/// rows it moves at once.
 const SAME_ROW: Pixels = px(10.); // px: compared with measured bounds
 
 /// Registers the overlay for the windows opened after it.
@@ -32,8 +29,6 @@ pub(crate) fn init(cx: &mut App) {
     Root::register_plugin::<TooltipHost>(cx, TooltipHost::new);
 }
 
-/// One window's tooltip: the overlay that shows it, the control the pointer is on, and the
-/// control last pressed, whose tooltip stays away until the pointer leaves it.
 pub(crate) struct TooltipHost {
     overlay: Entity<TooltipOverlay>,
     hovered: Option<(GlobalElementId, Weak<()>)>,
@@ -112,7 +107,6 @@ impl Render for TooltipHost {
     }
 }
 
-/// Where a control is this frame, and a token that lives as long as the control is drawn.
 #[derive(Default)]
 struct Trigger {
     id: Option<GlobalElementId>,
@@ -123,7 +117,7 @@ struct Trigger {
 #[derive(Default)]
 struct Alive(Rc<()>);
 
-/// Gives `control` the tooltip `text`. A window without the host draws none.
+/// A window without the host draws no tooltip.
 pub(crate) fn with_tooltip<E>(control: E, text: SharedString) -> E
 where
     E: StatefulInteractiveElement + ParentElement,
@@ -154,7 +148,6 @@ where
             let alive = trigger.alive.clone();
             let overlay = host.update(cx, |host, _| {
                 if *entered {
-                    // A press keeps the tooltip away until the pointer leaves the control.
                     if host.pressed == Some(bounds) {
                         return None;
                     }
@@ -197,7 +190,12 @@ where
         })
 }
 
-/// The tooltip itself: a line of text on the popover surface.
+/// The tooltip of an element that is not one of Lobby's controls, for gpui's own `.tooltip(..)`:
+/// the same view as the controls' tooltips, placed where gpui places it.
+pub fn tooltip(text: impl Into<SharedString>, cx: &mut App) -> AnyView {
+    cx.new(|_| TooltipText(text.into())).into()
+}
+
 struct TooltipText(SharedString);
 
 impl Render for TooltipText {
@@ -225,8 +223,6 @@ impl Render for TooltipText {
     }
 }
 
-/// Rises and fades in on entering; along a row of neighbours it slides from the last control to
-/// this one instead.
 fn transition(
     view: AnyView,
     transition: TooltipTransition,

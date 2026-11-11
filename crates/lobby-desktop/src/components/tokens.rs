@@ -35,7 +35,6 @@ impl AvatarSize {
     }
 }
 
-// The control and icon sizes belong to `ui`, whose controls take them.
 pub use crate::ui::{
     BAR_CONTROL_H, FIELD_H, ICON_MD, ICON_SM, ICON_XS, INLINE_H, PAGE_CONTROL_H,
     PAGE_CONTROL_RADIUS, ROW_HEIGHT,

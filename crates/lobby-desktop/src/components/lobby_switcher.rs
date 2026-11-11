@@ -30,7 +30,7 @@ use crate::components::{
     truncated_text,
 };
 use crate::kit::{
-    ActiveTheme as _, ThemeStyled as _,
+    ActiveTheme as _,
     menu::{DropdownMenu as _, PopupMenuItem},
 };
 use crate::scale::{design_viewport, device, u};
@@ -228,7 +228,6 @@ impl RenderOnce for LobbySwitcher {
             .accessibility_label(accessible)
             .debug_selector(|| "lobby-switcher".into())
             .px(u(TRIGGER_PAD_X))
-            // A button never shrinks by default; this one must, for its name to.
             .flex_shrink(1.)
             .min_w_0()
             .max_w_full()
@@ -339,8 +338,8 @@ fn lobby_menu(
     let panel = div()
         .id("lobby-menu")
         .debug_selector(|| "lobby-menu".into())
-        .w(u(LOBBY_MENU_WIDTH))
-        .popover_style(cx)
+        .w(u(LOBBY_MENU_WIDTH));
+    let panel = ui::popover_surface(panel, cx)
         .p(u(MEMBER_CARD_PAD))
         // A disabled line stops its press before it bubbles here, so pressing one closes both.
         .on_any_mouse_down(move |_, _, cx| pressed.update(cx, |m, _| m.pressed = true))
@@ -417,7 +416,7 @@ fn lobby_row(
             .h(u(MORE_SIZE))
             .flex_shrink_0()
             .text_color(muted)
-            .icon(ui::Icon::new(IconName::Ellipsis).size(u(ICON_SM)))
+            .icon(IconName::Ellipsis)
             .tooltip(copy::LOBBY_MENU)
             .selected(open)
             .on_click(move |_, window, cx| {

@@ -99,10 +99,6 @@ fn handler(h: &ClickHandler) -> impl Fn(&ClickEvent, &mut Window, &mut App) + 's
     move |e, w, cx| h(e, w, cx)
 }
 
-/// Mute, Deafen and Share Screen. An on state is the selected one, which the group also says as
-/// toggled on: Mute and Deafen filled coral, so being muted reads at a glance on either surface,
-/// Share Screen tinted lavender. Each label says what a press does. A switched-off control stays
-/// solid while it waits, as a connecting group does.
 fn voice_group(
     model: &VoiceBarModel,
     actions: &VoiceBarActions,
@@ -204,7 +200,6 @@ fn voice_group(
             ]
         }
     };
-    // One segmented control: only the group's outer corners round.
     let [first, middle, last] = buttons.map(|b| {
         let on = b.is_selected();
         b.toggled(on)

@@ -1,6 +1,11 @@
 use gpui_kit::{
-    Axis, Context, IntoElement as _, ParentElement as _, Styled as _, Window, assets::IconName,
-    base::Toolbar, div, prelude::FluentBuilder as _, px, relative,
+    Axis, Context, InteractiveElement as _, IntoElement as _, ParentElement as _, Styled as _,
+    Window,
+    assets::IconName,
+    base::{Popover, Toolbar, v_flex},
+    div,
+    prelude::FluentBuilder as _,
+    px, relative,
 };
 
 use super::{
@@ -8,16 +13,19 @@ use super::{
     stories::{caption, wrap},
 };
 use crate::components::{BarButton, SURFACE_INNER_RADIUS, primary_button};
-use crate::kit::{ActiveTheme as _, popover::Popover};
+use crate::kit::ActiveTheme as _;
 use crate::scale::{device_in, u};
 use crate::ui::{self, Icon};
 
-/// A button of the page tier, the one the sections below dress in each variant and state.
 fn page(id: &'static str) -> ui::Button {
     ui::Button::new(id).size(ui::Size::Page)
 }
 
-pub(super) fn controls(g: &mut Gallery, _: &mut Window, cx: &mut Context<Gallery>) -> Vec<Section> {
+pub(super) fn controls(
+    g: &mut Gallery,
+    window: &mut Window,
+    cx: &mut Context<Gallery>,
+) -> Vec<Section> {
     let variants = [
         ("default", page("k-default").label("Default")),
         (
@@ -309,17 +317,24 @@ pub(super) fn controls(g: &mut Gallery, _: &mut Window, cx: &mut Context<Gallery
             wrap([caption(
                 "click me",
                 Popover::new("k-popover")
+                    .offset(u(4.).to_pixels(window.rem_size()))
                     .trigger(
                         page("k-popover-trigger")
                             .variant(ui::Variant::Outline)
                             .label("Connected"),
                     )
                     .content(|_, _, cx| {
-                        div()
-                            .w(px(220.))
-                            .text_sm()
-                            .text_color(cx.theme().foreground)
-                            .child("A popover holds a few lines and the one action that helps.")
+                        ui::popover_surface(v_flex().id("content").occlude(), cx)
+                            .p_3()
+                            .child(
+                                div()
+                                    .w(px(220.))
+                                    .text_sm()
+                                    .text_color(cx.theme().foreground)
+                                    .child(
+                                        "A popover holds a few lines and the one action that helps.",
+                                    ),
+                            )
                     }),
                 cx,
             )]),

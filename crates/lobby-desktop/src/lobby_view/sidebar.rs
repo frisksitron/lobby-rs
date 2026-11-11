@@ -7,17 +7,24 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    rc::Rc,
     time::{Duration, Instant},
 };
 
 use gpui_kit::{
-    Animation, AnimationExt as _, AnyElement, AnyView, AppContext as _, Axis, Context, Entity,
+    Animation, AnimationExt as _, AnyElement, AnyView, App, AppContext as _, Axis, Context, Entity,
     EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _, Render,
     SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled as _, Subscription,
     TestSupportExt as _, Window,
-    base::slider::{SliderEvent, SliderState},
-    div, ease_out_quint, linear_color_stop, linear_gradient,
+    base::{
+        HandleEdge, InteractiveElementExt as _, ResizeHandleContext, ResizeHandleRenderer,
+        ResizeHandleState, Transition, resize_handle,
+        slider::{SliderEvent, SliderState},
+        transition,
+    },
+    deferred, div, ease_out_quint, linear_color_stop, linear_gradient,
     prelude::FluentBuilder as _,
+    px,
 };
 use lobby_client::{LobbyState, UiEffect, Volume};
 
@@ -30,10 +37,7 @@ use crate::{
         BORDER, MEMBER_ROW_GAP, MediaImages, SURFACE_PAD, SURFACE_RADIUS, Sharer, VoiceBarActions,
         VoiceFoot, Waits, card_surface, floating_sheet, nested_radius, voice_bar_model,
     },
-    kit::{
-        ActiveTheme as _, InteractiveElementExt as _,
-        resizable::{HandleEdge, resize_handle},
-    },
+    kit::ActiveTheme as _,
     lobbies::Lobbies,
     session_entity::{SessionEntity, SessionUiEvent},
 };
@@ -126,6 +130,48 @@ impl Render for SidebarDrag {
         gpui_kit::Empty
     }
 }
+
+fn edge_appearance() -> ResizeHandleRenderer {
+    Rc::new(|handle, window, cx| Some(edge_line(handle, window, cx)))
+}
+
+fn edge_line(handle: &ResizeHandleContext, window: &mut Window, cx: &mut App) -> AnyElement {
+    let (length, opacity) = match handle.state() {
+        ResizeHandleState::Idle => (0., 0.),
+        ResizeHandleState::Hovered => (20., 0.35),
+        ResizeHandleState::Pressed => (28., 0.6),
+        ResizeHandleState::Dragging => (44., 0.9),
+    };
+    let motion = cx.theme().motion_tokens();
+    let policy = Transition::new(motion.duration_fast).easing(motion.easing_move.clone());
+    // Sampled on every frame, at rest too, so a new hover starts from where the last one ended.
+    let length = transition("sidebar-edge-length", length, policy.clone(), window, cx);
+    let opacity = transition("sidebar-edge-opacity", opacity, policy, window, cx).clamp(0., 1.);
+    let theme = cx.theme();
+    div()
+        .flex_none()
+        .flex()
+        .items_center()
+        .w(px(1.)) // px: hairline
+        .h_full()
+        .bg(theme.border)
+        .when(length > 0.5, |line| {
+            // Deferred, so the sheet's clip does not take its outer pixel past the border.
+            line.child(deferred(
+                div()
+                    .flex_none()
+                    .w(px(EDGE_PILL_W)) // px: drawn across a hairline
+                    .h(px(length)) // px: drawn along a hairline
+                    .ml(px((1. - EDGE_PILL_W) / 2.)) // px: centred on the hairline
+                    .rounded_full()
+                    .bg(theme.muted_foreground)
+                    .opacity(opacity),
+            ))
+        })
+        .into_any_element()
+}
+
+const EDGE_PILL_W: f32 = 3.;
 
 /// What a row or the Member panel asks of the Lobby view.
 pub enum SidebarEvent {
@@ -313,7 +359,7 @@ impl MemberSidebar {
         }
     }
 
-    pub fn layout(&self, window: &Window, cx: &gpui_kit::App) -> SidebarLayout {
+    pub fn layout(&self, window: &Window, cx: &App) -> SidebarLayout {
         let lobbies = self.lobbies.read(cx);
         sidebar_layout(
             f32::from(window.viewport_size().width),
@@ -326,7 +372,7 @@ impl MemberSidebar {
     /// The sidebar in the Lobby body, cached: a keystroke, a frame of a share or a pulse in the
     /// feed does not render it again. The body lays it out at the box its render fills, without
     /// rendering it.
-    pub fn cached(sidebar: &Entity<Self>, window: &Window, cx: &gpui_kit::App) -> AnyElement {
+    pub fn cached(sidebar: &Entity<Self>, window: &Window, cx: &App) -> AnyElement {
         let this = sidebar.read(cx);
         let style = StyleRefinement::default();
         let style = match this.layout(window, cx) {
@@ -340,7 +386,7 @@ impl MemberSidebar {
     }
 
     /// Its width in design pixels in this window; `None` while it is folded away or put away.
-    pub fn shown(&self, window: &Window, cx: &gpui_kit::App) -> Option<f32> {
+    pub fn shown(&self, window: &Window, cx: &App) -> Option<f32> {
         self.layout(window, cx).docked()
     }
 
@@ -389,12 +435,10 @@ impl MemberSidebar {
         self.resize(Some(wanted), COLLAPSE_SLACK, window, cx);
     }
 
-    /// Docked, the kit's resize handle lies on the sheet's left border, its hairline the border's
-    /// own colour, and stops short of the rounded corners, where a straight line would show. Its
-    /// band lies inside the sheet, so it never takes a click from the feed.
     fn edge(&self, cx: &Context<Self>) -> impl IntoElement {
         let sidebar = cx.weak_entity();
         let handle = resize_handle::<SidebarDrag, SidebarDrag>("sidebar-edge", Axis::Horizontal)
+            .with_appearance(edge_appearance())
             .inside(HandleEdge::Leading)
             .on_drag(SidebarDrag, move |drag, offset, _, cx| {
                 let _ = sidebar.update(cx, |v, _| v.grab = f32::from(offset.x));

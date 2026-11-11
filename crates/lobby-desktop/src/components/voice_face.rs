@@ -15,7 +15,7 @@ use super::{
     AvatarState, Callback, MemberAvatar, MemberRowModel, PictureOf, Sharer, Tile, TilePaint,
     TilePress, tokens::AvatarSize, voice_bar::STRIP_INNER_RADIUS,
 };
-use crate::kit::{ActiveTheme as _, tooltip::Tooltip};
+use crate::kit::ActiveTheme as _;
 use crate::scale::{device_in, u};
 use crate::ui::{self, Icon};
 
@@ -221,7 +221,7 @@ impl RenderOnce for VoiceFace {
                 .items_center()
                 .justify_center()
                 .child(avatar)
-                .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+                .tooltip(move |_, cx| ui::tooltip(tip.clone(), cx))
                 .when_some(context, |d, context| {
                     d.on_mouse_down(MouseButton::Right, context)
                 })

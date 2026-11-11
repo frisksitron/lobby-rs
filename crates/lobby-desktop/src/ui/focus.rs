@@ -9,7 +9,6 @@ use gpui_kit::{
 
 use crate::kit::ActiveTheme as _;
 
-/// A band this wide outside the control's edge, in the theme's ring colour at this opacity.
 pub(super) const RING_WIDTH: f32 = 3.;
 pub(super) const RING_OPACITY: f32 = 0.5;
 

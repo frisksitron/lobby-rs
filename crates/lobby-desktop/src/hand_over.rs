@@ -22,19 +22,15 @@ use crate::scale::u;
 use crate::ui;
 
 const HEIR_ROW_H: f32 = ROW_HEIGHT;
-/// The radio's circle and the tick inside it, at 100%.
 const RADIO: f32 = 16.;
 const TICK: f32 = 12.;
 
 pub struct HandOverView {
     heirs: Vec<(UserId, SharedString)>,
     picked: Option<usize>,
-    /// One per heir, so an arrow key can move the focus along with the pick.
     focus: Vec<FocusHandle>,
 }
 
-/// One heir's radio: a circle that fills and ticks when it is the pick. Presses do not take the
-/// focus, so the ring means the keyboard.
 #[derive(IntoElement)]
 struct HeirRadio {
     id: ElementId,
@@ -43,10 +39,8 @@ struct HeirRadio {
     focus: FocusHandle,
     position: (usize, usize),
     name: SharedString,
-    on_pick: Pick,
+    on_pick: ui::ClickHandler,
 }
-
-type Pick = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 impl RenderOnce for HeirRadio {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
@@ -119,7 +113,6 @@ impl HandOverView {
         }
     }
 
-    /// Who is picked now.
     pub fn heir(&self) -> Option<UserId> {
         self.picked.map(|ix| self.heirs[ix].0.clone())
     }
@@ -129,15 +122,16 @@ impl HandOverView {
         cx.notify();
     }
 
-    /// An arrow key moves the pick `by` places along the list, round its ends, and the focus with
-    /// it, as a group of radios does: from the focused heir, or from the pick when the focus is
-    /// elsewhere, or to the first or the last of the list when there is neither.
     fn step(&mut self, by: isize, window: &mut Window, cx: &mut Context<Self>) {
         let len = self.heirs.len() as isize;
         if len == 0 {
             return;
         }
-        let from = (self.focus.iter().position(|h| h.is_focused(window))).or(self.picked);
+        let from = self
+            .focus
+            .iter()
+            .position(|h| h.is_focused(window))
+            .or(self.picked);
         let ix = match from {
             Some(at) => (at as isize + by).rem_euclid(len) as usize,
             None if by > 0 => 0,
@@ -194,7 +188,6 @@ impl Render for HandOverView {
         };
         let count = self.heirs.len();
         self.focus.resize_with(count, || cx.focus_handle());
-        // Tab enters the group at its pick, or at its first heir while there is none.
         let tab_ix = self.picked.unwrap_or(0);
         let rows = self.heirs.iter().enumerate().map(|(ix, (_, name))| {
             let picked = self.picked == Some(ix);

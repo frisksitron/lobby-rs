@@ -10,7 +10,6 @@ use gpui_kit::{
 use super::{ICON_MD, Icon};
 use crate::scale::u;
 
-/// One turn.
 const TURN: Duration = Duration::from_millis(800);
 
 #[derive(IntoElement)]
@@ -35,7 +34,6 @@ impl Spinner {
         Self::default()
     }
 
-    /// The glyph that turns, where the default does not suit its place.
     pub fn icon(mut self, icon: IconName) -> Self {
         self.icon = icon;
         self

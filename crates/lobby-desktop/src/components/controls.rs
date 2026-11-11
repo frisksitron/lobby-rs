@@ -1,25 +1,22 @@
 //! Fields, selects and dialogs at the heights of the surface they stand on (see `ui::Size`), so a
-//! page never sizes a control by hand. The onboarding screens' pair is
-//! [`FIELD_H`](crate::ui::FIELD_H) tall; a page's and a dialog's is [`PAGE_CONTROL_H`].
+//! page never sizes a control by hand.
 
-use gpui_kit::{App, Entity, ParentElement as _, Styled as _, Window};
+use gpui_kit::{App, Entity, ParentElement as _, Styled as _, Window, base::input::InputState};
 
 use super::{PAGE_CONTROL_H, PAGE_CONTROL_RADIUS, SURFACE_INNER_RADIUS};
 use crate::kit::{
-    Sizable as _, WindowExt as _,
+    WindowExt as _,
     dialog::{AlertDialog, DialogFooter},
-    input::{Input, InputState},
     searchable_list::{SearchableListDelegate, SearchableListItem},
     select::{Select, SelectState},
 };
 use crate::scale::u;
 use crate::ui;
 
-/// The onboarding step's one field: the kit's large size is [`FIELD_H`](crate::ui::FIELD_H) tall.
-pub fn step_input(state: &Entity<InputState>, id: &'static str) -> Input {
-    Input::new(state)
+pub fn step_input(state: &Entity<InputState>, id: &'static str) -> ui::Field {
+    ui::Field::new(state)
         .id(id)
-        .large()
+        .size(ui::Size::Step)
         .rounded(u(SURFACE_INNER_RADIUS))
 }
 

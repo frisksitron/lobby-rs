@@ -23,12 +23,10 @@ use crate::{
     scale::{device, u},
 };
 
-/// The track's size at 100%, and the thumb's, at the two sizes.
 const TRACK: (f32, f32) = (36., 20.);
 const THUMB: f32 = 16.;
 const TRACK_SMALL: (f32, f32) = (28., 16.);
 const THUMB_SMALL: f32 = 12.;
-/// The room between the track's edge and the thumb.
 const INSET: f32 = 2.;
 
 type Change = Rc<dyn Fn(bool, &mut Window, &mut App)>;
@@ -120,7 +118,6 @@ impl RenderOnce for Switch {
         let disabled_bg = if checked { checked_bg } else { unchecked_bg }.opacity(0.5);
         let thumb_bg: Background = theme.tokens.switch_thumb.into();
         let (clear, ring_color, muted) = (theme.transparent, theme.ring, theme.muted_foreground);
-        // A pill, and as round as the theme allows when it squares its corners.
         let radius = if theme.radius >= device(4., window) {
             device(track_h, window)
         } else {
@@ -134,8 +131,7 @@ impl RenderOnce for Switch {
         let focused = handle.is_focused(window) && !self.embedded && !disabled;
 
         // The thumb's place is geometry, not a semantic state: a checked style that set `left`
-        // would outrank the instance style. The spring owns it end to end and turns round from
-        // wherever the thumb is when the switch is toggled again mid-travel.
+        // would outrank the instance style.
         let travel: Pixels = device(track_w - thumb - INSET * 2., window);
         let thumb_x = spring(
             (self.id.clone(), "thumb"),
@@ -154,8 +150,6 @@ impl RenderOnce for Switch {
             .rounded(radius)
             .flex()
             .items_center()
-            // The thumb's inset is a 1px edge plus 1px of padding: the focus ring tints the edge,
-            // and that line keeps the ring visible round an unchecked track.
             .border_1()
             .border_color(clear)
             .p_px()

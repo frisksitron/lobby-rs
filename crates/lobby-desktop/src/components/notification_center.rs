@@ -10,8 +10,12 @@ use std::time::Duration;
 use gpui_kit::{
     Anchor, Animation, AnimationExt as _, AnyElement, App, Hsla, InteractiveElement as _,
     IntoElement, ParentElement as _, Pixels, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window, assets::IconName,
-    canvas, div, prelude::FluentBuilder as _, relative,
+    StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window,
+    assets::IconName,
+    base::{Popover, Scrollbar, ScrollbarAxis, v_flex},
+    canvas, div,
+    prelude::FluentBuilder as _,
+    relative,
 };
 use lobby_client::{
     Issue, IssueAction, IssueKind, LobbyState, Severity, Source, copy, local_date_time, local_time,
@@ -19,12 +23,7 @@ use lobby_client::{
 };
 use lobby_protocol::{AccessRequestId, UnixMs};
 
-use crate::kit::{
-    ActiveTheme as _,
-    popover::Popover,
-    scroll::{Scrollbar, ScrollbarAxis},
-    tooltip::Tooltip,
-};
+use crate::kit::ActiveTheme as _;
 use crate::scale::{design_viewport, u};
 use crate::ui::{self, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Icon};
 use crate::{
@@ -37,6 +36,7 @@ use crate::{
 };
 
 const ENTRY_PAD: f32 = 8.;
+const POPOVER_OFFSET: f32 = 4.;
 pub const SETTLE_FOR: Duration = Duration::from_secs(4);
 pub const FOLD_FOR: Duration = Duration::from_millis(180);
 const CENTER_WIDTH: f32 = 380.;
@@ -295,6 +295,7 @@ impl RenderOnce for NotificationBell {
         let connection = self.connection;
         let popover = Popover::new("notifications-popover")
             .anchor(Anchor::TopRight)
+            .offset(u(POPOVER_OFFSET).to_pixels(window.rem_size()))
             .trigger(trigger)
             .open(open)
             .on_open_change(move |open, window, cx| on_open_change(*open, window, cx))
@@ -309,7 +310,7 @@ impl RenderOnce for NotificationBell {
                     .use_keyed_state("notification-row-heights", cx, |_, _| RowHeights::default())
                     .read(cx)
                     .clone();
-                render_list(
+                let list = render_list(
                     Contents {
                         connection: connection.as_ref().map(|(n, h)| (n, h)),
                         decisions: &decisions,
@@ -324,7 +325,9 @@ impl RenderOnce for NotificationBell {
                         heights: &heights,
                     },
                     cx,
-                )
+                );
+                let surface = v_flex().id("content").occlude().tab_group();
+                ui::popover_surface(surface, cx).p_3().child(list)
             });
         // The wrapper, not the trigger, occludes: the popover listens on its own wrapper.
         BarButton::slot(popover, dot)
@@ -345,7 +348,7 @@ fn time_meta(id: String, ago: SharedString, when: SharedString, cx: &App) -> imp
         .text_xs()
         .text_color(cx.theme().muted_foreground)
         .child(ago)
-        .tooltip(move |window, cx| Tooltip::new(when.clone()).build(window, cx))
+        .tooltip(move |_, cx| ui::tooltip(when.clone(), cx))
 }
 
 fn decision_row(

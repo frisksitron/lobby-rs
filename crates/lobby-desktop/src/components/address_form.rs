@@ -4,11 +4,10 @@
 use std::rc::Rc;
 
 use gpui_kit::{
-    App, ClickEvent, Entity, IntoElement, ParentElement as _, RenderOnce, Styled as _, Window, div,
+    App, ClickEvent, Entity, IntoElement, ParentElement as _, RenderOnce, Styled as _, Window,
+    base::input::InputState, div,
 };
 use lobby_client::copy;
-
-use crate::kit::input::InputState;
 
 use super::{
     Feedback,

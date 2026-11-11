@@ -19,10 +19,8 @@ use gpui_kit::{
 
 use crate::kit::ActiveTheme as _;
 
-/// How wide a header and its content grow, at 100%.
 const MAX_W: f32 = 24.;
 
-/// A column, centred in the room it is given.
 fn column() -> Div {
     div().flex().flex_col().w_full().min_w_0().items_center()
 }

@@ -2,7 +2,13 @@ mod cards;
 
 use std::time::Duration;
 
-use gpui_kit::{AppContext as _, Context, Entity, EventEmitter, Hsla, Subscription, Task, Window};
+use gpui_kit::{
+    AppContext as _, Context, Entity, EventEmitter, Hsla, Subscription, Task, Window,
+    base::{
+        OtpEvent, OtpState,
+        input::{InputEvent, InputState},
+    },
+};
 use lobby_client::{Chip, EntryIntent, EntryStep, EntryView, Fill, LobbyOrigin, Stage, copy};
 use lobby_protocol::{LobbyInfo, MagicCode};
 use tracing::info;
@@ -13,7 +19,6 @@ use crate::components::{
     mark_color,
 };
 use crate::entry_entity::{EntryChanged, EntryEntity};
-use crate::kit::input::{InputEvent, InputState, OtpEvent, OtpState};
 
 pub const ADMITTED_PAUSE: Duration = Duration::from_millis(900);
 pub const WRONG_CODE_SHOWN: Duration = Duration::from_millis(600);

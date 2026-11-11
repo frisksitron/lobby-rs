@@ -26,7 +26,6 @@ use gpui_kit::{
 use super::{Icon, Size, Spinner, focus, tooltip::with_tooltip};
 use crate::kit::{ActiveTheme as _, Colorize as _, menu::DropdownMenu};
 
-/// A press is dimmed this much while it runs, on every variant alike.
 const LOADING_OPACITY: f32 = 0.8;
 
 /// The key context of a control that Enter and Space press while it has the focus. GPUI runs a
@@ -41,7 +40,6 @@ pub(super) fn init(cx: &mut App) {
     ]);
 }
 
-/// What a button means, which sets its colours.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub enum Variant {
     /// The default commit of its surface, the one Enter runs.
@@ -118,7 +116,7 @@ pub struct Button {
     on_click: Option<ClickHandler>,
 }
 
-type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+pub type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
 
 impl Button {
     pub fn new(id: impl Into<ElementId>) -> Self {
@@ -238,8 +236,6 @@ impl InteractiveElement for Button {
     }
 }
 
-/// A button's fill, ink and edge in one state. Only an outlined variant draws the edge; the others
-/// colour a border their caller gives them.
 #[derive(Clone, Copy)]
 struct Paint {
     bg: Background,
@@ -270,10 +266,8 @@ impl Paint {
     }
 }
 
-/// Rest, hover, pressed, selected and disabled.
 type States = (Paint, Paint, Paint, Paint, Paint);
 
-/// Gives every state the edge `edge`, and the disabled state `faded`.
 fn edged(states: States, edge: Hsla, faded: Hsla) -> States {
     let (rest, hover, active, selected, disabled) = states;
     (
@@ -285,8 +279,6 @@ fn edged(states: States, edge: Hsla, faded: Hsla) -> States {
     )
 }
 
-/// Everything a variant at a size looks like. `rest` carries the geometry too; the states carry
-/// only what they change.
 struct Look {
     rest: StyleRefinement,
     hover: StyleRefinement,
@@ -295,8 +287,8 @@ struct Look {
     disabled: StyleRefinement,
 }
 
-/// The one table of what a button looks like. It reads the kit's `button_*` theme slots, which
-/// the kit's own buttons (in its dialogs and toasts) read too, so the two never drift apart.
+/// Reads the kit's `button_*` theme slots, which the kit's own buttons (in its dialogs and
+/// toasts) read too, so the two never drift apart.
 fn look(variant: Variant, size: Size, cx: &App) -> Look {
     let theme = cx.theme();
     let tokens = &theme.tokens;
@@ -502,7 +494,6 @@ impl RenderOnce for Button {
             })
             .track_focus(&focus)
             .when(pressable, |this| this.key_context(PRESSABLE))
-            // A focused button's own edge, where it has one, takes the ring's colour too.
             .when(focused, |this| this.border_color(ring_color))
             .when_some(name, |this, name| this.accessibility_label(name))
             .when_some(tooltip.clone(), |this, text| this.aria_description(text))

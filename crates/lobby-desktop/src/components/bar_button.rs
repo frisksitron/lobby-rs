@@ -9,7 +9,6 @@ use gpui_kit::{
 use crate::scale::u;
 use crate::ui;
 
-/// The dot on a control's corner, at 100%.
 const BADGE: f32 = 6.;
 
 pub struct BarButton;
@@ -29,7 +28,6 @@ impl BarButton {
             .flex_shrink_0()
     }
 
-    /// `control` in its occluding wrapper, with a dot of `badge` on its top right corner.
     pub fn slot(control: impl IntoElement, badge: Option<Hsla>) -> Div {
         let control = match badge {
             None => control.into_any_element(),

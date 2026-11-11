@@ -734,8 +734,6 @@ impl VoiceSection {
         let button = ui::Button::new("monitor")
             .debug_selector(|| "monitor".into())
             .size(ui::Size::Page);
-        // The primary variant has no border, so it takes the secondary one's width: pressing the
-        // button moves nothing.
         let button = if on {
             button.variant(ui::Variant::Primary).border_1()
         } else {

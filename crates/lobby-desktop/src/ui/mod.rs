@@ -5,6 +5,7 @@
 
 mod button;
 mod empty;
+mod field;
 mod focus;
 mod icon;
 mod separator;
@@ -12,13 +13,15 @@ mod size;
 mod skeleton;
 mod slider;
 mod spinner;
+mod surface;
 mod switch;
 mod tooltip;
 
 use gpui_kit::App;
 
-pub use button::{Button, Custom, PRESSABLE, Variant};
+pub use button::{Button, ClickHandler, Custom, PRESSABLE, Variant};
 pub use empty::{Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle};
+pub use field::Field;
 pub use focus::ring as focus_ring;
 pub use icon::Icon;
 pub use separator::Separator;
@@ -29,7 +32,9 @@ pub use size::{
 pub use skeleton::Skeleton;
 pub use slider::Slider;
 pub use spinner::Spinner;
+pub use surface::popover_surface;
 pub use switch::Switch;
+pub use tooltip::tooltip;
 
 /// Sets up what the controls need in every window. Call after `gpui_kit::init` and before the
 /// first window opens.

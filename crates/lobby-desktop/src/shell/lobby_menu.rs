@@ -390,7 +390,6 @@ impl Shell {
                 .close_button(false)
                 .child(heirs.clone())
                 .footer(footer)
-                // Enter hands over to whoever is picked now, and does nothing before a pick.
                 .on_ok(move |_, _, cx| match picks.read(cx).heir() {
                     Some(heir) => {
                         hand_over(heir, cx);

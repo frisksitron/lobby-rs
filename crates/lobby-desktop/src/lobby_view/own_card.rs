@@ -7,13 +7,15 @@
 //! Issue. The picture is picked, squared by the Lobby and sent; the Lobby tells everyone, this
 //! Member included.
 
-use gpui_kit::{AppContext as _, Context, Entity, EventEmitter, Subscription, Task, Window};
+use gpui_kit::{
+    AppContext as _, Context, Entity, EventEmitter, Subscription, Task, Window,
+    base::input::{InputEvent, InputState},
+};
 use lobby_client::{AccountOp, Intent, UiEffect, copy};
 use lobby_protocol::Username;
 
 use crate::{
     components::{Rename, Said},
-    kit::input::{InputEvent, InputState},
     session_entity::{SessionEntity, SessionUiEvent},
 };
 

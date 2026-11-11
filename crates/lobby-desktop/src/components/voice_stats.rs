@@ -110,7 +110,6 @@ impl RenderOnce for VoiceStatsList {
                 let label_fill = theme.tokens.description_list_label;
                 let lines = stats_lines(stats);
                 let last = lines.len().saturating_sub(1);
-                // Two columns in a bordered table: each label on its own fill, its value beside.
                 div()
                     .flex()
                     .flex_col()

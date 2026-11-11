@@ -13,7 +13,7 @@ use gpui_kit::{
 use lobby_client::{Chip, ChipAt, Stage, copy};
 
 use super::{Avatar, AvatarSize, Callback, ICON_SM, ICON_XS, PULSE_FPS, SURFACE_INNER_RADIUS};
-use crate::kit::{ActiveTheme as _, tooltip::Tooltip};
+use crate::kit::ActiveTheme as _;
 use crate::scale::{device_in, u};
 use crate::ui::{self, Icon, Spinner};
 
@@ -55,7 +55,7 @@ const MARK_RING: f32 = 6.;
 const ENTER: Duration = Duration::from_millis(220);
 const ENTER_RISE: f32 = 8.;
 
-pub type ClickHandler = Rc<dyn Fn(&ClickEvent, &mut Window, &mut App)>;
+pub use crate::ui::ClickHandler;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Feedback {
@@ -199,7 +199,6 @@ pub fn primary_button(
         .size(ui::Size::Step)
         .rounded(device_in(SURFACE_INNER_RADIUS, cx))
         .label(if busy { busy_label } else { label }.to_owned())
-        // Loading turns an icon into the spinner, so a busy step shows one beside its words.
         .when(busy, |b| b.icon(IconName::LoaderCircle))
         .loading(busy)
 }
@@ -329,7 +328,7 @@ impl RenderOnce for StepRail {
                             let tip = goes_back_to(stage);
                             d.cursor_pointer()
                                 .hover(|s| s.bg(done_hover))
-                                .tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
+                                .tooltip(move |_, cx| ui::tooltip(tip, cx))
                                 .on_click(move |_, window, cx| on_go(stage, window, cx))
                         })
                 }

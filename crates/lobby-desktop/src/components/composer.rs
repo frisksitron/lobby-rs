@@ -185,7 +185,6 @@ impl RenderOnce for FormatBar {
                 .iter()
                 .fold(group, |group, &format| group.child(button(format)))
         };
-        // Base's bar owns the arrow keys: Left and Right move the focus along it, round the ends.
         Toolbar::new("format-bar")
             .flex()
             .items_center()

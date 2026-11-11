@@ -20,7 +20,7 @@ use super::{
     },
     truncated_text, watch_tile,
 };
-use crate::kit::{ActiveTheme as _, tooltip::Tooltip};
+use crate::kit::ActiveTheme as _;
 use crate::scale::{device_in, u};
 use crate::ui::{self, Icon};
 
@@ -177,7 +177,7 @@ impl RenderOnce for MemberRow {
                 .flex()
                 .justify_center()
                 .child(Icon::new(icon).size(u(ICON_MD)).text_color(danger))
-                .tooltip(move |window, cx| Tooltip::new(label).build(window, cx))
+                .tooltip(move |_, cx| ui::tooltip(label, cx))
         });
         let tile = row.tile.filter(|_| in_voice_group).map(|tile| {
             let tile = WatchTile::new(format!("watch-{}", row.name), tile, Sharer::of(&row));

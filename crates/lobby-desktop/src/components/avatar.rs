@@ -1,4 +1,4 @@
-//! Built on the kit's unstyled `base::Avatar`: `component::Avatar` sizes the initials' box
+//! Built on the kit's unstyled `base::Avatar`: the kit's styled Avatar sizes the initials' box
 //! instead of their text, leaving them in the top-left of a half-size box.
 
 use gpui_kit::{

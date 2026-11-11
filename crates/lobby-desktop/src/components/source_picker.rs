@@ -18,8 +18,11 @@ use gpui_kit::{
     AnyElement, App, AppContext as _, Context, Div, ElementId, Entity, FocusHandle,
     InteractiveElement as _, IntoElement, KeyDownEvent, ObjectFit, ParentElement as _, Render,
     RenderImage, ScrollHandle, SharedString, Stateful, StatefulInteractiveElement as _,
-    Styled as _, StyledImage as _, TestSupportExt as _, Window, assets::IconName,
-    base::actions::Cancel, div, img, prelude::FluentBuilder as _,
+    Styled as _, StyledImage as _, TestSupportExt as _, Window,
+    assets::IconName,
+    base::{Scrollbar, ScrollbarAxis, actions::Cancel},
+    div, img,
+    prelude::FluentBuilder as _,
 };
 use image::{Frame as ImageFrame, RgbaImage};
 use lobby_client::{ScreenSource, SourceId, SourceKind, Thumbnail, copy};
@@ -28,10 +31,8 @@ use lobby_protocol::{Quality, encoder::QUALITIES};
 use super::{page_select, picture_backdrop, section_label, truncated_text};
 use crate::kit::{
     ActiveTheme as _,
-    scroll::{Scrollbar, ScrollbarAxis},
     searchable_list::{SearchableListItem, SearchableVec},
     select::SelectState,
-    tooltip::Tooltip,
 };
 use crate::scale::{design_viewport, u};
 use crate::ui::{self, Icon, Spinner};
@@ -355,7 +356,7 @@ fn caption(ids: &Ids, e: &Entry, cx: &App) -> AnyElement {
                 .text_color(theme.muted_foreground)
                 .child(copy::CANT_SHARE),
         )
-        .tooltip(move |window, cx| Tooltip::new(whole.clone()).build(window, cx))
+        .tooltip(move |_, cx| ui::tooltip(whole.clone(), cx))
         .into_any_element()
 }
 

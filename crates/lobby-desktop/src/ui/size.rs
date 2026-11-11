@@ -12,8 +12,8 @@ pub const ICON_XS: f32 = 12.;
 pub const ICON_SM: f32 = 14.;
 pub const ICON_MD: f32 = 16.;
 
-// Four control heights, each for one kind of surface. A control takes its height from here and
-// never from the kit's size, whose steps do not match (`Button::large` is still 32).
+// A control takes its height from here and never from the kit's size, whose steps do not match
+// (`Button::large` is still 32).
 
 /// The onboarding screens' fields, the button beside a field and the code's cells.
 pub const FIELD_H: f32 = 44.;
@@ -67,7 +67,6 @@ impl Size {
         })
     }
 
-    /// The room on either side of a label.
     pub(crate) fn pad_x(self) -> Rems {
         u(match self {
             Size::Corner => 4.,
@@ -79,7 +78,6 @@ impl Size {
         })
     }
 
-    /// The space between an icon and a label.
     pub(crate) fn gap(self) -> Rems {
         u(match self {
             Size::Inline | Size::Bar | Size::Word | Size::Corner => 4.,
@@ -95,8 +93,6 @@ impl Size {
         })
     }
 
-    /// A page's, a step's and a worded action's controls carry a word that must read as the
-    /// action; the others keep the weight of the text around them.
     pub(crate) fn weight(self) -> Option<FontWeight> {
         match self {
             Size::Word | Size::Page | Size::Step => Some(FontWeight::SEMIBOLD),

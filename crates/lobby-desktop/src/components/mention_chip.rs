@@ -4,21 +4,19 @@
 
 use gpui_kit::{
     App, BorderStyle, Bounds, ContentMask, Edges, Entity, FontWeight, Hsla, ParentElement as _,
-    Pixels, Styled as _, Window, div, point, quad, size,
+    Pixels, Styled as _, Window,
+    base::{
+        InlineElement, InlineRenderContext, MarkdownNode, MarkdownParseContext, MarkdownPlugin,
+        input::TextareaState, markdown_ast::Node,
+    },
+    div, point, quad, size,
 };
 use lobby_client::{
     compose::mention_spans,
     message_text::{MENTION_SCHEME, MentionNames},
 };
 
-use crate::kit::{
-    ActiveTheme as _,
-    input::TextareaState,
-    text::{
-        InlineElement, InlineRenderContext, MarkdownNode, MarkdownParseContext, MarkdownPlugin,
-        markdown_ast::Node,
-    },
-};
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
 
 const NAME: &str = "lobby-mention";

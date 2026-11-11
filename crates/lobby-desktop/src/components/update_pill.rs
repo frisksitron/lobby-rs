@@ -12,13 +12,12 @@ use gpui_kit::{
 use lobby_client::{copy, update::UpdateStatus};
 
 use super::{BAR_CONTROL_H, BarButton, ICON_SM};
-use crate::kit::{ActiveTheme as _, tooltip::Tooltip};
+use crate::kit::ActiveTheme as _;
 use crate::scale::u;
 use crate::ui::{self, Icon};
 
 /// Room for "100%", so the pill keeps its width as the number grows.
 const PERCENT_W: f32 = 30.;
-/// The retry's width with no word beside its icon, a little under the bar's height.
 const RETRY_ICON_W: f32 = 24.;
 
 #[derive(IntoElement)]
@@ -77,7 +76,7 @@ impl RenderOnce for UpdatePill {
                     .gap_1p5()
                     .text_sm()
                     .text_color(theme.muted_foreground)
-                    .tooltip(move |window, cx| Tooltip::new(tip.clone()).build(window, cx))
+                    .tooltip(move |_, cx| ui::tooltip(tip.clone(), cx))
                     .child(
                         div()
                             .absolute()

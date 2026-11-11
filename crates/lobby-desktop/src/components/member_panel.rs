@@ -8,7 +8,10 @@
 use gpui_kit::{
     AnyElement, App, Entity, FontWeight, InteractiveElement as _, IntoElement, ParentElement as _,
     RenderOnce, SharedString, StatefulInteractiveElement as _, Styled, TestSupportExt as _, Window,
-    assets::IconName, base::slider::SliderState, div, prelude::FluentBuilder as _,
+    assets::IconName,
+    base::{input::InputState, slider::SliderState},
+    div,
+    prelude::FluentBuilder as _,
 };
 use lobby_client::{Volume, copy};
 
@@ -17,11 +20,7 @@ use super::{
     auth::{Tone, tone_text},
     nested_radius,
 };
-use crate::kit::{
-    ActiveTheme as _, Sizable as _,
-    input::{Input, InputState},
-    tooltip::Tooltip,
-};
+use crate::kit::ActiveTheme as _;
 use crate::scale::{BASE_RADIUS, device_in, u};
 use crate::ui;
 
@@ -334,9 +333,7 @@ fn caption(
         .text_xs()
         .text_color(color)
         .child(text.into())
-        .when_some(tip, |d, tip| {
-            d.tooltip(move |window, cx| Tooltip::new(tip).build(window, cx))
-        })
+        .when_some(tip, |d, tip| d.tooltip(move |_, cx| ui::tooltip(tip, cx)))
         .test_support()
 }
 
@@ -368,16 +365,12 @@ fn head(
                 .items_center()
                 .gap_1p5()
                 .child(div().flex_1().min_w_0().when_some(field, |d, field| {
-                    // `Input::h` is for multi-line fields: the line's height goes by the style.
                     d.child(
-                        Styled::h(
-                            Input::new(field)
-                                .id("rename-field")
-                                .xsmall()
-                                .focus_bordered(false),
-                            u(INLINE_H),
-                        )
-                        .border_color(theme.ring),
+                        ui::Field::new(field)
+                            .id("rename-field")
+                            .size(ui::Size::Inline)
+                            .focus_ring(false)
+                            .border_color(theme.ring),
                     )
                 }))
                 .child(

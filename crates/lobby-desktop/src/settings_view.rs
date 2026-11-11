@@ -7,7 +7,10 @@ use gpui_kit::{
     AppContext as _, Context, Entity, EventEmitter, FocusHandle, FontWeight,
     InteractiveElement as _, IntoElement, KeyDownEvent, ParentElement as _, Render, ScrollHandle,
     SharedString, StatefulInteractiveElement as _, Styled as _, Subscription, TestSupportExt as _,
-    Window, assets::IconName, div,
+    Window,
+    assets::IconName,
+    base::{Scrollbar, ScrollbarAxis},
+    div,
 };
 use lobby_client::{
     UI_SCALE_MAX, UI_SCALE_MIN, copy, step_ui_scale,
@@ -17,10 +20,7 @@ use lobby_client::{
 use crate::scale::u;
 use crate::{
     components::{ICON_MD, PAGE_CONTROL_H, PERCENT_W, READOUT_GAP, section_label},
-    kit::{
-        ActiveTheme as _,
-        scroll::{Scrollbar, ScrollbarAxis},
-    },
+    kit::ActiveTheme as _,
     lobbies::Lobbies,
     lobby_view::VoiceDevices,
     session_entity::SessionEntity,

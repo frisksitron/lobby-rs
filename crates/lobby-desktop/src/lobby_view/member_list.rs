@@ -32,9 +32,9 @@ use crate::components::{
     MemberRowModel, OwnerAction, PanelActions, PanelStep, ROW_HEIGHT, Rename, Sharer, Tile,
     WatchLine, picture, voice_box,
 };
-use crate::kit::{ActiveTheme as _, ThemeStyled as _};
+use crate::kit::ActiveTheme as _;
 use crate::scale::{device, u};
-use crate::ui::Skeleton;
+use crate::ui::{self, Skeleton};
 
 /// The sidebar's groups. The signed-in Member is first in whichever group they are in. While
 /// not connected the last known groups stay (`known` is false and the sidebar dims them), so
@@ -379,8 +379,8 @@ impl MemberSidebar {
             .track_focus(&self.card_focus)
             .on_mouse_down_out(cx.listener(move |this, _, _, cx| {
                 this.close_member_panel(&user, cx);
-            }))
-            .popover_style(cx)
+            }));
+        let card = ui::popover_surface(card, cx)
             .p(u(MEMBER_CARD_PAD))
             .child(panel)
             .test_support();
