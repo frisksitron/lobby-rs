@@ -1,8 +1,10 @@
 fn main() {
     let windows = std::env::var("TARGET").is_ok_and(|t| t.ends_with("windows-msvc"));
-    // A debug build lays out the gallery's Kit page deeper than Windows' 1 MiB main-thread stack.
+    // A debug build lays out deep element trees (the gallery's Kit page, a Message with a nested
+    // list) past Windows' 1 MiB main-thread stack.
     if windows {
         println!("cargo:rustc-link-arg-bin=lobby-gallery=/STACK:8388608");
+        println!("cargo:rustc-link-arg-bin=lobby=/STACK:8388608");
     }
     #[cfg(windows)]
     if windows {

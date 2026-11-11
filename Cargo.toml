@@ -17,10 +17,10 @@ lobby-protocol = { path = "crates/lobby-protocol" }
 lobby-server = { path = "crates/lobby-server" }
 lobby-client = { path = "crates/lobby-client" }
 
-gpui-kit = "=0.8.1"
+gpui-kit = "=0.9.1"
 # Rendered tests draw real GPUI frames headlessly through wgpu (dev-dependency only; the version
 # gpui-kit's gpui-pre builds for other platforms).
-gpui-pre-wgpu = "=0.3.10"
+gpui-pre-wgpu = "=0.3.12"
 tokio = { version = "=1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal", "fs", "io-util"] }
 tokio-util = { version = "=0.7.20", features = ["rt"] }
 axum = { version = "=0.8.9", default-features = false, features = ["http1", "json", "query", "tokio", "ws", "macros", "tracing", "matched-path"] }

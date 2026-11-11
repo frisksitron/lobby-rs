@@ -1,17 +1,18 @@
-# A patched copy of gpui-pre-scheduler 0.3.10 (Apache-2.0, Zed Industries), used through
+# A patched copy of gpui-pre-scheduler 0.3.12 (Apache-2.0, Zed Industries), used through
 # `[patch.crates-io]` in the workspace manifest. This is the manifest crates.io published.
 #
 # The copy differs from upstream only in `TestScheduler::block_until` in
 # `src/test_scheduler.rs`. With a timeout, upstream locked `rng` and then waited for `state`.
 # Every schedule from another thread locks `state` and then `rng`. A headless app that closed
 # while a Session's driver or a share's encoder thread scheduled a task could deadlock for good.
-# That hung the real-media layout tests in about one run in ten. 0.3.11 has the same code.
+# That hung the real-media layout tests in about one run in ten. 0.3.11 and 0.3.12 have the same
+# code.
 # Drop this copy when the pinned gpui-pre takes `state` first there.
 
 [package]
 edition = "2024"
 name = "gpui-pre-scheduler"
-version = "0.3.10"
+version = "0.3.12"
 build = false
 publish = true
 autolib = false
@@ -19,7 +20,7 @@ autobins = false
 autoexamples = false
 autotests = false
 autobenches = false
-description = "Zed's `scheduler` crate (gpui-pre snapshot of zed@08cbb88)"
+description = "Zed's `scheduler` crate (gpui-pre snapshot of zed@d2a4fb6)"
 readme = false
 license = "Apache-2.0"
 repository = "https://github.com/zed-industries/zed"
@@ -28,7 +29,7 @@ resolver = "2"
 [package.metadata.gpui-pre]
 zed-crate = "scheduler"
 zed-version = "0.1.0"
-zed-rev = "08cbb88a152c3751a43e853425a70e9f631a5918"
+zed-rev = "d2a4fb6ded7c470be25d1541281da3882495b65b"
 
 [features]
 test-support = []
