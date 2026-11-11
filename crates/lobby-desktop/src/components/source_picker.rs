@@ -377,6 +377,7 @@ fn item(ids: &Ids, e: &Entry, on_pick: &Pick, cx: &App) -> Stateful<Div> {
     let (pick, chosen) = (on_pick.clone(), e.source.clone());
     let (key_pick, key_chosen) = (on_pick.clone(), e.source.clone());
     base.when_some(e.focus, |d, f| d.track_focus(f))
+        .key_context(ui::PRESSABLE)
         .on_key_down(move |ev, window, cx| {
             if picks(ev) {
                 key_pick(&key_chosen, window, cx);

@@ -10,7 +10,7 @@ The maintained source for verifying what a Member sees and does in the desktop a
 
 ## Scenarios in the suite
 
-Only 18 scenarios in `tests/scenarios/` run in `cargo nextest run --workspace`, one for each main flow. A feature file can name a scenario that is not in the suite. To check that behaviour, write the scenario again from the feature file's recipe in `target/verify/`, or add it to the suite with the change that needs it.
+Only 23 scenarios in `tests/scenarios/` run in `cargo nextest run --workspace`, one for each main flow. A feature file can name a scenario that is not in the suite. To check that behaviour, write the scenario again from the feature file's recipe in `target/verify/`, or add it to the suite with the change that needs it.
 
 ## Driving conventions
 

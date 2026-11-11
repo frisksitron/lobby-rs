@@ -369,22 +369,35 @@ impl Shell {
         };
         window.open_dialog(cx, move |dialog, window, cx| {
             let (ok, origin, closed) = (ok.clone(), origin.clone(), closed.clone());
+            let hand_over = move |heir, cx: &mut gpui_kit::App| {
+                let intent = Intent::HandOverAndLeave(heir);
+                let _ = ok.update(cx, |s, cx| s.confirm_leave(&origin, intent, cx));
+            };
+            let by_button = hand_over.clone();
             let footer = HandOverView::footer(
                 &heirs,
                 |window, cx| window.close_dialog(cx),
                 move |heir, window, cx| {
-                    let intent = Intent::HandOverAndLeave(heir);
-                    let _ = ok.update(cx, |s, cx| s.confirm_leave(&origin, intent, cx));
+                    by_button(heir, cx);
                     window.close_dialog(cx);
                 },
                 cx,
             );
+            let picks = heirs.clone();
             dialog
                 .title(title.clone())
                 .w(device(HAND_OVER_WIDTH, window))
                 .close_button(false)
                 .child(heirs.clone())
                 .footer(footer)
+                // Enter hands over to whoever is picked now, and does nothing before a pick.
+                .on_ok(move |_, _, cx| match picks.read(cx).heir() {
+                    Some(heir) => {
+                        hand_over(heir, cx);
+                        true
+                    }
+                    None => false,
+                })
                 .on_close(move |_, _, cx| closed(cx))
         });
     }

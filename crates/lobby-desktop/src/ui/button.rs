@@ -15,8 +15,8 @@ use std::rc::Rc;
 
 use gpui_kit::{
     AnyElement, App, Background, ClickEvent, ElementId, Hsla, InteractiveElement, Interactivity,
-    IntoElement, MouseButton, ParentElement, Refineable as _, RenderOnce, SharedString,
-    StatefulInteractiveElement as _, StyleRefinement, Styled, Toggled, Window,
+    IntoElement, KeyBinding, MouseButton, NoAction, ParentElement, Refineable as _, RenderOnce,
+    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Toggled, Window,
     base::{self, GlobalState, Selectable, StyledExt as _, h_flex},
     div,
     prelude::FluentBuilder as _,
@@ -28,6 +28,18 @@ use crate::kit::{ActiveTheme as _, Colorize as _, menu::DropdownMenu};
 
 /// A press is dimmed this much while it runs, on every variant alike.
 const LOADING_OPACITY: f32 = 0.8;
+
+/// The key context of a control that Enter and Space press while it has the focus. GPUI runs a
+/// key binding before the focused element sees the key, so without this a dialog's Enter =
+/// Confirm would beat its focused Cancel.
+pub const PRESSABLE: &str = "Pressable";
+
+pub(super) fn init(cx: &mut App) {
+    cx.bind_keys([
+        KeyBinding::new("enter", NoAction, Some(PRESSABLE)),
+        KeyBinding::new("space", NoAction, Some(PRESSABLE)),
+    ]);
+}
 
 /// What a button means, which sets its colours.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
@@ -419,6 +431,8 @@ impl RenderOnce for Button {
             .clone();
         let focused = focus.is_focused(window);
         let (loading, on_click) = (self.loading, self.on_click);
+        // A menu's trigger has no command of its own: its popover opens on Enter and Space.
+        let pressable = on_click.is_some();
 
         base.style().refine(&rest);
         if square {
@@ -487,6 +501,7 @@ impl RenderOnce for Button {
                 this.aria_toggled(if on { Toggled::True } else { Toggled::False })
             })
             .track_focus(&focus)
+            .when(pressable, |this| this.key_context(PRESSABLE))
             // A focused button's own edge, where it has one, takes the ring's colour too.
             .when(focused, |this| this.border_color(ring_color))
             .when_some(name, |this, name| this.accessibility_label(name))

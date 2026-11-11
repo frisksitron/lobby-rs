@@ -17,7 +17,7 @@ mod tooltip;
 
 use gpui_kit::App;
 
-pub use button::{Button, Custom, Variant};
+pub use button::{Button, Custom, PRESSABLE, Variant};
 pub use empty::{Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle};
 pub use focus::ring as focus_ring;
 pub use icon::Icon;
@@ -34,5 +34,6 @@ pub use switch::Switch;
 /// Sets up what the controls need in every window. Call after `gpui_kit::init` and before the
 /// first window opens.
 pub fn init(cx: &mut App) {
+    button::init(cx);
     tooltip::init(cx);
 }
