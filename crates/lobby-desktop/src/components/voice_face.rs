@@ -39,7 +39,6 @@ pub struct VoiceFace {
     pictures: Option<PictureOf>,
     surface: Hsla,
     on_press: Option<Callback<TilePress>>,
-    still: bool,
     on_context: Option<Callback<(UserId, Point<Pixels>)>>,
 }
 
@@ -51,15 +50,8 @@ impl VoiceFace {
             pictures: None,
             surface,
             on_press: None,
-            still: false,
             on_context: None,
         }
-    }
-
-    /// See [`MemberAvatar::still`].
-    pub fn still(mut self, still: bool) -> Self {
-        self.still = still;
-        self
     }
 
     /// Where the avatar's picture comes from, once it is decoded; the initials stand in until then.
@@ -190,8 +182,7 @@ impl RenderOnce for VoiceFace {
                 )
                 .size(AvatarSize::Row)
                 .image(image)
-                .surface(self.surface)
-                .still(self.still),
+                .surface(self.surface),
             )
             .children(
                 row.tile

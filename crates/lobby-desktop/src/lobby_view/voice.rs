@@ -159,7 +159,7 @@ impl LobbyView {
     /// a right-click on any face opens that Member's card.
     pub(super) fn voice_strip(&self, state: &LobbyState, cx: &Context<Self>) -> gpui_kit::Div {
         let sidebar = self.sidebar.read(cx);
-        let (groups, still) = (sidebar.groups(state), sidebar.rings_still());
+        let groups = sidebar.groups(state);
         let surface = card_surface(cx);
         let press = forward(cx, |v: &mut Self, press, window, cx| match press {
             TilePress::Show(sharer) => v.show(sharer, window, cx),
@@ -176,7 +176,6 @@ impl LobbyView {
                 VoiceFace::new(row, groups.known, surface)
                     .pictures(pictures(self.images.clone()))
                     .on_press(press.clone())
-                    .still(still)
                     .on_context(card.clone())
             })
             .collect();

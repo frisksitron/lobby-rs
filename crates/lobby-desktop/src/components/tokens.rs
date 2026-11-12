@@ -48,7 +48,7 @@ pub const LINE_H: f32 = 30.;
 pub const PERCENT_W: f32 = 48.;
 pub const READOUT_GAP: f32 = 8.;
 
-/// The frame rate of a looping opacity pulse (the speaking ring, the typing dots). Each frame
+/// The frame rate of a looping opacity pulse (the typing dots, the waiting mark). Each frame
 /// steps the opacity by under 0.05, which reads as smooth, and the view around it is drawn half
 /// as often as at 60 Hz.
 pub const PULSE_FPS: f32 = 30.;

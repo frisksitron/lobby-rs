@@ -14,7 +14,7 @@ use lobby_client::{
 };
 use lobby_protocol::Quality;
 
-use super::{LobbyView, SHARE_SETTLE, forward, sidebar::OnScreen};
+use super::{LobbyView, SHARE_SETTLE, forward};
 use crate::components::{
     PICKER_W, PickerModel, PickerView, Place, Pointer, ShareToolbar, ShareView, Sharer, ToolbarAt,
     Whose, esc_hint, fullscreen_frame, panel_fit, panel_frame,
@@ -356,16 +356,11 @@ impl LobbyView {
         cx.notify();
     }
 
-    /// Every change of [`Viewing`] goes through here: the sidebar's own row says Watching from it,
-    /// and its speaking rings hold still while any share is shown.
+    /// Every change of [`Viewing`] goes through here: the sidebar's own row says Watching from it.
     fn set_viewing(&mut self, viewing: Viewing, cx: &mut Context<Self>) -> Viewing {
-        let on_screen = match viewing.shown() {
-            None => OnScreen::Nothing,
-            Some(shown) if shown.own => OnScreen::Own,
-            Some(_) => OnScreen::Watch,
-        };
+        let own_shown = viewing.shown().is_some_and(|shown| shown.own);
         self.sidebar
-            .update(cx, |s, cx| s.set_on_screen(on_screen, cx));
+            .update(cx, |s, cx| s.set_own_shown(own_shown, cx));
         std::mem::replace(&mut self.viewing, viewing)
     }
 

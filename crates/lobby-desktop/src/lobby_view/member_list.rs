@@ -262,7 +262,6 @@ impl MemberSidebar {
             .image(image)
             .in_voice_group(in_voice_group)
             .surface(surface)
-            .still(self.rings_still())
             .open(self.member_panel.as_ref().is_some_and(|p| p.user == row.id))
             .actions(actions.clone())
             .into_any_element();

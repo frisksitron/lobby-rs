@@ -93,7 +93,6 @@ pub struct MemberRow {
     open: bool,
     actions: Option<MemberRowActions>,
     image: Option<ImageSource>,
-    still: bool,
 }
 
 impl MemberRow {
@@ -106,14 +105,7 @@ impl MemberRow {
             open: false,
             actions: None,
             image: None,
-            still: false,
         }
-    }
-
-    /// See [`MemberAvatar::still`].
-    pub fn still(mut self, still: bool) -> Self {
-        self.still = still;
-        self
     }
 
     /// The avatar's picture, once it is decoded; the initials stand in until then.
@@ -204,8 +196,7 @@ impl RenderOnce for MemberRow {
                 )
                 .size(AvatarSize::Row)
                 .image(self.image)
-                .surface(surface)
-                .still(self.still),
+                .surface(surface),
             )
             .child(
                 div()

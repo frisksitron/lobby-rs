@@ -212,18 +212,10 @@ pub struct MemberSidebar {
     pub(super) rows_entered: HashMap<SharedString, Instant>,
     /// Where on the edge the pointer took it, so a drag does not jump by that much.
     grab: f32,
-    on_screen: OnScreen,
+    /// The Lobby view shows this Member's own share, which the state does not know: their row
+    /// says Watching.
+    own_shown: bool,
     _subscriptions: Vec<Subscription>,
-}
-
-/// The share the Lobby view shows, which the state does not know.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum OnScreen {
-    Nothing,
-    /// A Member's, from the running Watch.
-    Watch,
-    /// This Member's own: their row says Watching.
-    Own,
 }
 
 impl EventEmitter<SidebarEvent> for MemberSidebar {}
@@ -282,7 +274,7 @@ impl MemberSidebar {
             rows_shown: HashSet::new(),
             rows_entered: HashMap::new(),
             grab: 0.,
-            on_screen: OnScreen::Nothing,
+            own_shown: false,
             _subscriptions: subscriptions,
         }
     }
@@ -291,22 +283,15 @@ impl MemberSidebar {
         self.open
     }
 
-    pub fn set_on_screen(&mut self, on_screen: OnScreen, cx: &mut Context<Self>) {
-        if self.on_screen != on_screen {
-            self.on_screen = on_screen;
+    pub fn set_own_shown(&mut self, own_shown: bool, cx: &mut Context<Self>) {
+        if self.own_shown != own_shown {
+            self.own_shown = own_shown;
             cx.notify();
         }
     }
 
     pub fn groups(&self, state: &LobbyState) -> MemberGroups {
-        member_groups(state).own_shown(self.on_screen == OnScreen::Own)
-    }
-
-    /// Speaking rings hold still while a share is on screen (see [`MemberAvatar::still`]).
-    ///
-    /// [`MemberAvatar::still`]: crate::components::MemberAvatar::still
-    pub fn rings_still(&self) -> bool {
-        self.on_screen != OnScreen::Nothing
+        member_groups(state).own_shown(self.own_shown)
     }
 
     /// Open, the sheet holds the focus so Escape folds it from anywhere; folded, the composer gets

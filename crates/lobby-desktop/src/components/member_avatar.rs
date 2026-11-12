@@ -1,19 +1,16 @@
-//! A Member's avatar with a pulsing ring while they speak, dimming while their Voice connects, and
+//! A Member's avatar with a ring while they speak, dimming while their Voice connects, and
 //! the presence badge. Presence is told by shape as much as colour: a dot for online and idle, a
 //! bar for Do Not Disturb, a hollow ring for offline.
 
-use std::time::Duration;
-
 use gpui_kit::{
-    Animation, AnimationExt as _, AnyElement, App, ElementId, Hsla, ImageSource, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, base::spring, div,
-    prelude::FluentBuilder as _, pulsating_between,
+    AnyElement, App, ElementId, Hsla, ImageSource, IntoElement, ParentElement as _, RenderOnce,
+    SharedString, Styled as _, Window, base::spring, div, prelude::FluentBuilder as _,
 };
 use lobby_protocol::{Presence, VoiceState};
 
 use super::{
     Avatar,
-    tokens::{AvatarSize, PULSE_FPS, idle_color, voice_accent},
+    tokens::{AvatarSize, idle_color, voice_accent},
 };
 use crate::kit::ActiveTheme as _;
 use crate::scale::u;
@@ -21,10 +18,6 @@ use crate::ui::motion;
 
 /// The speaking ring sits one pixel outside the avatar.
 const RING: f32 = 2.;
-
-/// The pulse's range, and where a still ring holds: the middle, as with reduced motion.
-const RING_OPACITY: (f32, f32) = (0.35, 1.0);
-const STILL_RING_OPACITY: f32 = (RING_OPACITY.0 + RING_OPACITY.1) / 2.;
 
 fn presence_badge_on(
     presence: Presence,
@@ -80,7 +73,6 @@ pub struct MemberAvatar {
     size: AvatarSize,
     image: Option<ImageSource>,
     surface: Option<Hsla>,
-    still: bool,
 }
 
 impl MemberAvatar {
@@ -96,15 +88,7 @@ impl MemberAvatar {
             size: AvatarSize::Row,
             image: None,
             surface: None,
-            still: false,
         }
-    }
-
-    /// The speaking ring holds still: while a share is on screen its frames are motion enough,
-    /// and a pulse on its own timer would draw the window between them.
-    pub fn still(mut self, still: bool) -> Self {
-        self.still = still;
-        self
     }
 
     pub fn size(mut self, size: AvatarSize) -> Self {
@@ -167,28 +151,17 @@ impl RenderOnce for MemberAvatar {
                     ),
             )
             .when(ring > 0., |d| {
-                let circle = div()
-                    .absolute()
-                    .top_0()
-                    .left_0()
-                    .size(u(outer))
-                    .rounded_full()
-                    .border(u(RING))
-                    .border_color(voice_accent(cx.theme()));
-                d.child(if self.still {
-                    circle.opacity(STILL_RING_OPACITY * ring).into_any_element()
-                } else {
-                    circle
-                        .with_animation(
-                            self.id.clone(),
-                            Animation::new(Duration::from_millis(1100))
-                                .repeat()
-                                .with_max_fps(PULSE_FPS)
-                                .with_easing(pulsating_between(RING_OPACITY.0, RING_OPACITY.1)),
-                            move |circle, pulse| circle.opacity(pulse * ring),
-                        )
-                        .into_any_element()
-                })
+                d.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .left_0()
+                        .size(u(outer))
+                        .rounded_full()
+                        .border(u(RING))
+                        .border_color(voice_accent(cx.theme()))
+                        .opacity(ring),
+                )
             })
             .children(badge.map(|badge| {
                 div()
