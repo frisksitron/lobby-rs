@@ -16,7 +16,7 @@ enum Step {
 /// The checks that take seconds come first, so a long comment line or a banned dependency is
 /// reported before the minutes of clippy and tests. `check-toolchain` leads them because the
 /// builds after it need cmake.
-const STEPS: [(&str, Step); 12] = [
+const STEPS: [(&str, Step); 13] = [
     ("fmt", Step::Cargo(&["fmt", "--all", "--check"])),
     ("check-toolchain", Step::Xtask("check-toolchain")),
     ("check-comments", Step::Xtask("check-comments")),
@@ -39,6 +39,12 @@ const STEPS: [(&str, Step); 12] = [
     (
         "clippy shipped",
         Step::Cargo(&["clippy", "--workspace", "--", "-D", "warnings"]),
+    ),
+    // In the workspace xtask turns the server's test-support on. Alone, the server is what the
+    // image builds.
+    (
+        "clippy server",
+        Step::Cargo(&["clippy", "-p", "lobby-server", "--", "-D", "warnings"]),
     ),
     // Not the examples: clippy has checked that they build, and building them takes a minute.
     (

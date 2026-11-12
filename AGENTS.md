@@ -113,6 +113,7 @@ cargo xtask check-deps
 cargo xtask check-api
 cargo clippy --workspace --all-targets -- -D warnings
 cargo clippy --workspace -- -D warnings  # the shipped build: no tests, no automation feature
+cargo clippy -p lobby-server -- -D warnings  # the server as the image builds it
 cargo nextest run --workspace --lib --tests  # not the examples: clippy checks they build
 cargo test --workspace --doc  # nextest skips doctests
 ```
