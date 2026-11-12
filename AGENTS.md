@@ -32,7 +32,9 @@ is no separate spec, and the Rust types in `lobby-protocol` are the wire contrac
 - `lobby-protocol` has no tokio, no reqwest and no IO. The server never depends on reqwest or cpal.
 - ring is the only rustls provider: `aws-lc-rs` and `aws-lc-sys` must not appear.
 - Exact versions are pinned in the root `Cargo.toml`. Change a pin only on purpose.
-- Only `lobby-desktop/src/main.rs` builds a Tokio runtime. Tests build their own.
+- A binary's `main` builds its Tokio runtime. Elsewhere only the two media threads build one: the
+  client's RTC thread and the server's SFU thread each run a current-thread runtime of their own.
+  Tests build their own.
 - `lobby-client` exports no `pub async fn` outside its `testing` module (feature `test-support`).
   IO entry points spawn on the client's runtime and return a `ClientTask` or a channel.
   `cargo xtask check-api` enforces this one.

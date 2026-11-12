@@ -57,8 +57,8 @@ publishes the GitHub Release. Every installed app sees it within the hour.
 You need Rust (the version in `rust-toolchain.toml`), cmake on `PATH`, and on Windows the
 MSVC build tools. For Magic Code email, run a local SMTP sink such as
 [Mailpit](https://mailpit.axllent.org/) on port 1025, or set `log_codes = true` under `[smtp]`
-in `lobby.toml` to read each code in the server's log instead. `log_codes` works only for a
-server that binds a loopback address and has no `trusted_proxy_cidrs`.
+in `lobby.toml` to read each code in the server's log instead. `log_codes` works only in a debug
+build, for a server that binds a loopback address and has no `trusted_proxy_cidrs`.
 
 1. Set `auth.bootstrap_email` in `lobby.toml` to your email address. The first person to sign in
    with that address becomes the Lobby's first Member and its owner.
@@ -75,7 +75,7 @@ server that binds a loopback address and has no `trusted_proxy_cidrs`.
    LOBBY_INSTANCE_ID=b cargo run --bin lobby
    ```
 
-4. Press Connect. `http://localhost:8080` is filled in.
+4. Type `localhost:8080` and press Connect.
 
 The component gallery shows every desktop component in its states. Pass a story name, such as
 `MemberRow`, to open on that page:
@@ -87,8 +87,8 @@ cargo run -p lobby-desktop --features gallery --bin lobby-gallery [story]
 To drive the desktop app headlessly and capture proof of a UI change, see
 [.claude/skills/verify/SKILL.md](.claude/skills/verify/SKILL.md).
 
-[CONTRIBUTING.md](CONTRIBUTING.md) says how to send a change, and [AGENTS.md](AGENTS.md) holds the
-project rules.
+[AGENTS.md](AGENTS.md) holds the project rules. Run `cargo xtask gates` before you send a change.
+A change you send for inclusion in Lobby is licensed like the rest of it.
 
 ## License
 

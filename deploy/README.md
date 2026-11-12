@@ -164,8 +164,8 @@ deletions cannot change them during the backup.
 
 To restore, stop the container, replace `/opt/lobby/data` with the copy, run
 `chown -R 10001:10001 /opt/lobby/data`, and start the container again. If you restore only
-`lobby.db` from a `.backup`, delete the old `lobby.db-wal` and `lobby.db-shm` first: they belong to
-the database you replace.
+`lobby.db`, delete the old `lobby.db-wal` and `lobby.db-shm` first: they belong to the database
+you replace.
 
 ## Upgrading
 
@@ -191,7 +191,7 @@ Voice and Screen Share go through your machine, so its uplink is the limit.
 - **Voice** costs 128 kbps per talking Member per listener. With Opus DTX, a silent unmuted Member
   costs about 1 kbps, and a Muted Member sends nothing. 25 Members in Voice with 3 talking is about
   9.2 Mbps for the talkers plus 0.5 Mbps for the silent ones. The worst case, all 25 talking, is
-  about 77 Mbps.
+  about 77 Mbps. A Member with Studio Mode on costs 256 kbps per listener, silent or not.
 - **Screen Share** costs the share's bitrate per Viewer, set by the size of the picture it sends:
   6 Mbps up to 1080p, 10 Mbps up to 1440p and 20 Mbps up to 4K. A Viewer watches one share at a
   time, so the SFU sends each Viewer at most 20 Mbps. Nothing adapts: a Viewer whose link cannot

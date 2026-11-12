@@ -4,7 +4,6 @@ target/
 .git/
 .audit/
 .claude/
-docs/
 crates/lobby-desktop/assets/
 data/
 *.db
