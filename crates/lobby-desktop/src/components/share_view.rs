@@ -857,14 +857,21 @@ impl Render for ShareView {
             self.tell_paint_size(fitted, window.scale_factor());
         }
         let framed = !matches!(self.place, Some(Place::Fullscreen(_)));
+        // GPUI clips children to a rectangle only, so the picture rounds its own corners where
+        // they are the frame's. Behind bars as wide as the radius (a tall share) its corners are
+        // clear of the frame's, and stay square against the bars.
+        let radius = u(SURFACE_RADIUS).to_pixels(window.rem_size());
+        let in_corners = self.place.zip(fitted).is_none_or(|(place, fitted)| {
+            let bars = place.size() - fitted;
+            bars.width.max(bars.height) < radius * 2.
+        });
         let body = match frame {
             // Explicit pixels: the kit's image takes its intrinsic aspect ratio, so a percentage
             // size would grow past the tile and crop the picture.
             Some(image) => {
-                // GPUI clips children to a rectangle only, so the picture rounds its own corners.
                 let picture = img(image)
                     .object_fit(ObjectFit::Contain)
-                    .when(framed, |p| p.rounded(u(SURFACE_RADIUS)));
+                    .when(framed && in_corners, |p| p.rounded(u(SURFACE_RADIUS)));
                 let picture = match fitted {
                     Some(size) => {
                         let fitted = div()

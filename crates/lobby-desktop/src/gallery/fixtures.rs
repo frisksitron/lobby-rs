@@ -136,13 +136,17 @@ pub fn picture(w: u32, h: u32) -> Arc<RenderImage> {
     Arc::new(RenderImage::new([Frame::new(image)]))
 }
 
-/// A made-up 16:9 screen: a dark desktop with a window and a bar, in the decoder's BGRA.
-fn shared_screen() -> VideoFrame {
-    let (width, height) = (320_u32, 180_u32);
+/// A 16:9 screen, and a phone's held upright.
+const WIDE: (u32, u32) = (320, 180);
+const TALL: (u32, u32) = (180, 320);
+
+/// A made-up screen: a dark desktop with a window and a bar, in the decoder's BGRA.
+fn shared_screen((width, height): (u32, u32)) -> VideoFrame {
     let mut bgra = Vec::with_capacity((width * height * 4) as usize);
     for y in 0..height {
         for x in 0..width {
-            let in_window = (40..260).contains(&x) && (24..140).contains(&y);
+            let in_window =
+                (width / 8..width * 13 / 16).contains(&x) && (24..height * 7 / 9).contains(&y);
             let title = in_window && y < 38;
             let bar = y >= height - 14;
             let (r, g, b) = if title {
@@ -169,6 +173,10 @@ fn shared_screen() -> VideoFrame {
 
 /// A viewer showing [`shared_screen`], for a story to place and put controls on.
 pub fn viewer(name: &str, cx: &mut Context<Gallery>) -> Entity<ShareView> {
+    viewer_of(name, WIDE, cx)
+}
+
+fn viewer_of(name: &str, screen: (u32, u32), cx: &mut Context<Gallery>) -> Entity<ShareView> {
     let (_, frames) = tokio::sync::mpsc::channel(1);
     let feed = lobby_client::VideoFeed {
         frames,
@@ -176,7 +184,7 @@ pub fn viewer(name: &str, cx: &mut Context<Gallery>) -> Entity<ShareView> {
     };
     cx.new(|cx| {
         let mut view = ShareView::new(name.to_owned(), feed, cx);
-        view.push(shared_screen(), std::time::Instant::now());
+        view.push(shared_screen(screen), std::time::Instant::now());
         view
     })
 }
@@ -258,6 +266,8 @@ pub struct Held {
     pub pickers: [Entity<PickerView>; 4],
     /// Watched shares for the viewer stories: a view is drawn in one place at a time.
     pub viewers: [Entity<ShareView>; 11],
+    /// A share taller than it is wide, which the panel shows between bars.
+    pub tall_viewer: Entity<ShareView>,
     pub toasts: Vec<Entity<Notification>>,
     pub center_scroll: ScrollHandle,
     pub center_heights: crate::components::notification_center::RowHeights,
@@ -401,6 +411,7 @@ impl Held {
             rename_fields,
             pickers,
             viewers: ["bob"; 11].map(|name| viewer(name, cx)),
+            tall_viewer: viewer_of("bob", TALL, cx),
             toasts,
             center_scroll: ScrollHandle::new(),
             center_heights: Default::default(),

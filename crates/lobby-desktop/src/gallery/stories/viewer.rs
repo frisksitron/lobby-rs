@@ -288,6 +288,11 @@ pub(super) fn viewer(g: &mut Gallery, _: &mut Window, cx: &mut Context<Gallery>)
                     panel(&v[AWAY], toolbar(FRIENDS, false), cx),
                     cx,
                 ),
+                caption(
+                    "A tall share: square against its bars, in the frame's round corners",
+                    panel(&g.held.tall_viewer.clone(), toolbar(FRIENDS, false), cx),
+                    cx,
+                ),
             ]),
         ),
         Section::new(
