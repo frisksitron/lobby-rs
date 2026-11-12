@@ -82,17 +82,18 @@ pub async fn by_access_hash(db: &Db, hash: &[u8]) -> Result<Option<AuthRow>, DbE
 }
 
 /// The first use of the current pair (at most once per rotation). From then on, presenting the
-/// previous refresh token counts as reuse.
+/// previous refresh token counts as reuse. The pair is named by its access token: a request that
+/// was looked up before a rotation must not mark the pair that replaced its own.
 pub async fn mark_used(
     conn: &mut SqliteConnection,
-    session: SessionId,
+    access_hash: &[u8],
     now: UnixMs,
 ) -> Result<(), DbError> {
     sqlx::query(
         "UPDATE sessions SET current_used_at = ?2, last_seen_at = ?2
-         WHERE id = ?1 AND current_used_at IS NULL",
+         WHERE access_hash = ?1 AND current_used_at IS NULL",
     )
-    .bind(session.0)
+    .bind(access_hash)
     .bind(now.0)
     .execute(conn)
     .await?;

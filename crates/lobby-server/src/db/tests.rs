@@ -97,7 +97,8 @@ fn pair<'a>(access: &'a [u8; 32], refresh: &'a [u8; 32], now: UnixMs) -> NewPair
 }
 
 /// Two refreshes with the same token, one after the other as the writer runs them: the first
-/// rotates, and the second, whose answer was never used, is reissued.
+/// rotates, and the second, whose answer was never used, is reissued. A request that carried the
+/// old access token and reaches the writer between them does not count as a use of the new pair.
 #[tokio::test]
 async fn two_refreshes_with_one_token_rotate_once_and_reissue_once() {
     let dir = tempfile::tempdir().unwrap();
@@ -117,6 +118,7 @@ async fn two_refreshes_with_one_token_rotate_once_and_reissue_once() {
         .unwrap();
     let (x, y) = (([3u8; 32], [4u8; 32]), ([5u8; 32], [6u8; 32]));
     let first = sessions::refresh(&mut writer, &r0, &pair(&x.0, &x.1, t0), t0).await;
+    sessions::mark_used(&mut writer, &a0, t0).await.unwrap();
     let second = sessions::refresh(&mut writer, &r0, &pair(&y.0, &y.1, t0), t0).await;
     assert!(matches!(first.unwrap(), Refreshed::Rotated { .. }));
     assert!(matches!(second.unwrap(), Refreshed::Reissued { .. }));

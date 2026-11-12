@@ -76,14 +76,15 @@ pub struct Authenticated {
 /// recorded, which ends its lost-response grace.
 pub async fn authenticate(app: &App, token: &str) -> Result<Authenticated, AuthError> {
     let now = UnixMs::now();
-    let row = sessions::by_access_hash(&app.db, &tokens::digest(token))
+    let access = tokens::digest(token);
+    let row = sessions::by_access_hash(&app.db, &access)
         .await?
         .ok_or(AuthError::InvalidToken)?;
     if row.access_expires_at <= now {
         return Err(AuthError::AccessExpired);
     }
     if !row.used {
-        app.domain.mark_used(row.session).await?;
+        app.domain.mark_used(access).await?;
     }
     Ok(Authenticated {
         session: row.session,

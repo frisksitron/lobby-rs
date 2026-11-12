@@ -7,7 +7,7 @@ use super::{Domain, WriteError};
 pub(crate) use crate::db::sessions::Refreshed;
 use crate::{
     auth::tokens::{Digest, Minted},
-    db::sessions::{self, SessionId},
+    db::sessions,
 };
 
 impl Domain {
@@ -35,10 +35,10 @@ impl Domain {
 
     /// The first use of the current pair (at most once per rotation). From then on, presenting the
     /// previous refresh token counts as reuse.
-    pub async fn mark_used(&self, session: SessionId) -> Result<(), WriteError> {
+    pub async fn mark_used(&self, access: Digest) -> Result<(), WriteError> {
         self.run(move |w| {
             Box::pin(async move {
-                sessions::mark_used(&mut w.conn, session, UnixMs::now()).await?;
+                sessions::mark_used(&mut w.conn, &access, UnixMs::now()).await?;
                 Ok(())
             })
         })
