@@ -80,7 +80,10 @@ impl Shell {
             let _ = this.update_in(cx, |shell, window, cx| {
                 shell.signing_out = None;
                 shell.lobbies.update(cx, |l, cx| l.remove(&origin, cx));
-                if shell.quit != QuitState::Running {
+                if shell.back_to.as_ref() == Some(&origin) {
+                    shell.back_to = None;
+                }
+                if shell.quit != QuitState::Running || !shell.still_at(&origin) {
                     return;
                 }
                 let next = shell

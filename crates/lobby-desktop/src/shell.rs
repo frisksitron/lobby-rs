@@ -573,6 +573,12 @@ impl Shell {
         }
     }
 
+    /// A Sign Out or Leave that finishes late navigates only when this holds: where the person
+    /// went since stays.
+    fn still_at(&self, origin: &LobbyOrigin) -> bool {
+        self.current_origin() == Some(origin) && self.switching.is_none()
+    }
+
     /// Sign In for this Lobby; `notice` says why the person is here again.
     fn show_auth(
         &mut self,
@@ -757,7 +763,7 @@ impl Shell {
                     l.set_unsent(&origin, "", cx);
                     l.forget_seen(&origin, cx);
                 });
-                if shell.quit == QuitState::Running {
+                if shell.quit == QuitState::Running && shell.still_at(&origin) {
                     let notice = Feedback::Info(copy::SIGNED_OUT.into());
                     shell.sign_in_again(origin, info, notice, window, cx);
                 }
