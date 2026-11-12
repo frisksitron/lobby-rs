@@ -70,5 +70,10 @@ jobs:
       - name: Clippy
         run: cargo clippy -p lobby-server -p lobby-protocol --all-targets -- -D warnings
 
+      # In the workspace, xtask turns the server's test-support on, so the gates never see the
+      # server as the image builds it.
+      - name: Clippy (the image's build)
+        run: cargo clippy -p lobby-server -- -D warnings
+
       - name: Tests
         run: cargo nextest run -p lobby-server -p lobby-protocol

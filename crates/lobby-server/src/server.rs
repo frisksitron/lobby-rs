@@ -7,7 +7,9 @@ use std::{
     time::{Duration, Instant},
 };
 
-use lobby_protocol::{LobbyInfo, PROTOCOL_VERSION, UserId};
+#[cfg(feature = "test-support")]
+use lobby_protocol::UserId;
+use lobby_protocol::{LobbyInfo, PROTOCOL_VERSION};
 use tokio::{net::TcpListener, sync::Semaphore, task::JoinHandle, time::timeout_at};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};

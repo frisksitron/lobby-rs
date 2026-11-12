@@ -30,6 +30,7 @@ use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::task::TaskTracker;
 use tracing::{debug, error};
 
+#[cfg(feature = "test-support")]
 pub use self::admission::MAX_PENDING_PER_SITE;
 pub(crate) use self::{
     admission::{CodeRequest, Join, Verify},
