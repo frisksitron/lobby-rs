@@ -43,14 +43,21 @@ pub enum PaneAt {
 pub struct InkOverlay {
     target: OverlayTarget,
     panes: Vec<OverlayPane>,
-    /// Once the host made the window the overlay: before that it must never show.
-    native: Option<NativeWindow>,
-    /// Whether the host was last asked to show it: only while it has a pane to paint.
-    shown: bool,
+    stage: Stage,
     whole_tags: InkTags,
     picture_tags: InkTags,
-    /// Over a window: places the overlay again whenever the window moves.
-    _follow: Option<Task<()>>,
+}
+
+enum Stage {
+    /// Before the host made the window the overlay: it must never show.
+    Opening,
+    Made {
+        native: NativeWindow,
+        /// Whether the host was last asked to show it: only while it has a pane to paint.
+        shown: bool,
+        /// Over a window: places the overlay again whenever the window moves.
+        _follow: Option<Task<()>>,
+    },
 }
 
 impl InkOverlay {
@@ -82,11 +89,9 @@ impl InkOverlay {
                 cx.new(|_| InkOverlay {
                     target,
                     panes: Vec::new(),
-                    native: None,
-                    shown: false,
+                    stage: Stage::Opening,
                     whole_tags: InkTags::default(),
                     picture_tags: InkTags::default(),
-                    _follow: None,
                 })
             })
         })
@@ -121,7 +126,7 @@ impl InkOverlay {
                         }
                         // A drag sends a burst: one placing covers all of it.
                         while heard.try_recv().is_ok() {}
-                        let Ok(shown) = overlay.update(cx, |o, _, _| o.shown) else {
+                        let Ok(shown) = overlay.update(cx, |o, _, _| o.shown()) else {
                             return;
                         };
                         if shown && !native.show_overlay(target, true) {
@@ -134,30 +139,36 @@ impl InkOverlay {
         };
         overlay
             .update(cx, |o, _, _| {
-                o.native = Some(native);
-                o._follow = follow;
+                o.stage = Stage::Made {
+                    native,
+                    shown: false,
+                    _follow: follow,
+                };
             })
             .map_err(|_| OverlayFault::NoWindow)?;
         Ok(native)
     }
 
     pub fn native(&self) -> Option<NativeWindow> {
-        self.native
+        match self.stage {
+            Stage::Opening => None,
+            Stage::Made { native, .. } => Some(native),
+        }
     }
 
     pub fn shown(&self) -> bool {
-        self.shown
+        matches!(self.stage, Stage::Made { shown: true, .. })
     }
 
     /// What the overlay paints. It shows while there is a pane, once it is made.
     pub fn set_panes(&mut self, panes: Vec<OverlayPane>, cx: &mut Context<Self>) {
         let wanted = !panes.is_empty();
         self.panes = panes;
-        if let Some(native) = self.native
-            && wanted != self.shown
+        if let Stage::Made { native, shown, .. } = &mut self.stage
+            && wanted != *shown
         {
-            self.shown = wanted;
-            let target = self.target;
+            *shown = wanted;
+            let (native, target) = (*native, self.target);
             // Showing sends the window messages: never inside this update.
             cx.spawn(async move |_, _| {
                 if !native.show_overlay(target, wanted) {
@@ -184,7 +195,7 @@ impl InkOverlay {
             } => {
                 let spot = spot.get()?;
                 let (lx, ly) = lobby.client_origin()?;
-                let (ox, oy) = self.native?.client_origin()?;
+                let (ox, oy) = self.native()?.client_origin()?;
                 let scale = window.scale_factor();
                 let offset = point(
                     px((lx - ox) as f32 / scale), // px: screen pixels to this window's
