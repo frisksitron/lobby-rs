@@ -11,7 +11,7 @@ use tokio::{
     time::{Instant, MissedTickBehavior, interval_at, timeout, timeout_at},
 };
 
-use super::{CloseReason, InkQueue, Kick};
+use crate::lobby::{CloseReason, InkQueue, Kick};
 
 /// Once the connection is ending, the queued frames, the close frame and the closing handshake
 /// share this budget. Far below `write_timeout`, so a peer that stopped reading cannot hold
@@ -127,6 +127,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::*;
+    use crate::lobby::INK_QUEUE_BATCHES;
 
     struct Stalled;
 
@@ -231,7 +232,7 @@ mod tests {
     async fn a_viewer_who_reads_slowly_loses_old_ink_and_is_never_kicked() {
         let kick = Kick::child_of(&CancellationToken::new());
         let (tx, rx) = mpsc::channel(4);
-        let ink = InkQueue::new(super::super::ink::INK_QUEUE_BATCHES);
+        let ink = InkQueue::new(INK_QUEUE_BATCHES);
         let (wire, mut sent) = mpsc::channel(1);
         let writer = tokio::spawn(run(
             tokio_util::sync::PollSender::new(wire),

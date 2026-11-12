@@ -12,16 +12,14 @@ use tokio::{
 };
 use tracing::{Instrument as _, Span, debug, error, info, info_span, warn};
 
-use super::{
-    CloseReason, InkQueue, Kick, PreAuthPermit, budget::Budgets, ink::INK_QUEUE_BATCHES, refusal,
-    writer,
-};
+use super::{PreAuthPermit, budget::Budgets, writer};
 use crate::{
-    auth::{self, AuthError, Authenticated},
+    auth::{self, AuthError},
     chat::{self, ChatError},
-    domain::WriteError,
+    domain::{Authenticated, WriteError},
     limits::{SlidingWindow, retry_error},
-    lobby::{Conn, HistoryRead, RegisterError},
+    lobby::{CloseReason, Conn, HistoryRead, INK_QUEUE_BATCHES, InkQueue, Kick, RegisterError},
+    refusal,
     server::App,
     tiers::ConnId,
     voice::VoiceCommand,

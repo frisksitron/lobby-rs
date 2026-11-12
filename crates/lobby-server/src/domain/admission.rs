@@ -15,7 +15,6 @@ use tracing::{debug, info};
 
 use super::{Domain, WriteError, Writer};
 use crate::{
-    auth::tokens::{self, Digest, Minted},
     client_ip::ClientIp,
     config::AuthConfig,
     db::{
@@ -25,6 +24,7 @@ use crate::{
         users::{self, Profile},
     },
     limits::{CodeSend, Recipient},
+    tokens::{self, Digest, Minted},
 };
 
 const TICKET_TTL: Duration = Duration::from_secs(10 * 60);

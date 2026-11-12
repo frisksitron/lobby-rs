@@ -1,29 +1,25 @@
-//! Auth, sessions and tokens: crash-safe refresh rotation, Sign Out, and the access-token check
+//! Auth and sessions: crash-safe refresh rotation, Sign Out, and the access-token check
 //! shared by bearer REST and IDENTIFY. Magic Codes and admission (join, bootstrap, Ask to Join)
 //! live in the submodules; Vouch and Decline in `crate::access`. Their writes are
 //! `crate::domain`'s.
 
 pub(crate) mod join;
 pub(crate) mod magic;
-pub(crate) mod tokens;
 
 use axum::{
     Json,
     extract::{FromRequestParts, State},
     http::{StatusCode, header, request::Parts},
 };
-use lobby_protocol::{ErrorCode, RefreshRequest, SessionTokens, SignOutRequest, UnixMs, UserId};
+use lobby_protocol::{ErrorCode, RefreshRequest, SessionTokens, SignOutRequest, UnixMs};
 use tracing::info;
 
-use self::tokens::Minted;
 use crate::{
-    db::{
-        DbError,
-        sessions::{self, SessionId},
-    },
-    domain::{Refreshed, WriteError},
+    db::{DbError, sessions},
+    domain::{Authenticated, Refreshed, WriteError},
     error::{ApiError, AppJson},
     server::App,
+    tokens::{self, Minted},
 };
 
 #[derive(Debug, thiserror::Error)]
@@ -63,13 +59,6 @@ impl From<AuthError> for ApiError {
         };
         ApiError::new(StatusCode::UNAUTHORIZED, e.code(), e.to_string())
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Authenticated {
-    pub session: SessionId,
-    pub user: UserId,
-    pub access_expires_at: UnixMs,
 }
 
 /// Unknown or revoked ⇒ `AUTH_FAILED`, expired ⇒ `AUTH_EXPIRED`; the first use of a pair is

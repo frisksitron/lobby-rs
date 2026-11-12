@@ -5,11 +5,8 @@
 use lobby_protocol::{UnixMs, User, UserId, Username};
 use tracing::info;
 
-use super::{Domain, WriteError};
-use crate::{
-    auth::Authenticated,
-    db::{self, sessions, users},
-};
+use super::{Authenticated, Domain, WriteError};
+use crate::db::{self, sessions, users};
 
 impl Domain {
     /// The same name again is answered and nothing else; another name nobody holds

@@ -5,9 +5,7 @@
 use axum::{Extension, Json, extract::State};
 use lobby_protocol::{JoinOutcome, JoinRequest, JoinStatus, JoinStatusRequest, UnixMs};
 
-use super::tokens;
 use crate::{
-    auth::tokens::Minted,
     client_ip::ClientIp,
     db::{
         DbError,
@@ -16,6 +14,7 @@ use crate::{
     domain::{Join, WriteError},
     error::{ApiError, AppJson},
     server::App,
+    tokens::{self, Minted},
 };
 
 pub async fn join(

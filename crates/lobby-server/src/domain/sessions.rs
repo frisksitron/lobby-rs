@@ -1,14 +1,22 @@
 //! Sessions: refresh rotation and the first use of a token pair.
 
-use lobby_protocol::{SessionTokens, UnixMs};
+use lobby_protocol::{SessionTokens, UnixMs, UserId};
 use tracing::warn;
 
 use super::{Domain, WriteError};
 pub(crate) use crate::db::sessions::Refreshed;
 use crate::{
-    auth::tokens::{Digest, Minted},
-    db::sessions,
+    db::sessions::{self, SessionId},
+    tokens::{Digest, Minted},
 };
+
+/// The session an access token belongs to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Authenticated {
+    pub session: SessionId,
+    pub user: UserId,
+    pub access_expires_at: UnixMs,
+}
 
 impl Domain {
     /// Rotates the session that holds `presented`, or reissues it after a lost response; a reuse

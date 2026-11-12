@@ -36,7 +36,7 @@ pub(crate) use self::{
     cleanup::Batch,
     error::WriteError,
     files::Staged,
-    sessions::Refreshed,
+    sessions::{Authenticated, Refreshed},
 };
 use crate::{
     blobs::BlobStore, config::Config, db::DbLock, limits::CodeSends, lobby::Lobby, mail::Mailer,

@@ -3,6 +3,14 @@
 //! change and the events describing it happen in one critical section, which keeps READY consistent
 //! with what follows.
 
+mod ink;
+mod kick;
+
+pub use self::{
+    ink::{INK_QUEUE_BATCHES, InkQueue},
+    kick::{CloseReason, Kick},
+};
+
 use std::{
     collections::{BTreeMap, HashMap, VecDeque},
     sync::{Arc, Mutex, MutexGuard},
@@ -26,10 +34,10 @@ use crate::{
     config::VoiceConfig,
     db::{sessions::SessionId, users::Profile},
     limits::TokenBucket,
+    refusal,
     sfu::{SfuCmd, SfuEvent, SfuHandle, SfuOp},
     tiers::ConnId,
     voice::{VoiceCommand, VoiceEffect, VoiceInput, VoiceMachine},
-    ws::{CloseReason, InkQueue, Kick},
 };
 
 /// A Member's sends up to five back to back ("ok⏎ lol⏎") at once, then one per `ws.send_every`.
@@ -708,7 +716,7 @@ impl LobbyState {
                     rid,
                     refusal,
                 } => {
-                    let error = crate::ws::refusal::voice(&refusal, rid, now);
+                    let error = refusal::voice(&refusal, rid, now);
                     let msg = ServerMsg::Error(error);
                     self.send_to(&user, conn, Utf8Bytes::from(msg.encode()));
                 }

@@ -6,13 +6,12 @@ use lobby_protocol::{
     MagicCodeRequest, MagicCodeRequested, MagicCodeVerify, RequestLabel, UnixMs, VerifyOutcome,
 };
 
-use super::tokens;
 use crate::{
-    auth::tokens::Minted,
     client_ip::ClientIp,
     domain::{CodeRequest, Verify},
     error::{ApiError, AppJson},
     server::App,
+    tokens::{self, Minted},
 };
 
 /// `POST /api/v1/auth/magic-code`. A new challenge, known email or not, locked or new Lobby alike,
