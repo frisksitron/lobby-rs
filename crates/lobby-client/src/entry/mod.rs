@@ -324,7 +324,7 @@ impl Entry {
         }
         if self.next_check.is_some_and(|at| at <= now) {
             self.next_check = Some(now + JOIN_CHECK_EVERY);
-            self.check(false);
+            self.check(false, now);
         }
     }
 
@@ -342,8 +342,8 @@ impl Entry {
             EntryIntent::Resend => self.resend(now),
             EntryIntent::SubmitCode(code) => self.submit_code(code, now),
             EntryIntent::PickName(name) => self.pick_name(&name, now),
-            EntryIntent::CheckNow => self.check(true),
-            EntryIntent::WindowActive => self.check(false),
+            EntryIntent::CheckNow => self.check(true, now),
+            EntryIntent::WindowActive => self.check(false, now),
             EntryIntent::GoTo(stage) => self.go_to(stage, now),
             EntryIntent::Back => self.back(now),
         }
@@ -482,10 +482,14 @@ impl Entry {
 
     /// [`Self::fail`] for a Lobby's answer: a 429 also holds the step until it takes tries again.
     fn fail_api(&mut self, e: &ApiError, message: String, now: Instant) {
+        self.hold(e, now);
+        self.fail(message);
+    }
+
+    fn hold(&mut self, e: &ApiError, now: Instant) {
         if e.kind == ApiKind::Server(ErrorCode::RateLimited) {
             self.held_until = Some(now + e.retry_after.unwrap_or(RATE_LIMIT_FALLBACK));
         }
-        self.fail(message);
     }
 
     fn connect(&mut self, address: &str) {
@@ -614,11 +618,11 @@ impl Entry {
     }
 
     /// One status check at a time: a press while one is in flight only shows it.
-    fn check(&mut self, pressed: bool) {
+    fn check(&mut self, pressed: bool, now: Instant) {
         let EntryStep::AwaitingVouch { wait, .. } = &self.step else {
             return;
         };
-        if self.storing.is_some() {
+        if self.storing.is_some() || self.held(now) {
             return;
         }
         if pressed {
@@ -675,7 +679,10 @@ impl Entry {
                 warn!(error = %e, "join status check failed");
                 self.fail_api(&e, copy::request_code_error(&e), now);
             }
-            Err(e) => debug!(error = %e, "background join check failed; next one retries"),
+            Err(e) => {
+                debug!(error = %e, "background join check failed; next one retries");
+                self.hold(&e, now);
+            }
         }
     }
 
@@ -881,6 +888,38 @@ mod tests {
             message: "refused".into(),
             retry_after: None,
             detail: None,
+        }
+    }
+
+    /// No regular check, window coming forward or press asks the Lobby again during its pause.
+    #[test]
+    fn a_rate_limited_vouch_check_waits_out_the_pause() {
+        let now = Instant::now();
+        let pause = Duration::from_secs(30);
+        for pressed in [true, false] {
+            let mut entry = reached();
+            entry.go(waiting(), now);
+            let check = if pressed {
+                EntryIntent::CheckNow
+            } else {
+                EntryIntent::WindowActive
+            };
+            entry.dispatch(check, now);
+            entry.take_ops();
+            let limited = ApiError {
+                retry_after: Some(pause),
+                ..refused(ErrorCode::RateLimited)
+            };
+            entry.complete(entry.epoch, Done::Status(Err(limited)), now);
+            let during = now + JOIN_CHECK_EVERY;
+            entry.tick(during);
+            entry.dispatch(EntryIntent::WindowActive, during);
+            entry.dispatch(EntryIntent::CheckNow, during);
+            assert!(ops(&mut entry).is_empty(), "pressed: {pressed}");
+            assert!(entry.view(during).held, "pressed: {pressed}");
+            entry.tick(now + pause);
+            entry.dispatch(EntryIntent::WindowActive, now + pause);
+            assert_eq!(ops(&mut entry), ["status"], "pressed: {pressed}");
         }
     }
 
