@@ -8,6 +8,7 @@ mod empty;
 mod field;
 mod focus;
 mod icon;
+mod key;
 pub mod motion;
 mod separator;
 mod size;
@@ -20,7 +21,7 @@ mod tooltip;
 
 use gpui_kit::App;
 
-pub use button::{Button, ClickHandler, Custom, PRESSABLE, Variant};
+pub use button::{Button, ClickHandler, Custom, PRESSABLE, PressLink, Variant};
 pub use empty::{Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle};
 pub use field::Field;
 pub use focus::ring as focus_ring;

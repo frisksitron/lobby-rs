@@ -104,6 +104,7 @@ fn voice_group(
     actions: &VoiceBarActions,
     waits: Waits,
     size: FootSize,
+    deafen_press: &ui::PressLink,
     cx: &App,
 ) -> Option<Stateful<Div>> {
     let radius = device_in(size.radius(), cx);
@@ -175,6 +176,8 @@ fn voice_group(
                     (true, false) => "Unmute",
                     (false, _) => "Mute",
                 })
+                // Deafening mutes, so Deafen takes Mute down with it while Mute is up.
+                .when(!muted, |b| b.pressed_with(deafen_press))
                 .on_click(handler(&actions.mute));
             let deafen = button("voice-deafen")
                 .accessibility_label(if deafened { "Undeafen" } else { "Deafen" })
@@ -192,6 +195,7 @@ fn voice_group(
                     (true, false) => "Undeafen",
                     (false, _) => "Deafen",
                 })
+                .presses(deafen_press)
                 .on_click(handler(&actions.deafen));
             [
                 mute,
@@ -346,7 +350,7 @@ impl VoiceFoot {
 }
 
 impl RenderOnce for VoiceFoot {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let (size, waits, actions) = (self.size, self.waits, &self.actions);
         let radius = device_in(size.radius(), cx);
         let row = div()
@@ -371,10 +375,11 @@ impl RenderOnce for VoiceFoot {
                     .on_click(handler(&actions.join)),
             ),
             model => row
-                .children(
-                    voice_group(model, actions, waits, size, cx)
-                        .map(|group| nudged(group, mute_nudges(model), size, cx)),
-                )
+                .children({
+                    let deafen_press = ui::PressLink::new("deafen-press", window, cx);
+                    voice_group(model, actions, waits, size, &deafen_press, cx)
+                        .map(|group| nudged(group, mute_nudges(model), size, cx))
+                })
                 .child(
                     word_button("voice-leave", "Leave", IconName::PhoneOff, size)
                         .accessibility_label("Leave Voice")

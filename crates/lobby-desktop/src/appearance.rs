@@ -49,11 +49,11 @@ pub fn apply(settings: &Settings, cx: &mut App) {
         toasts.margins.top = px(top); // px: theme unit
         let docked = crate::lobby_view::SidebarLayout::Docked(crate::lobby_view::SIDEBAR_SLIM_W);
         toasts.margins.right = crate::lobby_view::toast_right_margin(docked, scale);
-        // The kit's dialogs fade in and settle 4 px on the Open spring's curve. The attachment
+        // The kit's dialogs fade in and settle 4 px, easing out like a popup. The attachment
         // progress ring reads the duration too, so it stays at the kit's 180 ms.
         let motion = &mut theme.motion;
         motion.duration_normal = DIALOG_FOR;
-        motion.easing_enter = Easing::Custom(Rc::new(ui::motion::open_curve));
+        motion.easing_enter = Easing::Custom(Rc::new(ui::motion::ease_out));
         motion.distance_short = u(4.);
     });
 }

@@ -29,6 +29,12 @@ pub(super) struct DecisionToast;
 
 const CONNECTION_TOAST: &str = "connection";
 
+/// A toast's frame. The kit clips its content at the padding, so half the bottom padding is
+/// [`toast_body`]'s: room under a button for its lip and its focus ring.
+fn toast() -> Notification {
+    Notification::new().pt_2().pb_1().px_3()
+}
+
 /// The toast of an Issue. Even one with an action (Rejoin, Send again) goes away by itself after
 /// a few seconds, so nothing sits on the member panel for a whole outage.
 pub(crate) fn issue_toast(issue: &Issue, lobby: WeakEntity<LobbyView>) -> Notification {
@@ -41,10 +47,8 @@ pub(crate) fn issue_toast(issue: &Issue, lobby: WeakEntity<LobbyView>) -> Notifi
     };
     let open = open_center(lobby.clone());
     let issue = issue.clone();
-    Notification::new()
+    toast()
         .id1::<IssueToast>(key)
-        .py_2()
-        .px_3()
         .content(move |_, window, cx| {
             let action = issue_action(&issue, &lobby, cx);
             toast_body(&spec, action.into_iter().collect(), window, cx)
@@ -65,10 +69,8 @@ pub(crate) fn connection_toast(
     };
     let action = notice.action.or(notice.secondary);
     let open = open_center(lobby.clone());
-    Notification::new()
+    toast()
         .id1::<ConnectionToast>(CONNECTION_TOAST)
-        .py_2()
-        .px_3()
         .content(move |_, window, cx| {
             let button = action.map(|a| {
                 let lobby = lobby.clone();
@@ -101,11 +103,9 @@ pub(crate) fn decision_toast(
     };
     let (id, name) = (request.id.clone(), request.username.to_string());
     let open = open_center(lobby.clone());
-    Notification::new()
+    toast()
         .id1::<DecisionToast>(key)
         .autohide(false)
-        .py_2()
-        .px_3()
         .content(move |_, window, cx| {
             let decide = |what: Decide, button: ui::Button| {
                 let (lobby, id) = (lobby.clone(), id.clone());
@@ -246,6 +246,7 @@ fn toast_body(
             });
         })
         .w_full()
+        .pb_1()
         .child(entry)
         .test_support()
         .into_any_element()

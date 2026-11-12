@@ -13,11 +13,11 @@ use std::rc::Rc;
 use gpui_kit::{
     AnyElement, App, Background, ElementId, IntoElement, ParentElement as _, Pixels,
     Refineable as _, RenderOnce, SharedString, StyleRefinement, Styled, Window,
-    base::{self, SwitchThumb, SwitchTrack, spring},
+    base::{self, SwitchThumb, SwitchTrack, transition},
     prelude::FluentBuilder as _,
 };
 
-use super::{focus, motion};
+use super::{focus, key, motion};
 use crate::{
     kit::ActiveTheme as _,
     scale::{device, u},
@@ -131,11 +131,11 @@ impl RenderOnce for Switch {
 
         // The thumb's place and the track's colour are geometry and paint, not semantic states: a
         // checked style would outrank the instance style, and would colour the track at once
-        // while the thumb still travels. Both follow one spring.
-        let on = spring(
+        // while the thumb still travels. Both follow one value.
+        let on = transition(
             (self.id.clone(), "thumb"),
-            if checked { 1. } else { 0. },
-            motion::MOVE,
+            if checked { 1_f32 } else { 0. },
+            motion::respond(),
             window,
             cx,
         );
@@ -163,7 +163,8 @@ impl RenderOnce for Switch {
                     .rounded(radius)
                     .size(u(thumb))
                     .left(thumb_x)
-                    .bg(thumb_bg),
+                    .bg(thumb_bg)
+                    .shadow(key::knob(thumb_bg, window, cx)),
             )
             .children(ring);
 

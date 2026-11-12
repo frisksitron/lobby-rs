@@ -5,15 +5,19 @@ use std::{rc::Rc, sync::Arc};
 
 use gpui_kit::{
     AnyElement, AppContext as _, ClickEvent, Context, Entity, FocusHandle, IntoElement as _,
-    ParentElement as _, SharedString, Styled as _, Window, base::OtpState, div,
-    prelude::FluentBuilder as _, px,
+    ParentElement as _, SharedString, Styled as _, Window,
+    assets::IconName,
+    base::{OtpState, slider::SliderState},
+    div,
+    prelude::FluentBuilder as _,
+    px,
 };
 use lobby_client::{History, IssueKind, LobbyState, Older, Phase};
 use lobby_protocol::{AuthorRef, MagicCode, Message, MessageId, Presence, UnixMs};
 
 use crate::components::{
     AvatarSize, AvatarState, CodeInput, CodeTyping, Feed, FeedAction, MemberAvatar,
-    NotificationBell, Slot, TypingLine,
+    NotificationBell, SURFACE_INNER_RADIUS, Slot, TypingLine,
 };
 use crate::gallery::{
     Gallery, Section,
@@ -21,6 +25,7 @@ use crate::gallery::{
 };
 use crate::kit::{ActiveTheme as _, dialog};
 use crate::lobby_view::{FOLDED_SHEET_W, unfolded_sheet};
+use crate::scale::{device_in, u};
 use crate::ui::{self, motion::Reveal};
 
 use super::{
@@ -50,6 +55,34 @@ pub struct MotionDemo {
     code: (Entity<OtpState>, Entity<CodeTyping>),
     feed: Feed,
     state: Arc<LobbyState>,
+    volume: Entity<SliderState>,
+    mic: Mic,
+}
+
+/// The press row's Mute and Deafen, which change as the Session changes them: Deafen mutes and
+/// Undeafen gives back the mute from before it; Unmute undeafens too.
+#[derive(Clone, Copy)]
+struct Mic {
+    muted: bool,
+    deafened: bool,
+    muted_before_deafen: bool,
+}
+
+impl Mic {
+    fn toggle_mute(&mut self) {
+        self.muted = !self.muted;
+        self.deafened = false;
+    }
+
+    fn toggle_deafen(&mut self) {
+        if self.deafened {
+            self.muted = self.muted_before_deafen;
+        } else {
+            self.muted_before_deafen = self.muted;
+            self.muted = true;
+        }
+        self.deafened = !self.deafened;
+    }
 }
 
 impl MotionDemo {
@@ -81,6 +114,18 @@ impl MotionDemo {
             code: (otp, typing),
             feed,
             state,
+            volume: cx.new(|_| {
+                SliderState::new()
+                    .min(0.)
+                    .max(200.)
+                    .step(1.)
+                    .default_value(100.)
+            }),
+            mic: Mic {
+                muted: true,
+                deafened: false,
+                muted_before_deafen: false,
+            },
         }
     }
 
@@ -133,6 +178,101 @@ fn trigger(
         }))
 }
 
+/// The controls Lobby presses most: its keys in each variant, the voice foot with Unmute latched
+/// until it is pressed, a flat title bar button and a slider.
+fn presses(
+    volume: &Entity<SliderState>,
+    mic: Mic,
+    window: &mut Window,
+    cx: &mut Context<Gallery>,
+) -> AnyElement {
+    let deafen_press = ui::PressLink::new("motion-deafen-press", window, cx);
+    let toggle_mute = cx.listener(|g, _: &ClickEvent, _, cx| {
+        g.held.motion.mic.toggle_mute();
+        cx.notify();
+    });
+    let toggle_deafen = cx.listener(|g, _: &ClickEvent, _, cx| {
+        g.held.motion.mic.toggle_deafen();
+        cx.notify();
+    });
+    let theme = cx.theme();
+    let rest = ui::Custom::new(theme.button_secondary, theme.button_secondary_foreground)
+        .hover(theme.button_secondary_hover)
+        .active(theme.button_secondary_active);
+    let off = ui::Custom::new(theme.danger, theme.danger_foreground).hover(theme.danger_hover);
+    let radius = device_in(SURFACE_INNER_RADIUS, cx);
+
+    let button = |id: &'static str, variant: ui::Variant, label: &'static str| {
+        ui::Button::new(id)
+            .variant(variant)
+            .size(ui::Size::Page)
+            .label(label)
+            .on_click(|_, _, _| {})
+            .into_any_element()
+    };
+    let foot = |id: &'static str, name: &'static str, icon: IconName, selected: bool| {
+        ui::Button::new(id)
+            .variant(ui::Variant::Custom(if selected { off } else { rest }))
+            .icon(icon)
+            .accessibility_label(name)
+            .w(u(40.))
+            .h(u(36.))
+            .p_0()
+            .selected(selected)
+    };
+    let (mute, mute_icon) = if mic.muted {
+        ("Unmute", IconName::MicOff)
+    } else {
+        ("Mute", IconName::Mic)
+    };
+    let (deafen, deafen_icon) = if mic.deafened {
+        ("Undeafen", IconName::HeadphoneOff)
+    } else {
+        ("Deafen", IconName::Headphones)
+    };
+    let foot = div()
+        .flex()
+        .items_center()
+        .gap(px(1.))
+        .child(
+            foot("motion-mute", mute, mute_icon, mic.muted)
+                .when(!mic.muted, |b| b.pressed_with(&deafen_press))
+                .on_click(toggle_mute)
+                .rounded_l(radius)
+                .rounded_r_none(),
+        )
+        .child(
+            foot("motion-deafen", deafen, deafen_icon, mic.deafened)
+                .presses(&deafen_press)
+                .on_click(toggle_deafen)
+                .rounded_none(),
+        )
+        .child(
+            foot("motion-share", "Share Screen", IconName::ScreenShare, false)
+                .on_click(|_, _, _| {})
+                .rounded_r(radius)
+                .rounded_l_none(),
+        );
+    let gear = ui::Button::new("motion-gear")
+        .size(ui::Size::Bar)
+        .icon(IconName::Settings)
+        .accessibility_label("Settings")
+        .on_click(|_, _, _| {});
+    let slider = div()
+        .w(px(140.))
+        .child(ui::Slider::new(volume).accessibility_label("Volume"));
+
+    row([
+        button("motion-press", ui::Variant::Primary, "Join Voice"),
+        button("motion-danger", ui::Variant::Danger, "Leave Lobby"),
+        button("motion-outline", ui::Variant::Outline, "Cancel"),
+        button("motion-secondary", ui::Variant::Secondary, "Turn on"),
+        foot.into_any_element(),
+        gear.into_any_element(),
+        slider.into_any_element(),
+    ])
+}
+
 fn row(children: impl IntoIterator<Item = AnyElement>) -> AnyElement {
     div()
         .flex()
@@ -152,11 +292,7 @@ pub(super) fn motion(
     let (switch, center, typing, talking, wrong) =
         (m.switch, m.center, m.typing, m.speaking, m.wrong);
 
-    let button = ui::Button::new("motion-press")
-        .variant(ui::Variant::Primary)
-        .size(ui::Size::Page)
-        .label("Join Voice")
-        .on_click(|_, _, _| {});
+    let presses = presses(&m.volume, m.mic, window, cx);
 
     let changed = this.clone();
     let bell = NotificationBell::new(
@@ -271,12 +407,12 @@ pub(super) fn motion(
     vec![
         Section::new(
             "press",
-            "1. Press a button: it goes in at once and gives way 1.5 px; it lets go on Quick",
-            wrap([caption("press and hold", button, cx)]),
+            "1. Press a key: its face drops onto its lip at once and comes back up on Quick. Latched (Unmute) or inert, it lies flush. Deafening mutes, so Deafen takes Mute down with it while Mute is up. A flat button, such as the gear, answers with colour alone",
+            presses,
         ),
         Section::new(
             "popup",
-            "2. Open a popup: the Notification Center rises 4 px and fades in on Open, and fades out on Quick",
+            "2. Open a popup: the Notification Center rises 4 px and fades in, at full speed from the first frame, and fades out the same way",
             div().h(px(56.)).child(bell),
         ),
         Section::new(
@@ -286,7 +422,7 @@ pub(super) fn motion(
         ),
         Section::new(
             "switch",
-            "4. Toggle a switch: the thumb moves on Move and the track's colour follows it",
+            "4. Toggle a switch: the thumb moves at full speed from the first frame and the track's colour follows it",
             wrap([caption("Do Not Disturb", switch, cx)]),
         ),
         Section::new(
@@ -345,7 +481,7 @@ pub(super) fn motion(
         ),
         Section::new(
             "sheet",
-            "8. Open the members sheet in the small window: it slides 4 px in from the edge and fades on Open, and goes the same way on Quick",
+            "8. Open the members sheet in the small window: it slides 4 px in from the edge and fades, at full speed from the first frame, and goes back the same way",
             div()
                 .flex()
                 .flex_col()

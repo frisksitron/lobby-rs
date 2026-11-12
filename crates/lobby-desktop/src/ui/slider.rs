@@ -17,7 +17,10 @@ use gpui_kit::{
     px, relative,
 };
 
-use super::focus::{RING_OPACITY, RING_WIDTH};
+use super::{
+    focus::{RING_OPACITY, RING_WIDTH},
+    key,
+};
 use crate::{kit::ActiveTheme as _, scale::u};
 
 const THUMB: f32 = 16.;
@@ -142,6 +145,7 @@ impl RenderOnce for Slider {
             }
         };
 
+        let knob = key::knob(thumb_face.into(), window, cx);
         let thumb = SliderThumb::new(&self.state)
             .disabled(disabled)
             .when(!disabled, |thumb| {
@@ -180,7 +184,8 @@ impl RenderOnce for Slider {
                             .flex_shrink_0()
                             .size_full()
                             .rounded(pill)
-                            .bg(thumb_face),
+                            .bg(thumb_face)
+                            .shadow(knob),
                     )
             });
 

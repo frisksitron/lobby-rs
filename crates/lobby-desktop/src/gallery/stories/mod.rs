@@ -190,8 +190,8 @@ VoiceStatsList::new(session.state().and_then(|s| s.voice.stats.clone()))",
     },
     Story {
         name: "Motion",
-        description: "Each moment that moves, drawn by the app's own code, with a button that sets it off: a press, a popup, a dialog, a switch, a Message coming in, typing, speaking, the members sheet and a wrong Magic Code. Near-critical springs: Quick (~130 ms), Move (~200 ms) and Open (~235 ms), nothing past its mark.",
-        usage: "ui::motion::{QUICK, MOVE, OPEN}\nReveal::new(id, open, window, cx).apply(surface, Side::Top)\nReveal::sheet(id, open, window, cx)\nmotion::arriving(row, motion::arrived(since)?)\nspring(id, target, motion::QUICK, window, cx)",
+        description: "Each moment that moves, drawn by the app's own code, with a button that sets it off: a press, a popup, a dialog, a switch, a Message coming in, typing, speaking, the members sheet and a wrong Magic Code. What answers a click eases out at full speed from the first frame; releases and marks blend on the Quick spring (~130 ms), nothing past its mark.",
+        usage: "transition(id, target, ui::motion::respond(), window, cx)\nReveal::new(id, open, window, cx).apply(surface, Side::Top)\nReveal::sheet(id, open, window, cx)\nmotion::arriving(row, motion::arrived(since)?)\nspring(id, target, motion::QUICK, window, cx)",
         render: motion::motion,
     },
 ];

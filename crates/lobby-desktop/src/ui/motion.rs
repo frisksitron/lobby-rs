@@ -1,26 +1,42 @@
-//! Lobby's motion: three near-critical springs and the few things built on them. Each runs on
-//! base's `spring` (the executor clock, velocity kept across a retarget), so each lands on its
-//! target at once under reduced motion. GPUI has no transform: a surface moves by a content
-//! offset and a colour changes by a mix in OKLab.
+//! Lobby's motion. What answers the person's own act (a switch's thumb, a popup or a sheet coming
+//! and going) eases out at full speed from the first frame. A press's release and what others
+//! set off (a new Message, typing, speaking) blend on a near-critical spring. Both are base's (the
+//! executor clock), so each lands on its target at once under reduced motion. GPUI has no
+//! transform: a surface moves by a content offset and a colour changes by a mix in OKLab.
 
 use std::{f32::consts::TAU, time::Duration};
 
 use gpui_kit::{
     App, Background, ElementId, Hsla, InteractiveElement as _, ParentElement, Pixels, Point,
     Styled, Window,
-    base::{Spring, spring},
+    base::{Spring, Transition, spring, transition},
     div, point,
 };
 
 use crate::{kit::Colorize as _, scale::u};
 
-/// Colour, hover and press release, small marks: 95% in ~95 ms.
+/// Colour, press release, small marks: 95% in ~95 ms. It keeps its velocity when it turns, so a
+/// mark that comes and goes never jumps.
 pub const QUICK: Spring = Spring::new(Duration::from_millis(126));
-const MOVE_RESPONSE: Duration = Duration::from_millis(189);
-/// Something changing place, such as a switch's thumb: 95% in ~143 ms.
-pub const MOVE: Spring = Spring::new(MOVE_RESPONSE);
-/// A surface appearing: 95% in ~168 ms.
-pub const OPEN: Spring = Spring::new(Duration::from_millis(222));
+/// A new row's spring, which sets off gently: no one asked for the row.
+const ARRIVE: Duration = Duration::from_millis(189);
+
+/// The answer to the person's own toggle, such as a switch's thumb. A spring sets off at rest and
+/// takes a frame or two to get going, which reads as a delay after the click.
+pub fn respond() -> Transition {
+    Transition::new(Duration::from_millis(160))
+}
+
+/// A popup or a sheet opening, as [`respond`] does: about 0.8 of the spring it replaced to settle,
+/// as the switch's thumb is.
+fn appear() -> Transition {
+    Transition::new(Duration::from_millis(190))
+}
+
+/// A popup or a sheet closing.
+fn vanish() -> Transition {
+    Transition::new(Duration::from_millis(110))
+}
 
 /// How far a popup, a sheet or a new row travels as it comes in.
 const RISE: f32 = 4.;
@@ -28,8 +44,8 @@ const RISE: f32 = 4.;
 /// ω·t at which a critically damped spring has covered 99% of its way.
 const SETTLED: f32 = 6.64;
 
-/// A value that is 1 while `on` and falls back to 0 on [`QUICK`]: a press or hover shows at once
-/// and blends away.
+/// A value that is 1 while `on` and falls back to 0 on [`QUICK`]: a press shows at once and
+/// blends away.
 pub fn snap_in(id: (ElementId, &'static str), on: bool, window: &mut Window, cx: &mut App) -> f32 {
     spring(
         id,
@@ -68,17 +84,17 @@ fn course(k: f32) -> f32 {
     1. - (1. + k) * (-k).exp()
 }
 
-/// [`OPEN`]'s course as an easing over a duration, for the kit's dialogs, which ease rather than
-/// spring: a critically damped approach that arrives at t = 1.
-pub fn open_curve(t: f32) -> f32 {
-    (course(SETTLED * t.clamp(0., 1.)) / course(SETTLED)).min(1.)
+/// The ease-out of [`respond`] as a plain curve, for the kit's dialogs, which take an easing
+/// rather than a [`Transition`]: full speed at t = 0, arriving at t = 1.
+pub fn ease_out(t: f32) -> f32 {
+    1. - (1. - t.clamp(0., 1.)).powi(3)
 }
 
-/// How far a row of a virtual list has come in on [`MOVE`], `since` it arrived; `None` once it is
-/// there. A row's spring state would die as it scrolls away, so its owner keeps the instant and
-/// this gives the spring's course from it. The owner skips the arrival under reduced motion.
+/// How far a row of a virtual list has come in, `since` it arrived; `None` once it is there. A
+/// row's spring state would die as it scrolls away, so its owner keeps the instant and this gives
+/// the spring's course from it. The owner skips the arrival under reduced motion.
 pub fn arrived(since: Duration) -> Option<f32> {
-    let k = TAU * since.as_secs_f32() / MOVE_RESPONSE.as_secs_f32();
+    let k = TAU * since.as_secs_f32() / ARRIVE.as_secs_f32();
     (k < SETTLED).then(|| course(k))
 }
 
@@ -109,8 +125,9 @@ pub enum Side {
     Right,
 }
 
-/// How far a popup has come in. It opens on [`OPEN`], fading in and moving [`RISE`] away from its
-/// anchor, and closes on a [`QUICK`] fade where it stands. It is drawn until the fade ends.
+/// How far a popup has come in. It opens fading in and moving [`RISE`] away from its anchor, and
+/// closes on a fade where it stands, each at full speed from the first frame. It is drawn until
+/// the fade ends.
 #[derive(Clone, Copy)]
 pub struct Reveal {
     open: bool,
@@ -127,13 +144,12 @@ impl Reveal {
         // Travel happens on the way in only: it rests at the end while the popup is drawn and
         // goes back to the start unseen.
         let drawn = open || shown > 0.;
-        let travel = spring(
-            (id, "travel"),
-            if drawn { 1. } else { 0. },
-            OPEN.with_travel(drawn),
-            window,
-            cx,
-        );
+        let (target, policy) = if drawn {
+            (1_f32, appear())
+        } else {
+            (0., Transition::new(Duration::ZERO))
+        };
+        let travel = transition((id, "travel"), target, policy, window, cx);
         Self {
             open,
             shown,
@@ -153,8 +169,12 @@ impl Reveal {
     }
 
     fn fade(id: ElementId, open: bool, window: &mut Window, cx: &mut App) -> f32 {
-        let (target, policy) = if open { (1., OPEN) } else { (0., QUICK) };
-        spring((id, "shown"), target, policy, window, cx)
+        let (target, policy) = if open {
+            (1_f32, appear())
+        } else {
+            (0., vanish())
+        };
+        transition((id, "shown"), target, policy, window, cx)
     }
 
     pub fn is_drawn(self) -> bool {
