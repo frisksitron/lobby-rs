@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.5 (2026-11-12)
+
+### New
+
+- Move buttons, popups, dialogs, Messages and Voice with short, tight motion
+- Make filled buttons low keys that press down
+
+### Fixed
+
+- Show the hover background on every chat Message and notification row
+- Make Enter press the focused button in a dialog, so Enter on Cancel no longer leaves the Lobby
+- Keep a Member signed in when a token refresh crosses a request that used the old token
+- Stop asking a Lobby for a Vouch answer while it asks for a pause
+- Keep the Lobby you switched to when a Sign Out or Leave finishes late
+- Send a Screen Share's picture size again when it did not reach the Lobby
+- Save attachments with a long emoji name, and ones named like the COM² device
+
 ## 0.1.4 (2026-11-09)
 
 ### New
