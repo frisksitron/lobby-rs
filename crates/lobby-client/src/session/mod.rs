@@ -35,7 +35,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     ClientTask, ConnError, Connection, LobbyOrigin, Phase,
-    api::{ApiClient, Page},
+    api::ApiClient,
     connection::{ConnEvent, SignedOutWhy},
     copy,
     ink::InkPen,
@@ -47,7 +47,7 @@ use crate::{
 pub(crate) use self::driver::{RuntimeClock, drive};
 use self::{
     account::Leave,
-    chat::FailedSends,
+    chat::{FailedSends, Following},
     io::{Done, IoRunner, Op},
     voice::{Ended, VoiceCall},
 };
@@ -243,11 +243,9 @@ pub struct Session {
     queued: Vec<UiEffect>,
     /// The queued sends wait until then: the Lobby's throttle asked for it.
     queued_next_at: Option<Instant>,
-    /// A backfill after a reconnect runs up to this Message id (`READY.lastMessageSeq`).
-    backfill_to: Option<u64>,
     /// The page after READY that the feed waits for. An answer to another one was asked under an
     /// earlier READY, whose feed the newer one may have started over.
-    history_asked: Option<Page>,
+    following: Option<Following>,
     typing_sent: Option<Instant>,
     /// How many pages of history came back, the dropped ones included.
     #[cfg(feature = "test-support")]
@@ -306,8 +304,7 @@ impl Session {
             watch_feed: None,
             queued: Vec::new(),
             queued_next_at: None,
-            backfill_to: None,
-            history_asked: None,
+            following: None,
             typing_sent: None,
             #[cfg(feature = "test-support")]
             history_pages: 0,

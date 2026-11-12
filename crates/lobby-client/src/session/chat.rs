@@ -24,6 +24,24 @@ use crate::{
 /// server may have stored it after all.
 pub const FAILED_NONCE_MEMORY: Duration = Duration::from_secs(60);
 
+/// The page that follows READY's, which only its answer may fill in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Following {
+    /// The newest page, for a READY whose own page was read empty.
+    Latest,
+    /// A backfill after a reconnect, in pages up to Message `to` (`READY.lastMessageSeq`).
+    After { after: MessageId, to: u64 },
+}
+
+impl Following {
+    fn page(self) -> Page {
+        match self {
+            Following::Latest => Page::Latest,
+            Following::After { after, .. } => Page::After(after),
+        }
+    }
+}
+
 /// Why the Session refused a send itself: the words of its Issue.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(super) enum SendError {
@@ -153,65 +171,64 @@ impl Session {
         // An older page answers the Load Older still asked for, from the oldest Message held.
         // The feed may have started over meanwhile (a Lobby reset, or too much missed): the
         // page belongs to the old feed, and would leave a hole under the History row.
-        if let Page::Before(before) = page
-            && (self.state.older != Older::Loading || self.state.oldest_message() != Some(before))
-        {
-            debug!(
-                before = before.get(),
-                "an older page for a feed that started over"
-            );
-            return UiEffects::default();
-        }
-        if matches!(page, Page::After(_) | Page::Latest) {
-            if self.history_asked != Some(page) {
-                debug!(?page, "a page asked under an earlier READY");
-                return UiEffects::default();
+        let following = match page {
+            Page::Before(before) => {
+                if self.state.older != Older::Loading || self.state.oldest_message() != Some(before)
+                {
+                    debug!(
+                        before = before.get(),
+                        "an older page for a feed that started over"
+                    );
+                    return UiEffects::default();
+                }
+                None
             }
-            self.history_asked = None;
-        }
+            Page::After(_) | Page::Latest => {
+                let Some(asked) = self.following.take_if(|f| f.page() == page) else {
+                    debug!(?page, "a page asked under an earlier READY");
+                    return UiEffects::default();
+                };
+                Some(asked)
+            }
+        };
         let p = match result {
             Ok(p) => p,
             Err(e) => {
                 warn!(?page, error = %e, "history failed");
-                return match page {
+                return match following {
                     // The button is still there to try again; the notification says it failed.
-                    Page::Before(_) => {
+                    None => {
                         self.state.older = Older::Available;
                         UiEffects(vec![UiEffect::Issue(Issue::new(
                             IssueKind::OlderFailed,
                             copy::OLDER_FAILED,
                         ))])
                     }
-                    Page::After(_) | Page::Latest => {
-                        self.backfill_to = None;
+                    Some(_) => {
                         self.state.history = History::Failed(copy::HISTORY_FAILED.to_owned());
                         UiEffects::default()
                     }
                 };
             }
         };
-        let settled = match page {
-            Page::Before(_) => self.state.merge_older(&p),
+        let settled = match following {
+            None => self.state.merge_older(&p),
             // The newest page, so nothing is missing after it, and it says whether older exist.
-            Page::Latest => {
-                self.backfill_to = None;
+            Some(Following::Latest) => {
                 self.state.history = History::Loaded;
                 self.state.merge_older(&p)
             }
-            Page::After(_) => {
+            Some(Following::After { to, .. }) => {
                 let settled = self.state.merge_page(&p);
                 // The next page from the last one this page held: live Messages above
                 // `lastMessageSeq` are in the chat already and must not be skipped to.
-                let last = p.messages.last().map(|m| m.id);
-                match (self.backfill_to, last) {
-                    (Some(to), Some(last)) if p.has_more && (last.get() as u64) < to => {
+                match p.messages.last().map(|m| m.id) {
+                    Some(last) if p.has_more && (last.get() as u64) < to => {
                         debug!(after = last.get(), to, "backfill continues");
-                        self.ask_history(Page::After(last));
+                        self.follow(Following::After { after: last, to });
                     }
                     _ => {
-                        if self.backfill_to.take().is_some() {
-                            info!("backfill done");
-                        }
+                        info!("backfill done");
                         self.state.history = History::Loaded;
                     }
                 }
@@ -234,25 +251,18 @@ impl Session {
         }
         self.catch_up_changes(ready);
         let to = ready.last_message_seq;
-        self.history_asked = None;
+        self.following = None;
         match self.state.newest_message() {
             Some(after) if (after.get() as u64) < to => {
                 info!(after = after.get(), to, "backfill");
-                self.backfill_to = Some(to);
-                self.state.history = History::Loading;
-                self.ask_history(Page::After(after));
+                self.follow(Following::After { after, to });
             }
             // The page was read empty, and Messages were committed before the registration.
             None if to > 0 => {
                 info!(to, "the empty READY page missed Messages: the newest page");
-                self.backfill_to = None;
-                self.state.history = History::Loading;
-                self.ask_history(Page::Latest);
+                self.follow(Following::Latest);
             }
-            _ => {
-                self.backfill_to = None;
-                self.state.history = History::Loaded;
-            }
+            _ => self.state.history = History::Loaded,
         }
         let (ReadyHistory::Latest(page) | ReadyHistory::After(page)) = &ready.history;
         debug!(count = page.messages.len(), "READY history");
@@ -320,11 +330,11 @@ impl Session {
         }
     }
 
-    /// The page that follows READY's, which only its answer may fill in.
-    fn ask_history(&mut self, page: Page) {
-        self.history_asked = Some(page);
+    fn follow(&mut self, following: Following) {
+        self.following = Some(following);
+        self.state.history = History::Loading;
         self.request(Op::Messages {
-            page,
+            page: following.page(),
             limit: limits::HISTORY_MAX,
         });
     }
