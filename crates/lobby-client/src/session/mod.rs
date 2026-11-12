@@ -34,8 +34,9 @@ use tokio::{runtime::Handle, sync::mpsc};
 use tracing::{debug, info, warn};
 
 use crate::{
-    ClientTask, ConnError, ConnEvent, Connection, LobbyOrigin, Phase,
+    ClientTask, ConnError, Connection, LobbyOrigin, Phase,
     api::{ApiClient, Page},
+    connection::ConnEvent,
     copy,
     ink::InkPen,
     issues::{Issue, IssueKind},
@@ -49,7 +50,6 @@ pub use self::{
     driver::{Clock, SessionHandle, SessionUpdate, Snapshot, Updates},
     intent::Intent,
     io::Completion,
-    voice::OFFER_TIMEOUT,
 };
 use self::{
     chat::FailedSends,

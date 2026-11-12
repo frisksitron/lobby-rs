@@ -31,7 +31,7 @@ impl fmt::Display for DraftId {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct UploadKey {
+pub(crate) struct UploadKey {
     pub draft: DraftId,
     pub attempt: u32,
 }
@@ -381,7 +381,7 @@ pub enum AttachError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-pub enum UploadError {
+pub(crate) enum UploadError {
     #[error("{}", copy::PAYLOAD_TOO_LARGE)]
     TooLarge,
     #[error("{0}")]

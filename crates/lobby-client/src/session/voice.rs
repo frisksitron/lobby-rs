@@ -28,7 +28,7 @@ use crate::{
     volume::Volume,
 };
 
-pub const OFFER_TIMEOUT: Duration = Duration::from_secs(10);
+pub(crate) const OFFER_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(super) struct Ended {
     kind: IssueKind,

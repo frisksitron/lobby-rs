@@ -39,30 +39,25 @@ pub mod testing;
 
 pub use api::{ApiError, ApiKind, LobbyInfoError, Page};
 pub use client::{Client, StoredSession};
-pub use connection::{ConnError, ConnEvent, Connection, Phase, ReconnectPolicy};
+pub use connection::{ConnError, Connection, Phase, ReconnectPolicy};
 pub use drafts::{
     AttachError, DraftAttachment, DraftId, DraftSource, DraftState, Drafts, PastedFormat,
-    SendBlock, UploadError, UploadKey, paste_png,
+    SendBlock, paste_png,
 };
 pub use entry::{
     Chip, ChipAt, Closed, EntryHandle, EntryIntent, EntryStep, EntryUpdates, EntryView, Fill,
-    JOIN_CHECK_EVERY, NamePath, RESEND_AFTER, Resend, Said, Stage,
+    NamePath, Resend, Said, Stage,
 };
 pub use issues::{Issue, IssueAction, IssueKind, Issues, Severity, Source};
-#[cfg(all(windows, feature = "test-support"))]
-pub use media::CaptureFaults;
-#[cfg(feature = "test-support")]
-pub use media::WatchLoad;
 #[cfg(windows)]
 pub use media::hardware_encoder;
 pub use media::sounds::{Sound, SoundPlayer};
 pub use media::{
-    AudioSink, AudioSource, DEVICE_POLL, DEVICE_START_TIMEOUT, DeviceChoice, DeviceKind,
-    DeviceList, DeviceSetup, DeviceSource, DeviceWatch, DspConfig, DspControl, DspLevels,
-    DspReading, Endpoints, FakeDevices, MediaConfig, MediaError, MediaPath, MicLevel, MicTest,
-    MonitorControl, NamedDevice, PaintSize, PathState, RouteChange, RouteProbe, ScreenSource,
-    ShareOpId, SourceId, SourceKind, StunTimings, SystemDevices, TestMotion, Tone, VideoFeed,
-    VideoFrame, VideoStats, VoiceCallId, VoiceEvent, VoiceStats, list_sources, share_blocked,
+    DEVICE_POLL, DeviceChoice, DeviceKind, DeviceList, DeviceSetup, DeviceSource, DeviceWatch,
+    DspControl, DspLevels, DspReading, Endpoints, FakeDevices, MediaConfig, MediaError, MediaPath,
+    MicLevel, MicTest, MonitorControl, NamedDevice, PaintSize, RouteProbe, ScreenSource, SourceId,
+    SourceKind, SystemDevices, TestMotion, Tone, VideoFeed, VideoFrame, VideoStats, VoiceStats,
+    list_sources, share_blocked,
 };
 pub use media::{GainUnavailable, MicGain, MicMeter, MicQuality, MicReading, MicVolume, Zone};
 pub use media::{Thumbnail, Thumbnails, request_thumbnails, synthetic_thumbnail};
@@ -73,16 +68,16 @@ pub use origin::{DEEP_LINK_SCHEME, HttpPolicy, LobbyOrigin, OriginError};
 pub use paths::Paths;
 pub use persist::{Loaded, Lobby, PersistError, Persisted, SavedWindow, StateFile, Upserted};
 pub use session::{
-    COMMAND_DEADLINE, Clock, Completion, Intent, OFFER_TIMEOUT, PictureError, SessionEvent,
-    SessionHandle, SessionUpdate, SignedOutWhy, Snapshot, UiEffect, UiEffects, Updates,
+    Clock, Intent, PictureError, SessionHandle, SessionUpdate, SignedOutWhy, Snapshot, UiEffect,
+    UiEffects, Updates,
 };
 pub use settings::{
     Compressor, CompressorAmount, NoiseEngine, NoiseSuppression, Settings, UI_SCALE_DEFAULT,
     UI_SCALE_MAX, UI_SCALE_MIN, step_ui_scale,
 };
 pub use state::{
-    AccountOp, ChangeSync, Changes, History, LobbyState, Older, OwnerAction, PendingMessage,
-    Shortfall, StrainCause, StrainRole, StrainWarning, VoicePhase, WatchUi,
+    AccountOp, Changes, History, LobbyState, Older, OwnerAction, PendingMessage, Shortfall,
+    StrainCause, StrainRole, StrainWarning, VoicePhase, WatchUi,
 };
 pub use task::{ClientTask, TaskGone};
 pub use time::{
@@ -91,3 +86,19 @@ pub use time::{
 };
 pub use tokens::{KeyringTokenStore, MemoryTokenStore, TokenStore, TokenStoreError};
 pub use volume::Volume;
+
+#[cfg(feature = "test-support")]
+pub use connection::ConnEvent;
+#[cfg(feature = "test-support")]
+pub use entry::{JOIN_CHECK_EVERY, RESEND_AFTER};
+#[cfg(all(windows, feature = "test-support"))]
+pub use media::CaptureFaults;
+#[cfg(feature = "test-support")]
+pub use media::{
+    AudioSink, AudioSource, DspConfig, PathState, RouteChange, ShareOpId, StunTimings, VoiceCallId,
+    VoiceEvent, WatchLoad,
+};
+#[cfg(feature = "test-support")]
+pub use session::{COMMAND_DEADLINE, Completion, SessionEvent};
+#[cfg(feature = "test-support")]
+pub use state::ChangeSync;

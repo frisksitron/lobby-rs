@@ -22,7 +22,9 @@ use lobby_protocol::{
 };
 use tracing::{debug, info, warn};
 
-pub use code::{RESEND_AFTER, Resend};
+#[cfg(any(test, feature = "test-support"))]
+pub use code::RESEND_AFTER;
+pub use code::Resend;
 pub use driver::{EntryHandle, EntryUpdates};
 pub(crate) use driver::{EntryIo, drive};
 

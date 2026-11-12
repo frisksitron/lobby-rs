@@ -79,7 +79,7 @@ pub use thumbs::{
 pub use video::{PaintSize, VideoFeed, VideoFrame};
 pub use watch::WatchLoad;
 
-use crate::{NoiseSuppression, SessionEvent};
+use crate::{NoiseSuppression, session::SessionEvent};
 
 static SHARE_BLOCKED: Mutex<Option<MediaError>> = Mutex::new(None);
 
@@ -109,7 +109,7 @@ pub(crate) fn probe_share() -> Option<MediaError> {
 
 /// How long opening the microphone and speakers may take. The devices open
 /// on the `lobby-audio` thread, never the caller's; the Session gives up after this long.
-pub const DEVICE_START_TIMEOUT: Duration = Duration::from_secs(3);
+pub(crate) const DEVICE_START_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub const SAMPLE_RATE: u32 = 48_000;
 /// One 20 ms Opus frame at 48 kHz.
