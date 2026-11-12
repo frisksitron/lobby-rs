@@ -7,12 +7,13 @@ use std::{io, path::Path};
 
 use lobby_protocol::content::is_bidi_control;
 
-const NAME_MAX_CHARS: usize = 255;
+/// Windows counts a file name in UTF-16 units.
+const NAME_MAX_UTF16: usize = 255;
 
 /// What a Save dialog is prefilled with, and the name an Open copy gets: the basename after
 /// splitting on both `/` and `\`, without `: < > " | ? *`, control characters and bidi controls,
 /// trailing dots and spaces trimmed, a Windows reserved device name prefixed with `_`, empty ⇒
-/// `download`, at most 255 characters.
+/// `download`, at most 255 UTF-16 units.
 pub fn sanitize_file_name(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or_default();
     let kept: String = base
@@ -33,8 +34,13 @@ pub fn sanitize_file_name(name: &str) -> String {
     if is_reserved(&out) {
         out.insert(0, '_');
     }
-    if out.chars().count() > NAME_MAX_CHARS {
-        out = out.chars().take(NAME_MAX_CHARS).collect();
+    let mut units = 0;
+    let too_long = out.char_indices().find(|(_, c)| {
+        units += c.len_utf16();
+        units > NAME_MAX_UTF16
+    });
+    if let Some((end, _)) = too_long {
+        out.truncate(end);
     }
     out
 }
@@ -47,7 +53,12 @@ fn is_reserved(name: &str) -> bool {
         || upper
             .strip_prefix("COM")
             .or_else(|| upper.strip_prefix("LPT"))
-            .is_some_and(|n| matches!(n, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"))
+            .is_some_and(|n| {
+                matches!(
+                    n,
+                    "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "¹" | "²" | "³"
+                )
+            })
 }
 
 const OPEN_ALLOWLIST: &[(&str, &[&str])] = &[
@@ -135,6 +146,8 @@ mod tests {
             ("CON", "_CON"),
             ("con.txt", "_con.txt"),
             ("LPT1.log", "_LPT1.log"),
+            ("COM².txt", "_COM².txt"),
+            ("COM0", "COM0"),
             ("com10.txt", "com10.txt"),
             ("console.txt", "console.txt"),
             ("naïve ☃.png", "naïve ☃.png"),
@@ -144,6 +157,8 @@ mod tests {
         }
         let long = "x".repeat(300);
         assert_eq!(sanitize_file_name(&long).chars().count(), 255);
+        let wide = "😀".repeat(200);
+        assert_eq!(sanitize_file_name(&wide).encode_utf16().count(), 254);
     }
 
     #[test]
