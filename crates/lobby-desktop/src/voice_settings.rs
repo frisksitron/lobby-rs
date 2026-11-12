@@ -2,7 +2,7 @@
 //! live level meter beside the Hear yourself button, a line kept for what is wrong, and the
 //! microphone's Windows volume. Speakers: its select. Sound: the three clean-up steps (echo
 //! cancellation, noise suppression, the compressor), then the UI sounds. Noise suppression is one
-//! select of Off and its engines ([`NoiseChoice`]), the compressor one of Off, Gentle or Strong
+//! select of Off and its engines ([`NoiseChoice`]), the compressor one of Off, Standard or Strong
 //! ([`CompressorChoice`]). A device choice is written through `Lobbies` at once, and the call that
 //! is on moves to it. A switch, select or slider is written through `Lobbies` too, and the Shell
 //! hands the call that is on what was saved.
@@ -66,7 +66,7 @@ const PERCENT_MAX: f32 = 100.;
 const SLIDER_W: f32 = 140.;
 /// The noise and compressor selects beside their rows' words.
 const CHOICE_W: f32 = 136.;
-/// Where a stored compressor amount stops reading as Gentle and starts reading as Strong: the
+/// Where a stored compressor amount stops reading as Standard and starts reading as Strong: the
 /// middle of the two choices.
 const STRONG_FROM: u8 = (CompressorAmount::DEFAULT.get() + CompressorAmount::STRONG.get()) / 2;
 /// What a control not usable yet fades back to.
@@ -201,22 +201,22 @@ impl SearchableListItem for NoiseChoice {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CompressorChoice {
     Off,
-    Gentle,
+    Standard,
     Strong,
 }
 
 impl CompressorChoice {
     const ALL: [CompressorChoice; 3] = [
         CompressorChoice::Off,
-        CompressorChoice::Gentle,
+        CompressorChoice::Standard,
         CompressorChoice::Strong,
     ];
 
-    /// A stored amount reads as the nearer of Gentle and Strong.
+    /// A stored amount reads as the nearer of Standard and Strong.
     fn of(compressor: Compressor) -> Self {
         match (compressor.on, compressor.amount.get() < STRONG_FROM) {
             (false, _) => CompressorChoice::Off,
-            (true, true) => CompressorChoice::Gentle,
+            (true, true) => CompressorChoice::Standard,
             (true, false) => CompressorChoice::Strong,
         }
     }
@@ -225,7 +225,7 @@ impl CompressorChoice {
         compressor.on = self != CompressorChoice::Off;
         match self {
             CompressorChoice::Off => {}
-            CompressorChoice::Gentle => compressor.amount = CompressorAmount::DEFAULT,
+            CompressorChoice::Standard => compressor.amount = CompressorAmount::DEFAULT,
             CompressorChoice::Strong => compressor.amount = CompressorAmount::STRONG,
         }
     }
@@ -237,7 +237,7 @@ impl SearchableListItem for CompressorChoice {
     fn title(&self) -> SharedString {
         match self {
             CompressorChoice::Off => OFF,
-            CompressorChoice::Gentle => "Gentle",
+            CompressorChoice::Standard => "Standard",
             CompressorChoice::Strong => "Strong",
         }
         .into()
