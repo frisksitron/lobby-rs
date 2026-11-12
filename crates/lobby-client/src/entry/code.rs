@@ -14,7 +14,7 @@ use lobby_protocol::{
 };
 use tracing::{info, warn};
 
-use super::{Closed, Entry, EntryStep, Fill, NamePath, Op, RATE_LIMIT_FALLBACK, Said};
+use super::{Closed, Entry, EntryStep, Fill, Flight, NamePath, Op, RATE_LIMIT_FALLBACK, Said};
 use crate::{ApiError, ApiKind, LobbyOrigin, copy};
 
 /// A new code is offered this long after the last one.
@@ -150,7 +150,7 @@ impl Entry {
     }
 
     pub(super) fn send_code(&mut self, typed: &str, now: Instant) {
-        if self.step != EntryStep::Email || self.busy || self.sends_held(now) {
+        if self.step != EntryStep::Email || self.flight.busy() || self.sends_held(now) {
             return;
         }
         let Ok(email) = Email::parse(typed) else {
@@ -170,10 +170,10 @@ impl Entry {
         };
         let email = email.clone();
         // A pause on checking the code (`held`) is not one on sending, which `resend_state` has.
-        if self.resend_state(&email, now) != Resend::Ready || self.busy {
+        if self.resend_state(&email, now) != Resend::Ready || self.flight.busy() {
             return;
         }
-        self.busy = true;
+        self.flight = Flight::Asked;
         self.said = None;
         let origin = self.reached_origin();
         self.ask(Op::RequestCode(origin, email));

@@ -211,6 +211,26 @@ pub(crate) enum Done {
     Cleared,
 }
 
+/// What Entry has in flight in this epoch.
+enum Flight {
+    Idle,
+    /// The step's own request: reaching the Lobby, sending or checking a code, filing a name.
+    Asked,
+    /// Waiting for a Vouch: a status check, started by the timer, the window or Check now.
+    Checking {
+        pressed: bool,
+    },
+    /// Tokens being stored that nobody has seen Signed in for yet.
+    Storing(LobbyOrigin),
+}
+
+impl Flight {
+    /// What the view and the guards call busy: a background check is not.
+    fn busy(&self) -> bool {
+        !matches!(self, Self::Idle | Self::Checking { pressed: false })
+    }
+}
+
 pub(crate) struct Entry {
     policy: HttpPolicy,
     /// The Lobby the person is in (Add Lobby): reaching it again says so.
@@ -219,16 +239,12 @@ pub(crate) struct Entry {
     step: EntryStep,
     origin: Option<LobbyOrigin>,
     info: Option<LobbyInfo>,
-    busy: bool,
-    /// A status check is in flight in this epoch, pressed or not.
-    checking: bool,
+    flight: Flight,
     next_check: Option<Instant>,
     held_until: Option<Instant>,
     said: Option<Said>,
     fill: Option<Fill>,
     codes: code::Codes,
-    /// Tokens being stored that nobody has seen Signed in for yet.
-    storing: Option<LobbyOrigin>,
     ops: Vec<(u64, Op)>,
     taken: u64,
 }
@@ -242,14 +258,12 @@ impl Entry {
             step,
             origin: None,
             info: None,
-            busy: false,
-            checking: false,
+            flight: Flight::Idle,
             next_check: None,
             held_until: None,
             said: None,
             fill: None,
             codes: code::Codes::default(),
-            storing: None,
             ops: Vec::new(),
             taken: 0,
         }
@@ -276,7 +290,10 @@ impl Entry {
     /// Tokens on their way to the store that no step has shown Signed in for: a dropped Entry
     /// clears them once the save is done.
     pub fn storing(&self) -> Option<&LobbyOrigin> {
-        self.storing.as_ref()
+        match &self.flight {
+            Flight::Storing(origin) => Some(origin),
+            _ => None,
+        }
     }
 
     pub fn view(&self, now: Instant) -> EntryView {
@@ -291,7 +308,7 @@ impl Entry {
             rail: self.rail(),
             origin: self.origin.clone(),
             info: self.info.clone(),
-            busy: self.busy,
+            busy: self.flight.busy(),
             // On the Code step only the code's own refusals hold the button: a send pause is the
             // resend link's, in `resend`.
             held: self.held(now) || (self.step == EntryStep::Email && self.sends_held(now)),
@@ -334,7 +351,7 @@ impl Entry {
         self.taken += 1;
         match intent {
             EntryIntent::Connect(address) => self.connect(&address),
-            EntryIntent::Edited if !self.busy => {
+            EntryIntent::Edited if !self.flight.busy() => {
                 if self.step == EntryStep::Address || matches!(self.said, Some(Said::Error(_))) {
                     self.said = None;
                 }
@@ -447,21 +464,20 @@ impl Entry {
     /// A new step, and a new epoch: what the old one had in flight no longer counts.
     fn go(&mut self, step: EntryStep, now: Instant) {
         self.epoch += 1;
-        self.busy = false;
-        self.checking = false;
         self.held_until = None;
         self.said = None;
         self.fill = None;
-        self.leave_store();
+        self.end_flight();
         self.next_check =
             matches!(step, EntryStep::AwaitingVouch { .. }).then(|| now + JOIN_CHECK_EVERY);
         self.step = step;
         info!(step = ?step_name(&self.step), "entry step");
     }
 
-    /// Tokens whose sign in no step will show: cleared behind the save that runs.
-    fn leave_store(&mut self) {
-        if let Some(origin) = self.storing.take() {
+    /// Nothing in flight counts any more. Tokens whose sign in no step will show are cleared
+    /// behind the save that runs.
+    fn end_flight(&mut self) {
+        if let Flight::Storing(origin) = std::mem::replace(&mut self.flight, Flight::Idle) {
             info!("a sign in was left while its tokens were stored: clearing them");
             self.ask(Op::Clear(origin));
         }
@@ -469,16 +485,16 @@ impl Entry {
 
     /// Starts the step's request, unless one is in flight or the Lobby asked for a pause.
     fn begin(&mut self, now: Instant) -> bool {
-        if self.busy || self.held(now) {
+        if self.flight.busy() || self.held(now) {
             return false;
         }
-        self.busy = true;
+        self.flight = Flight::Asked;
         self.said = None;
         true
     }
 
     fn fail(&mut self, message: impl Into<String>) {
-        self.busy = false;
+        self.flight = Flight::Idle;
         self.said = Some(Said::Error(message.into()));
     }
 
@@ -495,7 +511,7 @@ impl Entry {
     }
 
     fn connect(&mut self, address: &str) {
-        if self.step != EntryStep::Address || self.busy {
+        if self.step != EntryStep::Address || self.flight.busy() {
             return;
         }
         let origin = match LobbyOrigin::parse(address, self.policy) {
@@ -513,7 +529,7 @@ impl Entry {
             return;
         }
         self.epoch += 1;
-        self.busy = true;
+        self.flight = Flight::Asked;
         self.said = None;
         self.origin = Some(origin.clone());
         self.info = None;
@@ -526,7 +542,7 @@ impl Entry {
         stored: Result<bool, TokenStoreError>,
         now: Instant,
     ) {
-        self.busy = false;
+        self.flight = Flight::Idle;
         let origin = self.reached_origin();
         match (info, stored) {
             (Ok(info), Ok(found)) => {
@@ -555,25 +571,24 @@ impl Entry {
     fn store(&mut self, signed_in: SignedIn) {
         info!(user = %signed_in.user.id, "signed in; storing the tokens");
         let origin = self.reached_origin();
-        self.busy = true;
-        self.storing = Some(origin.clone());
+        self.flight = Flight::Storing(origin.clone());
         self.ask(Op::Store(origin, signed_in.tokens));
     }
 
     fn stored(&mut self, result: Result<(), TokenStoreError>, now: Instant) {
-        if self.storing.is_none() {
+        if !matches!(self.flight, Flight::Storing(_)) {
             return;
         }
         match result {
             Ok(()) => {
-                self.storing = None;
+                self.flight = Flight::Idle;
                 info!("tokens stored");
                 self.go(EntryStep::SignedIn, now);
             }
             Err(e) => {
                 warn!(error = %e, "token store failed");
                 // A save that timed out may still land: the clear queues behind it.
-                self.leave_store();
+                self.end_flight();
                 self.fail(copy::KEYCHAIN_UNAVAILABLE);
             }
         }
@@ -583,7 +598,7 @@ impl Entry {
         let EntryStep::Name { ticket, .. } = &self.step else {
             return;
         };
-        if self.busy || self.held(now) {
+        if self.flight.busy() || self.held(now) {
             return;
         }
         let ticket = ticket.clone();
@@ -624,19 +639,17 @@ impl Entry {
         let EntryStep::AwaitingVouch { wait, .. } = &self.step else {
             return;
         };
-        if self.storing.is_some() || self.held(now) {
+        if matches!(self.flight, Flight::Storing(_)) || self.held(now) {
+            return;
+        }
+        if let Flight::Checking { pressed: shown } = &mut self.flight {
+            *shown |= pressed;
             return;
         }
         if pressed {
-            self.busy = true;
-            if !self.checking {
-                self.said = None;
-            }
+            self.said = None;
         }
-        if self.checking {
-            return;
-        }
-        self.checking = true;
+        self.flight = Flight::Checking { pressed };
         let (origin, wait) = (self.reached_origin(), wait.clone());
         self.ask(Op::Status(origin, wait));
     }
@@ -646,9 +659,8 @@ impl Entry {
             return;
         };
         let (email, name) = (email.clone(), name.clone());
-        let pressed = self.busy;
-        self.busy = false;
-        self.checking = false;
+        let pressed = matches!(self.flight, Flight::Checking { pressed: true });
+        self.flight = Flight::Idle;
         match result {
             Ok(JoinStatus::PendingApproval) => {
                 debug!("still waiting for a Vouch");
