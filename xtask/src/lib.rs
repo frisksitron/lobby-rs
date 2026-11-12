@@ -6,6 +6,7 @@ pub mod check_comments;
 pub mod check_deps;
 pub mod check_kit;
 pub mod check_px;
+pub mod dpdfnet_weights;
 pub mod drive;
 pub mod gates;
 pub mod release;

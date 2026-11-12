@@ -1,8 +1,8 @@
 use std::{fmt::Display, path::PathBuf, process::ExitCode};
 
 use xtask::{
-    changelog, check_api, check_comments, check_deps, check_kit, check_px, drive, gates, release,
-    toolchain, workspace_root,
+    changelog, check_api, check_comments, check_deps, check_kit, check_px, dpdfnet_weights, drive,
+    gates, release, toolchain, workspace_root,
 };
 
 const USAGE: &str = "usage: cargo xtask <command>
@@ -33,6 +33,9 @@ commands:
   check-toolchain
       Check that cmake (needed by libopus) is on PATH and that
       deploy/Dockerfile builds on the channel rust-toolchain.toml pins.
+  dpdfnet-weights <model.onnx>
+      Write the DPDFNet weights the client embeds (crates/lobby-client/src/media/dpdfnet/) from
+      Ceva's dpdfnet2_48khz_hr.onnx, and print the blob's SHA-256 and whether it changed.
   drive <scenario> [--instances a,b] [--no-build] [--visible]
       Run a scenario of crates/lobby-desktop/tests/scenarios/ (a name or a path) against the
       real binaries: a lobby-server on free ports and one `lobby` per client, driven through
@@ -102,6 +105,21 @@ fn main() -> ExitCode {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
+            }
+        }
+        Some("dpdfnet-weights") => {
+            let Some(model) = args.next() else {
+                return usage("dpdfnet-weights needs the path of dpdfnet2_48khz_hr.onnx");
+            };
+            match dpdfnet_weights::run(&workspace_root(), model.as_ref()) {
+                Ok(done) => {
+                    println!("dpdfnet-weights: {done}");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("dpdfnet-weights: {e}");
+                    ExitCode::FAILURE
+                }
             }
         }
         Some("drive") => {

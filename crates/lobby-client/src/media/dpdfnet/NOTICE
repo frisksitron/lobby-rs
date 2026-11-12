@@ -1,0 +1,9 @@
+dpdfnet2.f16.bin holds the weights of DPDFNet-2 for 48 kHz, a speech enhancement model by Ceva,
+licensed under the Apache License, Version 2.0 (http://www.apache.org/licenses/LICENSE-2.0).
+
+Source: dpdfnet2_48khz_hr.onnx from https://huggingface.co/Ceva-IP/DPDFNet (onnx/), described at
+https://github.com/ceva-ip/DPDFNet. SHA-256 of the file it was made from:
+7f0575a5cec0ba4ffd8f8bd657e06d007e4ccdd955d76faab922b9d3291dc14b
+
+dpdfnet2.f16.bin is a derivative of that file: its tensors are reordered for Lobby's engine and
+rounded to 16-bit floats. `cargo xtask dpdfnet-weights <model.onnx>` makes it from the ONNX file.
