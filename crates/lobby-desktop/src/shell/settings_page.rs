@@ -83,7 +83,7 @@ impl Shell {
                 if shell.back_to.as_ref() == Some(&origin) {
                     shell.back_to = None;
                 }
-                if shell.quit != QuitState::Running || !shell.still_at(&origin) {
+                if !shell.may_move_on_from(&origin) {
                     return;
                 }
                 let next = shell
