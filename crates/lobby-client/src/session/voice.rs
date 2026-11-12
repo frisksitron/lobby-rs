@@ -141,40 +141,39 @@ const SOURCE_REPORT_SPACING: Duration = Duration::from_millis(500);
 /// [`SOURCE_REPORT_SPACING`], the newest held until it may go.
 #[derive(Debug, Default)]
 struct SourceReports {
-    sent: Option<(SourceSize, Instant)>,
+    told: Option<SourceSize>,
+    tried_at: Option<Instant>,
     held: Option<SourceSize>,
 }
 
 impl SourceReports {
     /// The capture's size now. Returns what to send at once.
     fn heard(&mut self, size: SourceSize, now: Instant) -> Option<SourceSize> {
-        self.held = None;
-        match self.sent {
-            Some((sent, _)) if sent == size => None,
-            Some((_, at)) if now < at + SOURCE_REPORT_SPACING => {
-                self.held = Some(size);
-                None
-            }
-            _ => {
-                self.sent = Some((size, now));
-                Some(size)
-            }
+        self.held = (self.told != Some(size)).then_some(size);
+        self.due(now)
+    }
+
+    fn sent(&mut self, size: SourceSize, went: bool) {
+        if went {
+            self.told = Some(size);
+        } else {
+            self.held = Some(size);
         }
     }
 
     /// The held size, once it may go.
     fn due(&mut self, now: Instant) -> Option<SourceSize> {
-        if self.deadline()? > now {
+        if self.deadline().is_some_and(|at| at > now) {
             return None;
         }
         let size = self.held.take()?;
-        self.sent = Some((size, now));
+        self.tried_at = Some(now);
         Some(size)
     }
 
     fn deadline(&self) -> Option<Instant> {
         self.held?;
-        self.sent.map(|(_, at)| at + SOURCE_REPORT_SPACING)
+        self.tried_at.map(|at| at + SOURCE_REPORT_SPACING)
     }
 }
 
@@ -377,11 +376,14 @@ impl Session {
 
     /// The size of what this Member shares. The server moves the drawing epoch with it, so a
     /// stroke drawn on the old picture ends and the boards clear. A report: nothing answers it.
-    fn send_share_source(&self, size: SourceSize) {
+    fn send_share_source(&mut self, size: SourceSize) {
         let (width, height) = (size.width.get(), size.height.get());
-        info!(width, height, "share source size sent");
         let frame = ClientFrame::new(ClientMsg::ScreenShareSource(ShareSource { size }));
-        let _ = self.conn.send(&frame);
+        let went = self.conn.send(&frame).is_ok();
+        info!(width, height, went, "share source size sent");
+        if let Some(share) = self.call.as_mut().and_then(|c| c.share.as_mut()) {
+            share.source.sent(size, went);
+        }
     }
 
     /// Every change to the call's path recovery goes through here, and so does what the
