@@ -38,7 +38,7 @@ mod volume;
 pub mod testing;
 
 pub use api::{ApiError, ApiKind, LobbyInfoError, Page};
-pub use client::{Client, StoredSession};
+pub use client::{BuildError, Client, StoredSession};
 pub use connection::{ConnError, Connection, Phase, ReconnectPolicy, SignedOutWhy};
 pub use drafts::{
     AttachError, DraftAttachment, DraftId, DraftSource, DraftState, Drafts, PastedFormat,
@@ -65,7 +65,7 @@ pub use media_cache::{
     DECODED_BUDGET_BYTES, DecodedImage, Lru, MediaCache, MediaCacheError, Variant, picture,
 };
 pub use origin::{DEEP_LINK_SCHEME, HttpPolicy, LobbyOrigin, OriginError};
-pub use paths::Paths;
+pub use paths::{Paths, PathsError};
 pub use persist::{Loaded, Lobby, PersistError, Persisted, SavedWindow, StateFile, Upserted};
 pub use session::{
     Clock, Intent, PictureError, SessionHandle, SessionUpdate, Snapshot, UiEffect, UiEffects,
