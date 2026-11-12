@@ -92,26 +92,24 @@ fn fill(s: &str, lobby: &str, lobby2: Option<&str>) -> Result<String, String> {
     Ok(s)
 }
 
-/// `{code:<email>}` and `{code2:<email>}` as the newest code mailed to that email. Both Lobbies
-/// mail into the one sink, so the newest is the one the Lobby just asked for.
-fn codes(s: &str, mail: &Mail) -> Result<String, String> {
+/// `{code:<email>}` and `{code2:<email>}` as the newest code mailed to that email since the last
+/// one a step took. Both Lobbies mail into the one sink, so the newest is the one the Lobby just
+/// asked for.
+fn codes(s: &str, mail: &mut Mail) -> Result<String, String> {
     let mut s = s.to_owned();
     while let Some(start) = s.find("{code:").or_else(|| s.find("{code2:")) {
         let open = s[start..].find(':').map_or(0, |colon| colon + 1);
         let end = start + s[start..].find('}').ok_or("unclosed {code:…}")?;
         let email = s[start + open..end].to_owned();
+        let seen = mail.seen.get(&email).copied().unwrap_or(0);
         let sink = &mail.sink;
-        let code = mail.rt.block_on(async {
-            let until = tokio::time::Instant::now() + MAIL_WITHIN;
-            while sink.count_to(&email) == 0 && tokio::time::Instant::now() < until {
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-            match sink.count_to(&email) {
-                0 => None,
-                n => Some(sink.code_number(&email, n).await),
-            }
-        });
-        let code = code.ok_or_else(|| format!("no code was mailed to {email}"))?;
+        let (count, code) = mail
+            .rt
+            .block_on(async {
+                tokio::time::timeout(MAIL_WITHIN, sink.code_after(&email, seen)).await
+            })
+            .map_err(|_| format!("no new code was mailed to {email}"))?;
+        mail.seen.insert(email, count);
         s.replace_range(start..=end, &code);
     }
     Ok(s)
@@ -121,13 +119,18 @@ fn codes(s: &str, mail: &Mail) -> Result<String, String> {
 struct Mail {
     sink: SmtpSink,
     rt: tokio::runtime::Runtime,
+    seen: BTreeMap<String, usize>,
 }
 
 impl Mail {
     fn start() -> Result<Mail, String> {
         let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
         let sink = rt.block_on(SmtpSink::start());
-        Ok(Mail { sink, rt })
+        Ok(Mail {
+            sink,
+            rt,
+            seen: BTreeMap::new(),
+        })
     }
 }
 
@@ -182,6 +185,13 @@ pub fn read(text: &str) -> Result<(Header, Vec<Line>), String> {
                 return Err(format!(
                     "line {number}: Layer 3 only, {why} (cargo nextest run -p lobby-desktop --test e2e_ui)"
                 ));
+            }
+            for key in ["history", "sent_files", "own_paths"] {
+                if obj.contains_key(key) {
+                    return Err(format!(
+                        "line {number}: Layer 3 only, the driver cannot set up `{key}` (cargo nextest run -p lobby-desktop --test e2e_ui)"
+                    ));
+                }
             }
             let strings = |key: &str| -> Vec<String> {
                 obj.get(key)
@@ -642,7 +652,7 @@ pub fn run(opts: &Options) -> Result<String, String> {
     let mut transcript =
         fs::File::create(out.join("transcript.jsonl")).map_err(|e| e.to_string())?;
 
-    let mail = Mail::start()?;
+    let mut mail = Mail::start()?;
     let smtp = mail.sink.port();
     let mut servers = vec![Server::create(
         run_dir.join("server"),
@@ -750,8 +760,8 @@ pub fn run(opts: &Options) -> Result<String, String> {
                 }
                 _ => {
                     let filled = fill(&step.to_string(), &lobby, lobby2.as_deref())?;
-                    let mut step: Value =
-                        serde_json::from_str(&codes(&filled, &mail)?).map_err(|e| e.to_string())?;
+                    let mut step: Value = serde_json::from_str(&codes(&filled, &mut mail)?)
+                        .map_err(|e| e.to_string())?;
                     if let Some(shot) = line.step.get("shot").and_then(Value::as_str) {
                         step["path"] = json!(slashes(&out.join(format!("{}-{shot}.png", line.on))));
                     }
