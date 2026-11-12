@@ -357,13 +357,3 @@ mod platform {
             .map_err(|e| e.to_string())
     }
 }
-
-#[cfg(not(windows))]
-mod platform {
-    use super::ScreenSource;
-    use crate::media::MediaError;
-
-    pub fn sources() -> Result<Vec<ScreenSource>, MediaError> {
-        Ok(Vec::new())
-    }
-}

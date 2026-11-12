@@ -24,8 +24,6 @@ pub enum GainUnavailable {
     NoDevice,
     #[error("This microphone's volume cannot be changed.")]
     NoControl,
-    #[error("The microphone's volume can be changed on Windows only.")]
-    Unsupported,
 }
 
 /// What the owner asks the thread.
@@ -64,11 +62,6 @@ impl MicVolume {
             if started.is_err() {
                 *lock(&gain) = MicGain::Unavailable(GainUnavailable::NoControl);
             }
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = asked;
-            *lock(&gain) = MicGain::Unavailable(GainUnavailable::Unsupported);
         }
         MicVolume {
             gain,

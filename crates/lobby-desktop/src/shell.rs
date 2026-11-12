@@ -85,11 +85,6 @@ enum Zoom {
     Reset,
 }
 
-/// The Wayland app id. It must match the name of
-/// `packaging/linux/io.github.frisksitron.Lobby.desktop`, or the desktop shows no icon or name for
-/// the window.
-const APP_ID: &str = "io.github.frisksitron.Lobby";
-
 /// Where the OS idle time comes from: the host in the app, a stand-in in tests.
 pub type IdleSource = fn() -> Option<Duration>;
 
@@ -338,7 +333,6 @@ impl Shell {
             display_id: setup.display,
             focus: setup.focus,
             show: setup.show,
-            app_id: Some(APP_ID.into()),
             ..TitleBar::window_options()
         };
         gpui_kit::open_window(options, cx, move |window, cx| {

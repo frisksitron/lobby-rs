@@ -1,4 +1,4 @@
-//! Repository gates run by CI, the scenario driver and the Linux package.
+//! Repository gates run by CI, the scenario driver and the release commands.
 
 pub mod changelog;
 pub mod check_api;
@@ -8,7 +8,6 @@ pub mod check_kit;
 pub mod check_px;
 pub mod drive;
 pub mod gates;
-pub mod package_linux;
 pub mod release;
 pub mod toolchain;
 

@@ -31,8 +31,6 @@ use super::{
     MediaError, ShareOpId, VoiceEvent, VoiceEvents,
     video::{PaintSize, VideoFrame},
 };
-#[cfg(not(windows))]
-use no_decoder::{Decoder, Picture};
 
 pub const DECODE_QUEUE: usize = 8;
 const POLL: Duration = Duration::from_millis(100);
@@ -713,59 +711,6 @@ pub(super) fn nal_types(au: &[u8]) -> Vec<u8> {
         .filter(|w| w[..3] == [0, 0, 1])
         .map(|w| w[3] & 0x1f)
         .collect()
-}
-
-#[cfg(not(windows))]
-mod no_decoder {
-    use std::num::NonZeroUsize;
-
-    use super::MediaError;
-
-    pub(crate) enum Decoder {}
-
-    impl Decoder {
-        pub fn new() -> Result<Decoder, MediaError> {
-            Err(MediaError::ShareUnsupported)
-        }
-
-        pub fn flush(&mut self) -> Result<(), MediaError> {
-            match *self {}
-        }
-
-        pub fn decode(&mut self, _: &[u8]) -> Result<bool, MediaError> {
-            match *self {}
-        }
-
-        pub fn copy(&mut self, _: &mut Picture, _: Option<(u32, u32)>) -> Result<bool, MediaError> {
-            match *self {}
-        }
-    }
-
-    pub(crate) struct Picture {
-        pub width: u32,
-        pub height: u32,
-    }
-
-    impl Picture {
-        pub fn empty() -> Picture {
-            Picture {
-                width: 0,
-                height: 0,
-            }
-        }
-
-        pub fn hardware(&self) -> bool {
-            false
-        }
-
-        pub fn size(&self) -> (u32, u32) {
-            (self.width, self.height)
-        }
-
-        pub fn to_bgra(&self, _: NonZeroUsize) -> Result<Vec<u8>, MediaError> {
-            Err(MediaError::ShareUnsupported)
-        }
-    }
 }
 
 #[cfg(test)]

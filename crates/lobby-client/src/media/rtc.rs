@@ -87,10 +87,6 @@ pub(crate) enum RtcCmd {
         volume: Volume,
     },
     /// The OS reported an interface or address added or removed.
-    #[cfg_attr(
-        not(windows),
-        expect(dead_code, reason = "only Windows watches the network")
-    )]
     NetworkChanged,
 }
 

@@ -387,17 +387,6 @@ mod system {
     }
 }
 
-#[cfg(not(windows))]
-mod system {
-    use super::{Budget, Thumbnail};
-    use crate::media::screen::SourceId;
-
-    /// The desktop's own dialog picks what is shared, and there is nothing to list.
-    pub fn grab(_: &SourceId, _: &Budget) -> Option<Thumbnail> {
-        None
-    }
-}
-
 #[cfg(all(test, windows))]
 mod probe {
     use std::time::Instant;

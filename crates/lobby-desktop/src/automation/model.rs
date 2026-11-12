@@ -61,14 +61,11 @@ fn files(cx: &App) -> Value {
     })
 }
 
-/// Whether a saved file carries the platform's downloaded-from-the-internet mark. Only Windows has
-/// one (Mark-of-the-Web), so elsewhere there is nothing to miss.
+/// Whether a saved file carries the downloaded-from-the-internet mark (Mark-of-the-Web).
 fn marked(path: &std::path::Path) -> bool {
-    !cfg!(windows) || {
-        let mut stream = path.as_os_str().to_owned();
-        stream.push(":Zone.Identifier");
-        std::path::Path::new(&stream).is_file()
-    }
+    let mut stream = path.as_os_str().to_owned();
+    stream.push(":Zone.Identifier");
+    std::path::Path::new(&stream).is_file()
 }
 
 pub fn elements(window: &Window) -> Value {

@@ -3,12 +3,6 @@
 //! touches `state.json` or the keychain. A second launch that holds a `lobby://` link hands the
 //! link over as well.
 
-#[cfg(not(windows))]
-use tokio::{runtime::Handle, sync::mpsc::UnboundedSender};
-
-#[cfg(not(windows))]
-use super::HostEvent;
-
 #[cfg(windows)]
 pub use windows_pipe::{Guard, acquire, ask_to_quit, is_running, pipe_name};
 
@@ -21,25 +15,6 @@ pub enum Instance {
     /// No guard: more than one instance is allowed (or the pipe could not be made), so it
     /// starts as if it were the only one.
     Unguarded,
-}
-
-#[cfg(not(windows))]
-pub struct Guard;
-
-#[cfg(not(windows))]
-pub fn pipe_name(profile: &str) -> String {
-    profile.to_owned()
-}
-
-#[cfg(not(windows))]
-pub fn acquire(
-    _allow_multiple: bool,
-    _name: &str,
-    _link: Option<&str>,
-    _rt: &Handle,
-    _events: UnboundedSender<HostEvent>,
-) -> Instance {
-    Instance::Unguarded
 }
 
 #[cfg(windows)]

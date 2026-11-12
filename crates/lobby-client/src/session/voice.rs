@@ -787,9 +787,6 @@ impl Session {
     }
 
     fn try_watch(&mut self, sharer: &UserId, now: Instant) -> Result<(), VoiceError> {
-        if cfg!(not(windows)) {
-            return Err(VoiceError::Media(MediaError::ShareUnsupported));
-        }
         let call = self.voice_call().ok_or(VoiceError::NotInVoice)?;
         if !self.voice_active() {
             return Err(VoiceError::NotActive);

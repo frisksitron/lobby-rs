@@ -96,12 +96,9 @@ pub fn share_blocked() -> Option<MediaError> {
 }
 
 pub(crate) fn probe_share() -> Option<MediaError> {
-    #[cfg(windows)]
     let blocked = hardware_encoder()
         .is_none()
         .then_some(MediaError::NoHardwareEncoder);
-    #[cfg(not(windows))]
-    let blocked = Some(MediaError::ShareUnsupported);
     tracing::info!(blocked = ?blocked, "screen share probed");
     *SHARE_BLOCKED.lock().unwrap_or_else(|e| e.into_inner()) = blocked.clone();
     blocked
@@ -511,8 +508,6 @@ pub enum MediaError {
     /// The window is minimized; it holds the window's name.
     #[error("{}", crate::copy::window_minimized(.0))]
     SourceMinimized(String),
-    #[error("Screen Share works on Windows only.")]
-    ShareUnsupported,
     #[error("This computer's GPU has no hardware H.264 encoder, which Screen Share needs.")]
     NoHardwareEncoder,
     #[error("This computer has no H.264 decoder. On Windows N, install the Media Feature Pack.")]

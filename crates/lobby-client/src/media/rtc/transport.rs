@@ -5,9 +5,7 @@
 //! usually drops the WebSocket too, which ends Voice; the move helps when the WebSocket survives
 //! it (a second interface, a VPN).
 //!
-//! Windows reports network changes as they happen (`netwatch::NetworkWatch`). Linux would watch an
-//! `AF_NETLINK`/`NETLINK_ROUTE` socket for them; not built, as ICE notices a dead path within
-//! 3 s and the next offer reroutes anyway.
+//! Windows reports network changes as they happen (`netwatch::NetworkWatch`).
 
 use std::{
     fmt, io,

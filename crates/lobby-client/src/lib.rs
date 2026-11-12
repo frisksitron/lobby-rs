@@ -5,6 +5,9 @@
 //! runtime handle given to [`Client::new`] and returns a [`ClientTask`] or a channel, which a
 //! GPUI executor may await without a Tokio reactor.
 
+#[cfg(not(windows))]
+compile_error!("lobby-client builds for Windows only");
+
 mod api;
 mod atomic;
 mod client;

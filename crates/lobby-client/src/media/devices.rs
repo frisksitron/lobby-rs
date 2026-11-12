@@ -173,11 +173,6 @@ fn communications_default(kind: DeviceKind) -> Option<String> {
     Some(cpal::DeviceId::new(cpal::HostId::Wasapi, id).to_string())
 }
 
-#[cfg(not(windows))]
-fn communications_default(_: DeviceKind) -> Option<String> {
-    None
-}
-
 /// A list that tests and `LOBBY_FAKE_MEDIA=1` change by hand.
 #[derive(Debug, Default)]
 pub struct FakeDevices {

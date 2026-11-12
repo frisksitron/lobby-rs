@@ -1,8 +1,8 @@
 use std::{fmt::Display, path::PathBuf, process::ExitCode};
 
 use xtask::{
-    changelog, check_api, check_comments, check_deps, check_kit, check_px, drive, gates,
-    package_linux, release, toolchain, workspace_root,
+    changelog, check_api, check_comments, check_deps, check_kit, check_px, drive, gates, release,
+    toolchain, workspace_root,
 };
 
 const USAGE: &str = "usage: cargo xtask <command>
@@ -49,10 +49,7 @@ commands:
   release <version>
       Refuse a bad commit subject, write the changelog entry, bump the workspace to <version>,
       commit, tag v<version> and push both to origin. CI builds the tag with `dist` and
-      publishes the GitHub Release the apps update from.
-  package-linux
-      Build the release `lobby` and pack it with its desktop entry, icon and metadata into
-      target/package/lobby-<version>-x86_64-linux.tar.gz (Linux only).";
+      publishes the GitHub Release the apps update from.";
 
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
@@ -154,16 +151,6 @@ fn main() -> ExitCode {
                 }
             }
         }
-        Some("package-linux") => match package_linux::run(&workspace_root()) {
-            Ok(tarball) => {
-                println!("package-linux: {}", tarball.display());
-                ExitCode::SUCCESS
-            }
-            Err(e) => {
-                eprintln!("package-linux: {e}");
-                ExitCode::FAILURE
-            }
-        },
         Some("help" | "--help" | "-h") | None => {
             println!("{USAGE}");
             ExitCode::SUCCESS

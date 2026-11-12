@@ -189,8 +189,6 @@ fn main() -> anyhow::Result<()> {
     {
         host::install::apply_update(&staged, relaunch);
     }
-    #[cfg(not(windows))]
-    let _ = (swap_on_exit, driven);
     info!("exited");
     logging::flush_and_drop();
     Ok(())
@@ -205,7 +203,7 @@ fn start_updates(
     cx: &mut App,
 ) {
     let (Some(feed), Some(dir)) = (
-        feed.filter(|_| cfg!(windows)),
+        feed,
         std::env::current_exe()
             .ok()
             .and_then(|exe| exe.parent().map(ToOwned::to_owned)),

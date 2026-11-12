@@ -72,32 +72,22 @@ pub struct Tray {
 }
 
 impl Tray {
-    /// `None` where there is no notification area to put it in (or this platform has no tray yet).
-    /// With `shown` false the icon is registered but hidden: a driven client keeps the person's
-    /// tray clear.
+    /// `None` where there is no notification area to put it in. With `shown` false the icon is
+    /// registered but hidden: a driven client keeps the person's tray clear.
     pub fn add(tooltip: &str, shown: bool, events: UnboundedSender<HostEvent>) -> Option<Self> {
         #[cfg(windows)]
         {
             tray::TrayIcon::add(tooltip, shown, events).map(|icon| Self { _icon: icon })
         }
-        #[cfg(not(windows))]
-        {
-            let _ = (tooltip, shown, events);
-            None
-        }
     }
 }
 
-/// The session's time without keyboard or mouse input. `None` where the platform cannot tell, so
-/// the Member is never shown idle.
+/// The session's time without keyboard or mouse input. `None` when Windows cannot tell, so the
+/// Member is never shown idle.
 pub fn idle_time() -> Option<Duration> {
     #[cfg(windows)]
     {
         win::idle_time()
-    }
-    #[cfg(not(windows))]
-    {
-        None
     }
 }
 
@@ -127,9 +117,6 @@ pub enum OverlayFault {
     SourceGone,
     #[error("Windows does not say when the shared window moves")]
     Follow,
-    #[cfg(not(windows))]
-    #[error("there is no overlay on this platform")]
-    Unsupported,
 }
 
 /// Runs `open` so that a window it creates is Per-Monitor V2 DPI aware, whatever the process is.
@@ -137,10 +124,6 @@ pub fn per_monitor_v2<T>(open: impl FnOnce() -> T) -> T {
     #[cfg(windows)]
     {
         win::per_monitor_v2(open)
-    }
-    #[cfg(not(windows))]
-    {
-        open()
     }
 }
 
@@ -159,11 +142,6 @@ impl WindowWatch {
             win::WindowWatch::start(window, moved)
                 .map(|hooks| Self { _hooks: hooks })
                 .ok_or(OverlayFault::Follow)
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (window, moved);
-            Err(OverlayFault::Unsupported)
         }
     }
 }
@@ -196,7 +174,7 @@ pub enum DriveWindow {
 /// made from a task, never inside a GPUI update: the messages must reach GPUI while the app is not
 /// borrowed, or GPUI drops them with "RefCell already borrowed".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NativeWindow(#[cfg_attr(not(windows), allow(dead_code))] isize);
+pub struct NativeWindow(isize);
 
 impl NativeWindow {
     pub fn of(window: &gpui_kit::Window) -> Option<Self> {
@@ -209,11 +187,6 @@ impl NativeWindow {
                 _ => None,
             }
         }
-        #[cfg(not(windows))]
-        {
-            let _ = window;
-            None
-        }
     }
 
     fn command(self, command: WindowCommand) {
@@ -223,18 +196,12 @@ impl NativeWindow {
             WindowCommand::Show => tray::show_window(self.0, true),
             WindowCommand::ShowQuietly => tray::show_window(self.0, false),
         }
-        #[cfg(not(windows))]
-        let _ = command;
     }
 
     pub fn park_offscreen(self) -> bool {
         #[cfg(windows)]
         {
             win::park_offscreen(self.0)
-        }
-        #[cfg(not(windows))]
-        {
-            false
         }
     }
 
@@ -250,11 +217,6 @@ impl NativeWindow {
         {
             win::make_overlay(self.0, target)
         }
-        #[cfg(not(windows))]
-        {
-            let _ = target;
-            Err(OverlayFault::Unsupported)
-        }
     }
 
     /// Shows the overlay over `target` without activating it, or hides it. Over a window it
@@ -265,11 +227,6 @@ impl NativeWindow {
         {
             win::show_overlay(self.0, target, shown)
         }
-        #[cfg(not(windows))]
-        {
-            let _ = (target, shown);
-            false
-        }
     }
 
     /// Keeps the window out of captures of the screen, or lets it back in. True when Windows
@@ -279,11 +236,6 @@ impl NativeWindow {
         {
             win::exclude_from_capture(self.0, excluded)
         }
-        #[cfg(not(windows))]
-        {
-            let _ = excluded;
-            false
-        }
     }
 
     /// Where the client area starts on the screen, in physical pixels.
@@ -292,10 +244,6 @@ impl NativeWindow {
         {
             win::client_origin(self.0)
         }
-        #[cfg(not(windows))]
-        {
-            None
-        }
     }
 
     /// Whether most of the window is on `monitor`.
@@ -303,11 +251,6 @@ impl NativeWindow {
         #[cfg(windows)]
         {
             win::on_monitor(self.0, monitor)
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = monitor;
-            false
         }
     }
 
@@ -352,11 +295,6 @@ impl NativeWindow {
         #[cfg(windows)]
         {
             win::resize_client(self.0, width, height)
-        }
-        #[cfg(not(windows))]
-        {
-            let _ = (width, height);
-            false
         }
     }
 }

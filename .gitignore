@@ -6,5 +6,4 @@ target/
 *.snap.new
 .pending-snap
 /sweep.timestamp
-packaging/linux/cargo-sources.json
 /dist/
