@@ -10,9 +10,9 @@
 //! The reference for echo cancellation is the playout's final mix, handed over in 10 ms frames
 //! through an `rtrb` ring ([`RenderTap`]). The playout only writes to it while the setting is on.
 //!
-//! RNNoise and the compressor allocate nothing per frame. sonora's suppressor and AEC3 do
-//! (measured: about 2 and 40 allocations per frame), inside
-//! their crate; the encoder thread has 200 ms of slack, so that is the cost of choosing them.
+//! RNNoise, DPDFNet and the compressor allocate nothing per frame. sonora's suppressor and AEC3
+//! do (measured: about 2 and 40 allocations per frame), inside their crate; the encoder thread
+//! has 200 ms of slack, so that is the cost of choosing them.
 //!
 //! Each frame is metered at the four points of the chain into a [`DspMeter`].
 
@@ -27,10 +27,10 @@ use sonora::{
     config::{EchoCanceller, NoiseSuppression as WebrtcNs, NoiseSuppressionLevel},
 };
 
-use super::{SAMPLE_RATE, meter::DspMeter};
+use super::{SAMPLE_RATE, dpdfnet::Dpdfnet, meter::DspMeter};
 use crate::{Compressor, CompressorAmount, NoiseEngine, NoiseSuppression, Settings};
 
-/// 10 ms at 48 kHz: the frame RNNoise and the WebRTC processing both work in.
+/// 10 ms at 48 kHz: the frame the WebRTC processing, RNNoise and DPDFNet all work in.
 pub(crate) const DSP_FRAME: usize = SAMPLE_RATE as usize / 100;
 pub(crate) type Frame = [f32; DSP_FRAME];
 
@@ -108,8 +108,11 @@ impl std::fmt::Debug for DspControl {
 const AMOUNT_MASK: u16 = 0x7f;
 const COMPRESSOR_BIT: u16 = 1 << 7;
 const NOISE_BIT: u16 = 1 << 8;
-const WEBRTC_BIT: u16 = 1 << 9;
-const ECHO_BIT: u16 = 1 << 10;
+/// The noise engine, as its place in [`NoiseEngine::ALL`].
+const ENGINE_SHIFT: u16 = 9;
+const ENGINE_MASK: u16 = 0b11 << ENGINE_SHIFT;
+const ECHO_BIT: u16 = 1 << 11;
+const _: () = assert!(NoiseEngine::ALL.len() <= (ENGINE_MASK >> ENGINE_SHIFT) as usize + 1);
 
 impl DspControl {
     pub fn new(config: DspConfig) -> Self {
@@ -120,25 +123,26 @@ impl DspControl {
 
     pub fn set(&self, config: DspConfig) {
         let bit = |on: bool, bit: u16| if on { bit } else { 0 };
+        let engine = NoiseEngine::ALL
+            .iter()
+            .position(|e| *e == config.noise.engine)
+            .expect("ALL lists every engine") as u16;
         let bits = u16::from(config.compressor.amount.get())
             | bit(config.compressor.on, COMPRESSOR_BIT)
             | bit(config.noise.on, NOISE_BIT)
-            | bit(config.noise.engine == NoiseEngine::Webrtc, WEBRTC_BIT)
+            | engine << ENGINE_SHIFT
             | bit(config.echo_cancellation, ECHO_BIT);
         self.0.store(bits, Ordering::Relaxed);
     }
 
     pub(crate) fn get(&self) -> DspConfig {
         let bits = self.0.load(Ordering::Relaxed);
+        let engine = usize::from((bits & ENGINE_MASK) >> ENGINE_SHIFT);
         DspConfig {
             echo_cancellation: bits & ECHO_BIT != 0,
             noise: NoiseSuppression {
                 on: bits & NOISE_BIT != 0,
-                engine: if bits & WEBRTC_BIT != 0 {
-                    NoiseEngine::Webrtc
-                } else {
-                    NoiseEngine::Rnnoise
-                },
+                engine: NoiseEngine::ALL[engine],
             },
             compressor: Compressor {
                 on: bits & COMPRESSOR_BIT != 0,
@@ -177,8 +181,9 @@ pub(crate) fn render_ring(control: DspControl) -> (RenderTap, rtrb::Consumer<Fra
 
 /// The noise module's engine, while it is in the path.
 enum Suppressor {
-    Rnnoise(Box<DenoiseState<'static>>),
     Webrtc(Box<AudioProcessing>),
+    Rnnoise(Box<DenoiseState<'static>>),
+    Dpdfnet(Box<Dpdfnet>),
 }
 
 impl Suppressor {
@@ -198,6 +203,7 @@ impl Suppressor {
                 }),
                 ..Config::default()
             })),
+            NoiseEngine::Dpdfnet => Suppressor::Dpdfnet(Box::new(Dpdfnet::new())),
         }
     }
 }
@@ -310,6 +316,10 @@ impl Dsp {
                     let done = webrtc.process_capture_f32(&[&*frame], &mut [&mut self.output]);
                     debug_assert!(done.is_ok(), "{done:?}");
                     frame.copy_from_slice(&self.output);
+                    rms(frame)
+                }
+                Some(Suppressor::Dpdfnet(dpdfnet)) => {
+                    dpdfnet.process(frame.try_into().expect("a whole frame"));
                     rms(frame)
                 }
                 None => after_echo,
@@ -579,14 +589,85 @@ mod tests {
         room.control.set(config);
         let after = room.run(20);
         assert!(after > REMOVED_DB, "noise suppression on: {after} dB");
-        config.noise.engine = NoiseEngine::Webrtc;
-        room.control.set(config);
-        let after = room.run(20);
-        assert!(after > REMOVED_DB, "the other noise engine: {after} dB");
+        for engine in [NoiseEngine::Webrtc, NoiseEngine::Dpdfnet] {
+            config.noise.engine = engine;
+            room.control.set(config);
+            let after = room.run(20);
+            assert!(after > REMOVED_DB, "{engine:?}: {after} dB");
+        }
         config.compressor.on = false;
         room.control.set(config);
         let after = room.run(20);
         assert!(after > REMOVED_DB, "the compressor off: {after} dB");
+    }
+
+    #[test]
+    fn the_control_hands_the_call_every_setting_as_it_was_set() {
+        let control = DspControl::default();
+        for engine in NoiseEngine::ALL {
+            for (on, echo_cancellation, amount) in [(true, false, 0), (false, true, 100)] {
+                let config = DspConfig {
+                    echo_cancellation,
+                    noise: NoiseSuppression { on, engine },
+                    compressor: Compressor {
+                        on: !on,
+                        amount: CompressorAmount::new(amount),
+                    },
+                };
+                control.set(config);
+                assert_eq!(control.get(), config);
+            }
+        }
+    }
+
+    #[test]
+    fn strong_suppression_takes_steady_noise_out_and_lets_a_voice_through() {
+        let mut dsp = Dsp::new(DspConfig {
+            echo_cancellation: false,
+            noise: NoiseSuppression {
+                on: true,
+                engine: NoiseEngine::Dpdfnet,
+            },
+            compressor: Compressor {
+                on: false,
+                ..Compressor::default()
+            },
+        });
+        // Two seconds of hiss at about -31 dBFS, then two more with a voice over it.
+        let (hiss_alone, length) = (DSP_FRAME * 200, DSP_FRAME * 400);
+        let voice = crate::media::Pulses::new(
+            crate::media::PulseShape::Buzz {
+                from_hz: 120.0,
+                to_hz: 200.0,
+            },
+            21_011,
+            7_200,
+            0.3,
+        );
+        let clean: Vec<f32> = (0..length)
+            .map(|n| {
+                n.checked_sub(hiss_alone)
+                    .map_or(0.0, |n| voice.sample(n as u64))
+            })
+            .collect();
+        let mut seed = 7_u32;
+        let noisy: Vec<f32> = clean
+            .iter()
+            .map(|c| {
+                seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+                c + ((seed >> 8) as f32 / (1 << 24) as f32 - 0.5) * 0.1
+            })
+            .collect();
+        let mut pcm = noisy.clone();
+        dsp.process(&mut pcm, None);
+
+        let settled = hiss_alone - DSP_FRAME * 100..hiss_alone;
+        let removed_db = 20.0 * (rms(&noisy[settled.clone()]) / rms(&pcm[settled])).log10();
+        let talking = hiss_alone..length;
+        let voice_db = 20.0 * (rms(&pcm[talking.clone()]) / rms(&clean[talking])).log10();
+        // Measured: 72 dB of the hiss taken out, and the voice within 0.2 dB of its level.
+        assert!(removed_db > 40.0, "the hiss is gone: {removed_db} dB");
+        assert!(voice_db > -3.0, "the voice is not: {voice_db} dB");
     }
 
     #[test]

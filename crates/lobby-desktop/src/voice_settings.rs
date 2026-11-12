@@ -1,11 +1,11 @@
 //! Settings' Voice section, in three groups under small headings. Microphone: its select, the
 //! live level meter beside the Hear yourself button, a line kept for what is wrong, and the
 //! microphone's Windows volume. Speakers: its select. Sound: the three clean-up steps (echo
-//! cancellation, noise suppression, the compressor), then the UI sounds. Noise suppression and
-//! the compressor are each one Off, Gentle or Strong select, mapped onto the settings they store
-//! ([`Strength`]). A device choice is written through `Lobbies` at once, and the call that is on
-//! moves to it. A switch, select or slider is written through `Lobbies` too, and the Shell hands
-//! the call that is on what was saved.
+//! cancellation, noise suppression, the compressor), then the UI sounds. Noise suppression is one
+//! select of Off and its engines ([`NoiseChoice`]), the compressor one of Off, Gentle or Strong
+//! ([`CompressorChoice`]). A device choice is written through `Lobbies` at once, and the call that
+//! is on moves to it. A switch, select or slider is written through `Lobbies` too, and the Shell
+//! hands the call that is on what was saved.
 //!
 //! The lists come from a [`DeviceWatch`] that lives as long as the page is open, and so do the
 //! microphone test and its volume: the meter opens the chosen microphone on a stream of its own,
@@ -64,8 +64,8 @@ const FAKE_GAIN: f32 = 0.8;
 const PERCENT_MAX: f32 = 100.;
 
 const SLIDER_W: f32 = 140.;
-/// The Off, Gentle or Strong selects beside their rows' words.
-const STRENGTH_W: f32 = 136.;
+/// The noise and compressor selects beside their rows' words.
+const CHOICE_W: f32 = 136.;
 /// Where a stored compressor amount stops reading as Gentle and starts reading as Strong: the
 /// middle of the two choices.
 const STRONG_FROM: u8 = (CompressorAmount::DEFAULT.get() + CompressorAmount::STRONG.get()) / 2;
@@ -147,85 +147,117 @@ enum Listening {
     Monitor,
 }
 
-/// How much of a clean-up step to apply. Settings stores each step its own way (a noise engine, a
-/// compressor amount); this is the one scale a person picks from, and the only place that maps
-/// the two.
+const OFF: &str = "Off";
+
+/// A line of the noise suppression select: Off, or one of the engines under its label.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Strength {
+pub enum NoiseChoice {
+    Off,
+    On(NoiseEngine),
+}
+
+impl NoiseChoice {
+    fn all() -> Vec<NoiseChoice> {
+        std::iter::once(NoiseChoice::Off)
+            .chain(NoiseEngine::ALL.map(NoiseChoice::On))
+            .collect()
+    }
+
+    fn of(noise: NoiseSuppression) -> Self {
+        if noise.on {
+            NoiseChoice::On(noise.engine)
+        } else {
+            NoiseChoice::Off
+        }
+    }
+
+    /// Off keeps the engine, so turning it back on finds the last choice.
+    fn set(self, noise: &mut NoiseSuppression) {
+        match self {
+            NoiseChoice::Off => noise.on = false,
+            NoiseChoice::On(engine) => *noise = NoiseSuppression { on: true, engine },
+        }
+    }
+}
+
+impl SearchableListItem for NoiseChoice {
+    type Value = NoiseChoice;
+
+    fn title(&self) -> SharedString {
+        match self {
+            NoiseChoice::Off => OFF,
+            NoiseChoice::On(engine) => engine.label(),
+        }
+        .into()
+    }
+
+    fn value(&self) -> &NoiseChoice {
+        self
+    }
+}
+
+/// A line of the compressor select. Settings stores an amount; this is the scale a person picks
+/// from, and the only place that maps the two.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompressorChoice {
     Off,
     Gentle,
     Strong,
 }
 
-impl Strength {
-    const ALL: [Strength; 3] = [Strength::Off, Strength::Gentle, Strength::Strong];
-
-    fn label(self) -> &'static str {
-        match self {
-            Strength::Off => "Off",
-            Strength::Gentle => "Gentle",
-            Strength::Strong => "Strong",
-        }
-    }
-
-    fn of_noise(noise: NoiseSuppression) -> Self {
-        match (noise.on, noise.engine) {
-            (false, _) => Strength::Off,
-            (true, NoiseEngine::Webrtc) => Strength::Gentle,
-            (true, NoiseEngine::Rnnoise) => Strength::Strong,
-        }
-    }
+impl CompressorChoice {
+    const ALL: [CompressorChoice; 3] = [
+        CompressorChoice::Off,
+        CompressorChoice::Gentle,
+        CompressorChoice::Strong,
+    ];
 
     /// A stored amount reads as the nearer of Gentle and Strong.
-    fn of_compressor(compressor: Compressor) -> Self {
+    fn of(compressor: Compressor) -> Self {
         match (compressor.on, compressor.amount.get() < STRONG_FROM) {
-            (false, _) => Strength::Off,
-            (true, true) => Strength::Gentle,
-            (true, false) => Strength::Strong,
+            (false, _) => CompressorChoice::Off,
+            (true, true) => CompressorChoice::Gentle,
+            (true, false) => CompressorChoice::Strong,
         }
     }
 
-    /// Off keeps the engine, so turning it back on finds the last choice.
-    fn set_noise(self, noise: &mut NoiseSuppression) {
-        noise.on = self != Strength::Off;
+    fn set(self, compressor: &mut Compressor) {
+        compressor.on = self != CompressorChoice::Off;
         match self {
-            Strength::Off => {}
-            Strength::Gentle => noise.engine = NoiseEngine::Webrtc,
-            Strength::Strong => noise.engine = NoiseEngine::Rnnoise,
-        }
-    }
-
-    fn set_compressor(self, compressor: &mut Compressor) {
-        compressor.on = self != Strength::Off;
-        match self {
-            Strength::Off => {}
-            Strength::Gentle => compressor.amount = CompressorAmount::DEFAULT,
-            Strength::Strong => compressor.amount = CompressorAmount::STRONG,
+            CompressorChoice::Off => {}
+            CompressorChoice::Gentle => compressor.amount = CompressorAmount::DEFAULT,
+            CompressorChoice::Strong => compressor.amount = CompressorAmount::STRONG,
         }
     }
 }
 
-impl SearchableListItem for Strength {
-    type Value = Strength;
+impl SearchableListItem for CompressorChoice {
+    type Value = CompressorChoice;
 
     fn title(&self) -> SharedString {
-        self.label().into()
+        match self {
+            CompressorChoice::Off => OFF,
+            CompressorChoice::Gentle => "Gentle",
+            CompressorChoice::Strong => "Strong",
+        }
+        .into()
     }
 
-    fn value(&self) -> &Strength {
+    fn value(&self) -> &CompressorChoice {
         self
     }
 }
 
-pub type Strengths = SearchableVec<Strength>;
+/// A clean-up step's select, listing `T`.
+type Choices<T> = SelectState<SearchableVec<T>>;
 
 /// The section's controls that keep a state of their own: the microphone's input level slider in
 /// whole percent, and the selects for noise suppression and the compressor.
 #[derive(Clone)]
 pub struct VoiceControls {
     gain: Entity<SliderState>,
-    noise: Entity<SelectState<Strengths>>,
-    compressor: Entity<SelectState<Strengths>>,
+    noise: Entity<Choices<NoiseChoice>>,
+    compressor: Entity<Choices<CompressorChoice>>,
 }
 
 impl VoiceControls {
@@ -237,25 +269,22 @@ impl VoiceControls {
                 .step(1.)
                 .default_value(gain_percent)
         });
-        let strength = |window: &mut Window, cx: &mut App| {
-            cx.new(|cx| SelectState::new(Strengths::new(Strength::ALL.to_vec()), None, window, cx))
-        };
+        let noise = SearchableVec::new(NoiseChoice::all());
+        let compressor = SearchableVec::new(CompressorChoice::ALL);
         Self {
             gain,
-            noise: strength(window, cx),
-            compressor: strength(window, cx),
+            noise: cx.new(|cx| SelectState::new(noise, None, window, cx)),
+            compressor: cx.new(|cx| SelectState::new(compressor, None, window, cx)),
         }
     }
 }
 
 /// Puts the select on `shown`, unless it already stands there. The section does it as it draws,
 /// so the settings it is given decide what the selects say.
-fn show_strength(
-    select: &Entity<SelectState<Strengths>>,
-    shown: Strength,
-    window: &mut Window,
-    cx: &mut App,
-) {
+fn show_choice<T>(select: &Entity<Choices<T>>, shown: T, window: &mut Window, cx: &mut App)
+where
+    T: SearchableListItem<Value = T> + PartialEq + Clone + 'static,
+{
     if select.read(cx).selected_value() != Some(&shown) {
         select.update(cx, |select, cx| {
             select.set_selected_value(&shown, window, cx)
@@ -319,17 +348,17 @@ impl VoiceSettingsView {
             }),
             cx.subscribe(
                 &controls.noise,
-                |this, _, ev: &SelectEvent<Strengths>, cx| {
-                    if let SelectEvent::Confirm(Some(strength)) = ev {
-                        this.change(VoiceChange::Noise(*strength), cx);
+                |this, _, ev: &SelectEvent<SearchableVec<NoiseChoice>>, cx| {
+                    if let SelectEvent::Confirm(Some(choice)) = ev {
+                        this.change(VoiceChange::Noise(*choice), cx);
                     }
                 },
             ),
             cx.subscribe(
                 &controls.compressor,
-                |this, _, ev: &SelectEvent<Strengths>, cx| {
-                    if let SelectEvent::Confirm(Some(strength)) = ev {
-                        this.change(VoiceChange::Compressor(*strength), cx);
+                |this, _, ev: &SelectEvent<SearchableVec<CompressorChoice>>, cx| {
+                    if let SelectEvent::Confirm(Some(choice)) = ev {
+                        this.change(VoiceChange::Compressor(*choice), cx);
                     }
                 },
             ),
@@ -589,12 +618,8 @@ impl VoiceSettingsView {
                 self.sync_test(cx);
             }
             VoiceChange::Echo(on) => self.save(|s| s.echo_cancellation = on, cx),
-            VoiceChange::Noise(strength) => {
-                self.save(|s| strength.set_noise(&mut s.noise_suppression), cx)
-            }
-            VoiceChange::Compressor(strength) => {
-                self.save(|s| strength.set_compressor(&mut s.compressor), cx)
-            }
+            VoiceChange::Noise(choice) => self.save(|s| choice.set(&mut s.noise_suppression), cx),
+            VoiceChange::Compressor(choice) => self.save(|s| choice.set(&mut s.compressor), cx),
             VoiceChange::Sounds(on) => self.save(|s| s.sounds = on, cx),
         }
         cx.notify();
@@ -651,8 +676,8 @@ fn show_devices(
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VoiceChange {
     Echo(bool),
-    Noise(Strength),
-    Compressor(Strength),
+    Noise(NoiseChoice),
+    Compressor(CompressorChoice),
     /// The microphone's Windows input level, from 0 to 1.
     Gain(f32),
     Monitor(bool),
@@ -803,19 +828,22 @@ impl VoiceSection {
             .into_any_element()
     }
 
-    /// The Off, Gentle or Strong select of a clean-up step, showing `shown`.
-    fn strength_select(
+    /// The select of a clean-up step, showing `shown`.
+    fn choice_select<T>(
         &self,
         id: &'static str,
         label: &'static str,
-        state: &Entity<SelectState<Strengths>>,
-        shown: Strength,
+        state: &Entity<Choices<T>>,
+        shown: T,
         window: &mut Window,
         cx: &mut App,
-    ) -> AnyElement {
-        show_strength(state, shown, window, cx);
+    ) -> AnyElement
+    where
+        T: SearchableListItem<Value = T> + PartialEq + Clone + 'static,
+    {
+        show_choice(state, shown, window, cx);
         div()
-            .w(u(STRENGTH_W))
+            .w(u(CHOICE_W))
             .child(picker(state, id, label))
             .into_any_element()
     }
@@ -840,19 +868,19 @@ where
 
 impl RenderOnce for VoiceSection {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
-        let noise = self.strength_select(
+        let noise = self.choice_select(
             "noise-suppression",
             copy::NOISE_SUPPRESSION,
             &self.controls.noise,
-            Strength::of_noise(self.noise),
+            NoiseChoice::of(self.noise),
             window,
             cx,
         );
-        let compressor = self.strength_select(
+        let compressor = self.choice_select(
             "compressor",
             copy::COMPRESSOR,
             &self.controls.compressor,
-            Strength::of_compressor(self.compressor),
+            CompressorChoice::of(self.compressor),
             window,
             cx,
         );

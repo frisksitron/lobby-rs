@@ -84,7 +84,7 @@ pub(super) fn voice_section(
     vec![
         Section::new(
             "voice-section",
-            "Default window: noise and the compressor are each an Off, Gentle or Strong select beside their lines",
+            "Default window: noise is an Off, Gentle, Standard or Strong select and the compressor an Off, Gentle or Strong one, beside their lines",
             framed(ROOMY_W, voice(heard(), &cleaning()), cx),
         ),
         Section::new(

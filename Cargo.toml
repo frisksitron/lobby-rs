@@ -69,6 +69,8 @@ rtrb = "=0.4.0"
 # WebRTC audio processing port (noise suppression and AEC3).
 nnnoiseless = { version = "=0.5.2", default-features = false }
 sonora = "=0.2.0"
+# DPDFNet's STFT (`media::dpdfnet`); the version nnnoiseless already builds, through easyfft.
+realfft = "=3.5.0"
 windows-capture = "=2.0.1"
 # The version windows-capture builds; used directly only by `media::win` (DWM, PrintWindow, network
 # changes, the communications audio device) and the desktop's `host` (OS idle time, window
@@ -120,9 +122,10 @@ debug = "line-tables-only"
 debug = "line-tables-only"
 
 # fast_image_resize is generic: its resize loops are instantiated in lobby-client, so that crate is
-# optimized too.
+# optimized too. At 3, not 2: DPDFNet (`media::dpdfnet`) takes 7.5 of a frame's 10 ms at 2, and
+# 1.6 at 3.
 [profile.dev.package.lobby-client]
-opt-level = 2
+opt-level = 3
 
 [profile.dev.package.fast_image_resize]
 opt-level = 3

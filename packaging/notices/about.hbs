@@ -13,6 +13,11 @@ li { margin: .2rem 0; }
 <h1>Third-party notices</h1>
 <p>Lobby for Windows is built from the open-source crates below, each under the licence named.
 It also embeds the Figtree font (SIL Open Font License 1.1) and Lucide icons (ISC).</p>
+<p>The Strong noise suppression runs DPDFNet-2 (48 kHz) by Ceva, under the
+<a href="#Apache-2.0">Apache License 2.0</a>, from
+<a href="https://huggingface.co/Ceva-IP/DPDFNet">huggingface.co/Ceva-IP/DPDFNet</a>
+(<a href="https://github.com/ceva-ip/DPDFNet">github.com/ceva-ip/DPDFNet</a>). Lobby embeds its
+weights reordered and rounded to 16-bit floats.</p>
 <h2>Licences used</h2>
 <ul>
 {{#each overview}}<li><a href="#{{id}}">{{name}}</a> ({{count}})</li>

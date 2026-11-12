@@ -140,26 +140,37 @@ impl Default for NoiseSuppression {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NoiseEngine {
-    /// A small neural network trained on speech: the best on most microphones.
-    #[default]
-    Rnnoise,
     /// The classic WebRTC suppressor: lighter on the CPU.
     Webrtc,
+    /// A small neural network trained on speech: good on most microphones.
+    #[default]
+    Rnnoise,
+    /// Ceva's DPDFNet, a larger network: takes out more, 40 ms later than RNNoise and at about
+    /// forty times its CPU.
+    Dpdfnet,
 }
 
 impl NoiseEngine {
-    /// Named for what a person hears, not for the library: RNNoise is "Strong", WebRTC's
-    /// suppressor "Gentle".
+    /// From the lightest to the strongest, as Settings lists them.
+    pub const ALL: [NoiseEngine; 3] = [
+        NoiseEngine::Webrtc,
+        NoiseEngine::Rnnoise,
+        NoiseEngine::Dpdfnet,
+    ];
+
+    /// Named for what a person hears, not for the library.
     pub fn label(self) -> &'static str {
         match self {
-            NoiseEngine::Rnnoise => "Strong",
             NoiseEngine::Webrtc => "Gentle",
+            NoiseEngine::Rnnoise => "Standard",
+            NoiseEngine::Dpdfnet => "Strong",
         }
     }
 
     fn from_stored(text: &str) -> Self {
         match text {
             "webrtc" => NoiseEngine::Webrtc,
+            "dpdfnet" => NoiseEngine::Dpdfnet,
             _ => NoiseEngine::default(),
         }
     }
@@ -416,7 +427,7 @@ mod tests {
                 member_volumes: Settings::default().member_volumes,
                 noise_suppression: NoiseSuppression {
                     on: false,
-                    engine: NoiseEngine::Webrtc,
+                    engine: NoiseEngine::Dpdfnet,
                 },
                 echo_cancellation: true,
                 compressor: Compressor {
@@ -428,6 +439,7 @@ mod tests {
             ..Persisted::default()
         };
         let json = serde_json::to_string(&state).unwrap();
+        assert!(json.contains(r#""engine":"dpdfnet""#), "{json}");
         assert_eq!(load(&json), state, "{json}");
     }
 

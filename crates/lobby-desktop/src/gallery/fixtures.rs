@@ -267,8 +267,8 @@ pub struct Held {
     /// The Voice rows' microphone and speakers selects on the sample devices, then on two with
     /// the long names Windows gives.
     pub devices: [Entity<SelectState<crate::voice_settings::Items>>; 4],
-    /// Input level at 72 %, and the two Off, Gentle or Strong selects, for the Voice rows: one set
-    /// for the steps on and one for the steps off, since a select shows one value at a time.
+    /// Input level at 72 %, and the noise and compressor selects, for the Voice rows: one set for
+    /// the steps on and one for the steps off, since a select shows one value at a time.
     pub voice_controls: [crate::voice_settings::VoiceControls; 2],
     pub motion: super::stories::motion::MotionDemo,
 }

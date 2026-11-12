@@ -12,6 +12,7 @@ mod bench;
 #[cfg(windows)]
 mod capture;
 mod devices;
+mod dpdfnet;
 mod dsp;
 mod engine;
 #[cfg(windows)]

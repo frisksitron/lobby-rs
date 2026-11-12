@@ -8,9 +8,11 @@
 //! ```
 //!
 //! Flags, all optional:
-//! - `--noise rnnoise|webrtc|off` (default rnnoise, the Settings' default) and `--aec`: Alice's
-//!   capture DSP, with the compressor as Settings start it. `--noise off` without `--aec` is the
-//!   microphone through the compressor and the limiter alone.
+//! - `--noise rnnoise|webrtc|dpdfnet|off` (default rnnoise, the Settings' default) and `--aec`:
+//!   Alice's capture DSP, with the compressor as Settings start it. `--noise off` without `--aec`
+//!   is the microphone through the compressor and the limiter alone. DPDFNet takes the pulses for
+//!   noise and removes them, here and under `--calibrate`: with it the bench times nothing, and
+//!   shows only that the call carries it.
 //! - `--studio`: echo cancellation, noise suppression and the compressor all out, so the
 //!   microphone goes raw into the low-delay encoder; it overrides the two.
 //! - `--seconds N`: seconds measured, after `--warmup N` (defaults 30 and 3).
@@ -60,8 +62,8 @@ mod common;
 
 use common::{Member, WAIT, active, origin, until};
 
-const USAGE: &str = "usage: voice_bench [--noise rnnoise|webrtc|off] [--aec] [--studio] [--seconds N] \
-[--warmup N] [--pulse buzz|tone] [--loss PERCENT] [--delay-ms N] [--jitter-ms N] \
+const USAGE: &str = "usage: voice_bench [--noise rnnoise|webrtc|dpdfnet|off] [--aec] [--studio] \
+[--seconds N] [--warmup N] [--pulse buzz|tone] [--loss PERCENT] [--delay-ms N] [--jitter-ms N] \
 [--bob-after-ms N] [--calibrate] [--move-output] [--monitor]";
 
 const RATE: f64 = 48_000.0;
@@ -109,6 +111,7 @@ impl Dsp {
         let noise = match self.noise {
             Some(NoiseEngine::Rnnoise) => "rnnoise",
             Some(NoiseEngine::Webrtc) => "webrtc",
+            Some(NoiseEngine::Dpdfnet) => "dpdfnet",
             None => "off",
         };
         format!("noise={noise} aec={}", self.aec)
@@ -181,6 +184,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Args, String> {
                 out.dsp.noise = match value()?.as_str() {
                     "rnnoise" => Some(NoiseEngine::Rnnoise),
                     "webrtc" => Some(NoiseEngine::Webrtc),
+                    "dpdfnet" => Some(NoiseEngine::Dpdfnet),
                     "off" => None,
                     other => return Err(format!("unknown noise suppression {other}")),
                 };
@@ -382,14 +386,10 @@ fn calibrate(shape: PulseShape) -> (Value, String) {
     let detector = Detector::new(&pulses);
     let lookahead = CodecLoop::new(false).expect("opus").lookahead();
     let studio_lookahead = CodecLoop::new(true).expect("opus").lookahead();
-    let settings = [
-        (None, false),
-        (Some(NoiseEngine::Rnnoise), false),
-        (Some(NoiseEngine::Webrtc), false),
-        (None, true),
-        (Some(NoiseEngine::Rnnoise), true),
-        (Some(NoiseEngine::Webrtc), true),
-    ];
+    let noises = std::iter::once(None).chain(NoiseEngine::ALL.map(Some));
+    let settings = [false, true]
+        .into_iter()
+        .flat_map(|aec| noises.clone().map(move |noise| (noise, aec)));
     let mut chains: Vec<(String, Option<Dsp>, bool)> =
         vec![("direct".into(), None, false), ("opus".into(), None, true)];
     for (noise, aec) in settings {

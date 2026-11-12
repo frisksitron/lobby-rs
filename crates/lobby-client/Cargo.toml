@@ -37,6 +37,7 @@ opus.workspace = true
 rtrb.workspace = true
 nnnoiseless.workspace = true
 sonora.workspace = true
+realfft.workspace = true
 # Screen Share.
 fast_image_resize.workspace = true
 yuvutils-rs.workspace = true
