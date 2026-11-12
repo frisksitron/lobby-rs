@@ -24,7 +24,7 @@ use crate::{
         DEVICE_START_TIMEOUT, DeviceChoice, DeviceKind, MediaConfig, MediaError, OwnShareFeed,
         PathState, ScreenSource, ShareOpId, VideoFeed, VoiceCallId, VoiceEvent, sounds::Sound,
     },
-    state::{ShareUi, VoicePhase, VoiceUi},
+    state::{LobbyState, VoicePhase, VoiceUi, WatchUi},
     volume::Volume,
 };
 
@@ -123,12 +123,13 @@ enum CallStage {
     },
 }
 
-/// While this Member shares: where the encoder's copy of what is sent goes, and what the server
-/// has heard of the source's size.
+/// While this Member shares: what is shared, where the encoder's copy of it goes, and what the
+/// server has heard of its size.
 struct LocalShare {
     id: ShareOpId,
+    source: ScreenSource,
     own: Arc<OwnShareFeed>,
-    source: SourceReports,
+    reports: SourceReports,
     strain: Strain,
 }
 
@@ -211,13 +212,23 @@ impl VoiceCall {
             }
             CallStage::Offered { .. } => None,
         };
-        let source = self.share.as_ref().and_then(|s| s.source.deadline());
+        let reports = self.share.as_ref().and_then(|s| s.reports.deadline());
         stage
             .into_iter()
             .chain(self.devices_due)
             .chain(self.path.deadline())
-            .chain(source)
+            .chain(reports)
             .min()
+    }
+
+    /// The call's speaking rings: this Member by its own VAD, the others by what plays.
+    fn show_speaking(&self, me: Option<&UserId>, shown: &mut BTreeSet<UserId>) {
+        let speakers = || self.heard.iter().chain(me.filter(|_| self.speaking));
+        let same = speakers().all(|u| shown.contains(u))
+            && shown.iter().all(|u| speakers().any(|s| s == u));
+        if !same {
+            *shown = speakers().cloned().collect();
+        }
     }
 }
 
@@ -264,14 +275,8 @@ impl Session {
                 }
             }
             VoiceEvent::Answer { .. } => debug!("answer for an older voice session"),
-            VoiceEvent::Speaking(speaking) => {
-                current.speaking = speaking;
-                self.show_speaking();
-            }
-            VoiceEvent::Speakers(heard) => {
-                current.heard = heard;
-                self.show_speaking();
-            }
+            VoiceEvent::Speaking(speaking) => current.speaking = speaking,
+            VoiceEvent::Speakers(heard) => current.heard = heard,
             VoiceEvent::TalkingMuted => {
                 // The Member may have unmuted in the frames the event was in flight, and a
                 // deafened Member chose to be unreachable.
@@ -304,7 +309,6 @@ impl Session {
                     watch.strain.on_stats(now, &stats);
                 }
                 self.state.voice.stats = Some(stats);
-                self.publish_strain();
             }
             VoiceEvent::Failed(e) => {
                 warn!(error = %e, "voice media failed");
@@ -320,7 +324,7 @@ impl Session {
             }
             VoiceEvent::ShareSource { share, size } => {
                 let local = current.share.as_mut().filter(|s| s.id == share);
-                if let Some(size) = local.and_then(|s| s.source.heard(size, now)) {
+                if let Some(size) = local.and_then(|s| s.reports.heard(size, now)) {
                     self.send_share_source(size);
                 }
             }
@@ -341,7 +345,6 @@ impl Session {
             VoiceEvent::WatchLoad { watch, load } => {
                 if let Some(w) = self.watch_mut().filter(|w| w.id == watch) {
                     w.strain.on_watch_load(now, &load);
-                    self.publish_strain();
                 }
                 #[cfg(feature = "test-support")]
                 self.watch_loads.push((now, load));
@@ -354,9 +357,7 @@ impl Session {
                     .filter(|s| s.id == share);
                 if let Some(local) = local {
                     local.strain.on_share_load(now, &load);
-                    let stalled = local.strain.take_exclusive_fullscreen();
-                    self.publish_strain();
-                    if stalled {
+                    if local.strain.take_exclusive_fullscreen() {
                         self.raise(IssueKind::ShareFailed, copy::SHARE_EXCLUSIVE_FULLSCREEN);
                     }
                 }
@@ -364,14 +365,35 @@ impl Session {
         }
     }
 
-    fn publish_strain(&mut self) {
-        let Some(call) = self.call.as_ref() else {
-            return;
-        };
-        self.state.share.strain = call.share.as_ref().and_then(|s| s.strain.warning());
-        if let Some(ui) = self.state.share.watch.as_mut() {
-            ui.strain = call.watch.as_ref().and_then(|w| w.strain.warning());
+    /// The one writer of what the snapshot shows of the call. Each of the Session's ways in runs
+    /// it last, so code in the middle of a round reads the call, not these fields.
+    pub(super) fn show_call(&mut self) {
+        let watch = self.watch_ui();
+        let call = self.call.as_ref();
+        let LobbyState {
+            me, voice, share, ..
+        } = &mut self.state;
+        voice.phase = call.map(VoiceCall::phase).unwrap_or_default();
+        match call {
+            Some(call) => call.show_speaking(me.as_ref(), &mut voice.speaking),
+            None => voice.speaking.clear(),
         }
+        let local = call.and_then(|c| c.share.as_ref());
+        if share.sharing.as_ref() != local.map(|s| &s.source) {
+            share.sharing = local.map(|s| s.source.clone());
+        }
+        share.strain = local.and_then(|s| s.strain.warning());
+        share.watch = watch;
+    }
+
+    /// What the viewer shows of the call's Watch, ahead of the snapshot.
+    pub(super) fn watch_ui(&self) -> Option<WatchUi> {
+        self.call.as_ref()?.watch.as_ref()?.ui()
+    }
+
+    /// Whether this Member shares, ahead of the snapshot.
+    pub(super) fn sharing(&self) -> bool {
+        self.call.as_ref().is_some_and(|c| c.share.is_some())
     }
 
     /// The size of what this Member shares. The server moves the drawing epoch with it, so a
@@ -382,12 +404,11 @@ impl Session {
         let went = self.conn.send(&frame).is_ok();
         info!(width, height, went, "share source size sent");
         if let Some(share) = self.call.as_mut().and_then(|c| c.share.as_mut()) {
-            share.source.sent(size, went);
+            share.reports.sent(size, went);
         }
     }
 
-    /// Every change to the call's path recovery goes through here, and so does what the
-    /// controls show of it.
+    /// Every change to the call's path recovery goes through here.
     pub(super) fn path_step(
         &mut self,
         step: impl FnOnce(&mut PathRecovery) -> Option<Step>,
@@ -405,9 +426,6 @@ impl Session {
                 let lost = copy::voice_ended(VoiceEndReason::ConnectionLost);
                 self.leave_with(Ended::voice(lost), now);
             }
-        }
-        if let Some(call) = &self.call {
-            self.state.voice.phase = call.phase();
         }
     }
 
@@ -430,7 +448,7 @@ impl Session {
             .call
             .as_mut()
             .and_then(|c| c.share.as_mut())
-            .and_then(|s| s.source.due(now));
+            .and_then(|s| s.reports.due(now));
         if let Some(size) = held {
             self.send_share_source(size);
         }
@@ -473,20 +491,6 @@ impl Session {
 
     pub(super) fn voice_active(&self) -> bool {
         self.call.is_some() && self.state.me_voice().is_some_and(|v| !v.joining)
-    }
-
-    /// The call's speaking rings: this Member by its own VAD, the others by what plays.
-    fn show_speaking(&mut self) {
-        let Some(call) = &self.call else {
-            return;
-        };
-        let mut speaking: BTreeSet<UserId> = call.heard.iter().cloned().collect();
-        if call.speaking
-            && let Some(me) = &self.state.me
-        {
-            speaking.insert(me.clone());
-        }
-        self.state.voice.speaking = speaking;
     }
 
     /// Joins Voice: the media threads start, the devices open on their own thread, and
@@ -540,7 +544,6 @@ impl Session {
             watch: None,
             unanswered: Vec::new(),
         };
-        self.state.voice.phase = call.phase();
         self.call = Some(call);
         let join = ClientMsg::VoiceJoin(self.voice_flags());
         if let Err(e) = self.command(join, Command::VoiceJoin { call: id }, now) {
@@ -684,7 +687,6 @@ impl Session {
             join_after: self.state.voice.join_after,
             ..VoiceUi::default()
         };
-        self.state.share = ShareUi::default();
         // The own-share feed closes after Voice is told to stop.
         drop(call);
         if let Some(Ended { kind, message }) = why {
@@ -730,12 +732,12 @@ impl Session {
             return Err(e.into());
         }
         info!(source = %source.name, "sharing");
-        self.state.share.sharing = Some(source);
         if let Some(call) = self.call.as_mut() {
             call.share = Some(LocalShare {
                 id: share,
+                source,
                 own,
-                source: SourceReports::default(),
+                reports: SourceReports::default(),
                 strain: Strain::sharer(),
             });
         }
@@ -743,7 +745,7 @@ impl Session {
     }
 
     pub(super) fn stop_share(&mut self, now: Instant) {
-        if self.state.share.sharing.is_none() {
+        if !self.sharing() {
             return;
         }
         info!("stopping the screen share");
@@ -763,8 +765,6 @@ impl Session {
 
     pub(super) fn end_share(&mut self, error: Option<String>) {
         self.stop_share_media();
-        self.state.share.sharing = None;
-        self.state.share.strain = None;
         if let Some(call) = self.call.as_mut() {
             call.share = None;
         }
@@ -842,8 +842,7 @@ impl Session {
     }
 
     /// After every change to the Watch or the roster: what ended drops out, the media moves to
-    /// whom it wants, the snapshot says what the viewer shows, and a Watch with nothing asked or
-    /// held is over.
+    /// whom it wants, and a Watch with nothing asked or held is over.
     pub(super) fn settle_watch(&mut self) {
         let state = &self.state;
         if let Some(call) = self.call.as_mut()
@@ -864,8 +863,6 @@ impl Session {
             }
             None => {}
         }
-        let watch = self.call.as_ref().and_then(|c| c.watch.as_ref());
-        self.state.share.watch = watch.and_then(Watch::ui);
         self.follow_ink();
     }
 
@@ -893,7 +890,6 @@ impl Session {
         if let Some(call) = self.call.as_mut() {
             call.watch = None;
         }
-        self.state.share.watch = None;
     }
 
     fn stop_watch_media(&mut self) {
@@ -989,7 +985,6 @@ impl Session {
                 {
                     info!(vsid = vsid.get(), "voice session started");
                     call.stage = CallStage::AwaitingOffer { vsid, offer_due };
-                    self.state.voice.phase = call.phase();
                     self.queued.push(UiEffect::Sound(Sound::Join));
                 }
             }

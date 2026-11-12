@@ -12,7 +12,7 @@ impl Session {
     /// The Sharer's "Let viewers draw". The share's roster entry says whether it is on. Only a
     /// Sharer has the switch, so a refusal here says nothing.
     pub(super) fn set_drawing(&mut self, enabled: bool, now: Instant) {
-        if self.state.share.sharing.is_none() {
+        if !self.sharing() {
             debug!("drawing set without a share");
             return;
         }
@@ -23,7 +23,12 @@ impl Session {
     }
 
     pub(super) fn pen_down(&mut self, share: ShareId, at: PenPoint, now: Instant) {
-        let Some((_, epoch)) = self.state.drawable_shares().find(|(id, _)| *id == share) else {
+        let watch = self.watch_ui();
+        let drawable = self
+            .state
+            .drawable_shares(watch.as_ref())
+            .find(|(id, _)| *id == share);
+        let Some((_, epoch)) = drawable else {
             return;
         };
         let Some(me) = self.state.me.clone() else {
@@ -100,12 +105,12 @@ impl Session {
     }
 
     pub(super) fn follow_ink(&mut self) {
-        if let Some((share, epoch, _)) = self.pen.drawing()
-            && !self
-                .state
-                .drawable_shares()
-                .any(|pair| pair == (share, epoch))
-        {
+        let Some((share, epoch, _)) = self.pen.drawing() else {
+            return;
+        };
+        let watch = self.watch_ui();
+        let mut drawable = self.state.drawable_shares(watch.as_ref());
+        if !drawable.any(|pair| pair == (share, epoch)) {
             self.pen.abandon();
         }
     }

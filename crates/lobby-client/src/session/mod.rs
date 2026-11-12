@@ -367,6 +367,7 @@ impl Session {
             Intent::RetryNow => self.conn.retry_now(),
             Intent::ProbeNow => self.conn.probe_now(),
         }
+        self.show_call();
     }
 
     pub(super) fn raise(&mut self, kind: IssueKind, message: impl Into<String>) {
@@ -395,6 +396,7 @@ impl Session {
 
     pub fn handle(&mut self, ev: SessionEvent, now: Instant) -> UiEffects {
         let mut fx = self.handle_event(ev, now);
+        self.show_call();
         fx.extend(self.take_effects());
         fx
     }
@@ -627,6 +629,7 @@ impl Session {
 
     pub fn tick(&mut self, now: Instant) -> UiEffects {
         let mut fx = self.tick_deadlines(now);
+        self.show_call();
         fx.extend(self.take_effects());
         fx
     }

@@ -613,13 +613,14 @@ impl LobbyState {
             .drawing
     }
 
-    pub(crate) fn drawable_shares(&self) -> impl Iterator<Item = (ShareId, DrawingEpoch)> + '_ {
+    /// `watch` is the snapshot's, or the Session's own in the middle of a round: the snapshot's
+    /// is written at its end.
+    pub(crate) fn drawable_shares<'a>(
+        &'a self,
+        watch: Option<&'a WatchUi>,
+    ) -> impl Iterator<Item = (ShareId, DrawingEpoch)> + 'a {
         [
-            self.share
-                .watch
-                .as_ref()
-                .filter(|w| w.coming.is_none())
-                .map(|w| &w.sharer),
+            watch.filter(|w| w.coming.is_none()).map(|w| &w.sharer),
             self.me.as_ref(),
         ]
         .into_iter()
@@ -629,13 +630,16 @@ impl LobbyState {
     }
 
     pub fn may_draw(&self, share: ShareId) -> bool {
-        self.drawable_shares().any(|(id, _)| id == share)
+        self.drawable_shares(self.share.watch.as_ref())
+            .any(|(id, _)| id == share)
     }
 
     /// The share a pen draws on when nothing else says: the one being watched, else the Member's
     /// own, while its drawing is on.
     pub fn pen_share(&self) -> Option<ShareId> {
-        self.drawable_shares().next().map(|(share, _)| share)
+        self.drawable_shares(self.share.watch.as_ref())
+            .next()
+            .map(|(share, _)| share)
     }
 
     fn sync_ink(&mut self) {
