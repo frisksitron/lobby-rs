@@ -2,9 +2,8 @@
 //! stays single-flight.
 //!
 //! Leave Lobby closes this device's connection with 4006. The close may come before the answer,
-//! so the Session notes it asked (`leaving`) when it asks, and the close is read against that
-//! once, whichever of the two comes first. The close of a Leave waits for the Leave's answer: a
-//! refusal means the owner removed the Member first.
+//! so the Session notes it asked ([`Leave::Asked`]) when it asks, and the connection's give-up on
+//! 4006 is read against that once, whichever of the two comes first.
 //!
 //! The Lobby refuses the owner's Leave, so the owner's is two calls: Make owner, then Leave. Leave
 //! runs (as an account op) from the first call, so the owner is leaving until either refuses.
@@ -40,6 +39,19 @@ impl From<UploadError> for PictureError {
             UploadError::Api(e) => Self::Api(e),
         }
     }
+}
+
+/// Where this device's Leave stands.
+#[derive(Debug)]
+pub(super) enum Leave {
+    No,
+    /// The owner's Leave waits for the Lobby to make this Member the owner.
+    HandingOver(UserId),
+    /// The Leave went out and the Lobby has not refused it: the close of 4006 that follows is its
+    /// own doing, whether it comes before the answer or after.
+    Asked,
+    /// The connection gave up on that close: the Leave's answer is still to say why.
+    Closed,
 }
 
 impl Session {
@@ -86,19 +98,26 @@ impl Session {
     /// The Lobby removes the Member and closes this connection with 4006, as for a Member the
     /// owner removed: that close is read as Left, not as removed.
     pub(super) fn leave_lobby_request(&mut self) {
-        if self.state.account.running(AccountOp::Leave) {
+        if self.state.account.running(AccountOp::Leave) || self.leave_asked() {
             return;
         }
-        self.leaving = true;
+        self.leave = Leave::Asked;
         self.account_op(AccountOp::Leave, Op::Leave);
     }
 
+    /// A Leave the Lobby has not refused. One it granted stays asked until the Session is shut
+    /// down: another asked in between has nothing to do, and must not undo what the close is
+    /// read against.
+    fn leave_asked(&self) -> bool {
+        matches!(self.leave, Leave::Asked | Leave::Closed)
+    }
+
     pub(super) fn hand_over_and_leave(&mut self, heir: UserId) {
-        if !self.state.account.start(AccountOp::Leave) {
+        if self.leave_asked() || !self.state.account.start(AccountOp::Leave) {
             return;
         }
         info!(%heir, "making the heir the owner, then leaving");
-        self.heir = Some(heir.clone());
+        self.leave = Leave::HandingOver(heir.clone());
         self.io.run(Op::Owner {
             user: heir,
             action: OwnerAction::MakeOwner,
@@ -110,7 +129,7 @@ impl Session {
         match result {
             Ok(()) => {
                 info!(%heir, "handed over: leaving");
-                self.leaving = true;
+                self.leave = Leave::Asked;
                 self.io.run(Op::Leave);
             }
             Err(e) => {
@@ -163,8 +182,7 @@ impl Session {
             Ok(()) => self.queued.push(UiEffect::Left),
             Err(e) => {
                 warn!(error = %e, "leaving refused");
-                self.leaving = false;
-                if std::mem::take(&mut self.leave_closed) {
+                if matches!(std::mem::replace(&mut self.leave, Leave::No), Leave::Closed) {
                     self.queued.push(UiEffect::NeedsAuth(SignedOutWhy::Removed));
                 } else {
                     self.raise(IssueKind::LeaveFailed, copy::account_failed(&e));

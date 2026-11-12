@@ -39,7 +39,7 @@ pub mod testing;
 
 pub use api::{ApiError, ApiKind, LobbyInfoError, Page};
 pub use client::{Client, StoredSession};
-pub use connection::{ConnError, Connection, Phase, ReconnectPolicy};
+pub use connection::{ConnError, Connection, Phase, ReconnectPolicy, SignedOutWhy};
 pub use drafts::{
     AttachError, DraftAttachment, DraftId, DraftSource, DraftState, Drafts, PastedFormat,
     SendBlock, paste_png,
@@ -68,8 +68,8 @@ pub use origin::{DEEP_LINK_SCHEME, HttpPolicy, LobbyOrigin, OriginError};
 pub use paths::Paths;
 pub use persist::{Loaded, Lobby, PersistError, Persisted, SavedWindow, StateFile, Upserted};
 pub use session::{
-    Clock, Intent, PictureError, SessionHandle, SessionUpdate, SignedOutWhy, Snapshot, UiEffect,
-    UiEffects, Updates,
+    Clock, Intent, PictureError, SessionHandle, SessionUpdate, Snapshot, UiEffect, UiEffects,
+    Updates,
 };
 pub use settings::{
     Compressor, CompressorAmount, NoiseEngine, NoiseSuppression, Settings, UI_SCALE_DEFAULT,

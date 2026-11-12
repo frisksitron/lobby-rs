@@ -36,7 +36,7 @@ use tracing::{debug, info, warn};
 use crate::{
     ClientTask, ConnError, Connection, LobbyOrigin, Phase,
     api::{ApiClient, Page},
-    connection::ConnEvent,
+    connection::{ConnEvent, SignedOutWhy},
     copy,
     ink::InkPen,
     issues::{Issue, IssueKind},
@@ -45,16 +45,17 @@ use crate::{
 };
 
 pub(crate) use self::driver::{RuntimeClock, drive};
+use self::{
+    account::Leave,
+    chat::FailedSends,
+    io::{Done, IoRunner, Op},
+    voice::{Ended, VoiceCall},
+};
 pub use self::{
     account::PictureError,
     driver::{Clock, SessionHandle, SessionUpdate, Snapshot, Updates},
     intent::Intent,
     io::Completion,
-};
-use self::{
-    chat::FailedSends,
-    io::{Done, IoRunner, Op},
-    voice::{Ended, VoiceCall},
 };
 
 pub const COMMAND_DEADLINE: Duration = Duration::from_secs(5);
@@ -117,30 +118,6 @@ pub enum UiEffect {
     /// The Lobby let this Member leave: the window shuts the Session down with
     /// [`SessionHandle::leave_lobby`] and goes on to the next Lobby.
     Left,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SignedOutWhy {
-    Expired,
-    /// The Lobby ended this session (close 4005): a Sign Out, here or everywhere from another
-    /// device.
-    Revoked,
-    Removed,
-}
-
-impl SignedOutWhy {
-    /// The one reading of a close: the Lobby's code, and whether this device asked to Leave.
-    /// `None` for the close of a Leave: the Leave's answer says whether the Member left or was
-    /// removed.
-    fn after_close(code: Option<u16>, leaving: bool) -> Option<SignedOutWhy> {
-        use lobby_protocol::close::{REMOVED, SESSION_REVOKED};
-        Some(match code {
-            Some(SESSION_REVOKED) => SignedOutWhy::Revoked,
-            Some(REMOVED) if leaving => return None,
-            Some(REMOVED) => SignedOutWhy::Removed,
-            _ => SignedOutWhy::Expired,
-        })
-    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -258,16 +235,7 @@ pub struct Session {
     presence_retry_at: Option<Instant>,
     /// READY arrived at least once: a later Connected is a reconnect.
     connected_once: bool,
-    /// This device asked to Leave and the Lobby has not refused it: the close of 4006 that
-    /// follows is its own doing, whether it comes before the answer or after.
-    leaving: bool,
-    /// The owner's Leave waits for the Lobby to make this Member the owner.
-    heir: Option<UserId>,
-    /// The code of the connection's last close, read when the connection gives up: a refusal
-    /// may come between the two and change what the close means.
-    closed: Option<u16>,
-    /// The connection gave up on the close of a Leave: the Leave's answer is still to say why.
-    leave_closed: bool,
+    leave: Leave,
     /// The latest Watch's decoded pictures, until the viewer takes them.
     watch_feed: Option<VideoFeed>,
     /// Effects raised outside an event's handling (an intent's refusal, a media failure), for
@@ -334,10 +302,7 @@ impl Session {
             presence_sent: None,
             presence_retry_at: None,
             connected_once: false,
-            leaving: false,
-            heir: None,
-            closed: None,
-            leave_closed: false,
+            leave: Leave::No,
             watch_feed: None,
             queued: Vec::new(),
             queued_next_at: None,
@@ -441,11 +406,11 @@ impl Session {
                 UiEffects::default()
             }
             SessionEvent::Conn(ConnEvent::Phase(phase)) => self.on_phase(phase, now),
-            SessionEvent::Conn(ConnEvent::Disconnected { code }) => {
-                debug!(?code, "disconnected");
-                self.closed = code;
+            SessionEvent::Conn(ConnEvent::Disconnected) => {
+                debug!("disconnected");
                 self.fail_all(copy::MESSAGE_NOT_DELIVERED, now)
             }
+            SessionEvent::Conn(ConnEvent::SignedOut(why)) => self.on_signed_out(why, now),
             SessionEvent::Conn(ConnEvent::Msg(msg)) => self.on_msg(&msg, now),
             SessionEvent::Completed(Completion(done)) => self.completed(done, now),
         }
@@ -491,15 +456,6 @@ impl Session {
             // Voice ends with the WebSocket and is not rejoined by itself.
             self.end_call(Some(Ended::voice(copy::VOICE_DISCONNECTED)));
         }
-        if phase == Phase::NeedsAuth {
-            match SignedOutWhy::after_close(self.closed.take(), self.leaving) {
-                Some(why) => fx.0.push(UiEffect::NeedsAuth(why)),
-                None => self.leave_closed = true,
-            }
-        } else if phase == Phase::Connected {
-            self.closed = None;
-            self.leave_closed = false;
-        }
         let back = phase == Phase::Connected && self.state.phase != Phase::Connected;
         info!(?phase, "phase");
         self.state.phase = phase;
@@ -513,6 +469,17 @@ impl Session {
             self.presence_retry_at = None;
             self.sync_presence(now);
             self.send_queued(now);
+        }
+        fx
+    }
+
+    /// The connection gave up for good. The close of a Leave says nothing yet: the Leave's answer
+    /// tells whether the Member left or was removed.
+    fn on_signed_out(&mut self, why: SignedOutWhy, now: Instant) -> UiEffects {
+        let mut fx = self.on_phase(Phase::NeedsAuth, now);
+        match (why, &self.leave) {
+            (SignedOutWhy::Removed, Leave::Asked | Leave::Closed) => self.leave = Leave::Closed,
+            _ => fx.0.push(UiEffect::NeedsAuth(why)),
         }
         fx
     }

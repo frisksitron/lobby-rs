@@ -9,7 +9,6 @@ use std::{
 use futures_util::{FutureExt as _, SinkExt as _, StreamExt as _, future::BoxFuture};
 use lobby_protocol::{
     AccessToken, ClientFrame, ClientMsg, HeldHistory, Identify, Presence, Rid, ServerMsg, UnixMs,
-    close,
 };
 use tokio::{
     runtime::Handle,
@@ -32,9 +31,14 @@ use crate::{
 };
 
 mod ink_lane;
+mod redial;
 mod transport;
 
-use self::ink_lane::InkLane;
+pub use self::redial::ReconnectPolicy;
+use self::{
+    ink_lane::InkLane,
+    redial::{AfterClose, Ended, Hold, Redial, Refresh, Step, Stop, Woken},
+};
 
 const HANDSHAKE_BUDGET: Duration = Duration::from_secs(20);
 /// A token that takes longer than this (a refresh on a dead pooled connection) gets a fresh
@@ -61,48 +65,23 @@ const STALE_HEARTBEATS: f64 = 2.5;
 const STALE_FLOOR: Duration = Duration::from_secs(1);
 /// After an OS resume: no frame within this long of our ping ⇒ the socket is dead.
 pub const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
-/// A session that lasted this long was a real recovery: the attempt count starts over. One that
-/// ended sooner keeps counting, so a Lobby that accepts and then drops every connection backs off
-/// to Unavailable instead of being redialed in a loop.
-const STABLE_AFTER: Duration = Duration::from_secs(10);
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ReconnectPolicy {
-    pub tiers: [Duration; 4],
-    pub max_attempts: u32,
-    /// ±this fraction of the wait, so a Lobby's clients do not all return at the same instant
-    /// after a server restart.
-    pub jitter: f64,
-}
-
-impl Default for ReconnectPolicy {
-    fn default() -> Self {
-        Self {
-            tiers: [2, 5, 10, 30].map(Duration::from_secs),
-            max_attempts: 10,
-            jitter: 0.2,
-        }
-    }
-}
-
-impl ReconnectPolicy {
-    pub fn delay_before(&self, attempt: u32, unit: f64) -> Option<Duration> {
-        if attempt == 0 || attempt > self.max_attempts {
-            return None;
-        }
-        let tier = usize::try_from(attempt - 1)
-            .unwrap_or(usize::MAX)
-            .min(self.tiers.len() - 1);
-        let factor = 1.0 + self.jitter * (2.0 * unit.clamp(0.0, 1.0) - 1.0);
-        Some(self.tiers[tier].mul_f64(factor.max(0.0)))
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnEvent {
     Phase(Phase),
     Msg(ServerMsg),
-    Disconnected { code: Option<u16> },
+    Disconnected,
+    /// This device is signed out of the Lobby. Always the connection's last event.
+    SignedOut(SignedOutWhy),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SignedOutWhy {
+    Expired,
+    /// The Lobby ended this session (close 4005): a Sign Out, here or everywhere from another
+    /// device.
+    Revoked,
+    Removed,
 }
 
 /// Durations, not instants: the actor runs on Tokio's clock and the UI on its own, so the UI
@@ -232,7 +211,7 @@ impl Connection {
         let actor = Actor {
             url: api.origin().ws_url(lobby_protocol::routes::WS),
             api,
-            policy,
+            redial: Redial::new(policy),
             events,
             cmds: cmds_rx,
             cancel: cancel.clone(),
@@ -345,7 +324,7 @@ impl Drop for Connection {
 struct Actor {
     url: String,
     api: Arc<ApiClient>,
-    policy: ReconnectPolicy,
+    redial: Redial,
     events: mpsc::Sender<SessionEvent>,
     cmds: mpsc::Receiver<Command>,
     cancel: CancellationToken,
@@ -358,24 +337,13 @@ struct Actor {
 struct Gone;
 
 enum End {
+    /// `token` is the one the Lobby refused, if the close is a 4003.
     Closed {
         code: Option<u16>,
         token: AccessToken,
         up_for: Option<Duration>,
     },
-    Failed(DialFailure),
-    Dead {
-        up_for: Duration,
-    },
-    NeedsAuth,
-    ProtocolMismatch,
-}
-
-enum Next {
-    Stop(Phase),
-    Hold(Phase),
-    Now,
-    Backoff { offline: bool },
+    Other(Ended),
 }
 
 impl Actor {
@@ -390,18 +358,11 @@ impl Actor {
     }
 
     async fn run(mut self) {
-        let mut attempt = 0;
-        // One immediate retry after a 4003 (refresh, then reconnect), not counted as an attempt.
-        let mut auth_retry = true;
-        let mut violations = 0;
-        // Redials without a wait since the last stable session: one is allowed, then backoff.
-        let mut quick = 0;
         loop {
-            if self
-                .emit(ConnEvent::Phase(Phase::Connecting { attempt }))
-                .await
-                .is_err()
-            {
+            let connecting = Phase::Connecting {
+                attempt: self.redial.attempt(),
+            };
+            if self.emit(ConnEvent::Phase(connecting)).await.is_err() {
                 return;
             }
             let Ok(end) = self.attempt().await else {
@@ -411,55 +372,15 @@ impl Actor {
             // Commands queued for a socket that is gone are dropped; the Session fails them. One
             // that slips in after this drain carries the old number and `session` drops it.
             while self.cmds.try_recv().is_ok() {}
-            let next = match end {
-                End::NeedsAuth => Next::Stop(Phase::NeedsAuth),
-                End::ProtocolMismatch => Next::Stop(Phase::ProtocolMismatch),
-                End::Failed(failure) => {
-                    if self
-                        .emit(ConnEvent::Disconnected { code: None })
-                        .await
-                        .is_err()
-                    {
-                        return;
-                    }
-                    Next::Backoff {
-                        offline: failure == DialFailure::NoNetwork,
-                    }
-                }
-                End::Dead { up_for } => {
-                    if self
-                        .emit(ConnEvent::Disconnected { code: None })
-                        .await
-                        .is_err()
-                    {
-                        return;
-                    }
-                    if up_for >= STABLE_AFTER {
-                        (attempt, quick) = (0, 0);
-                    }
-                    redial(&mut quick)
-                }
-                End::Closed {
-                    code,
-                    token,
-                    up_for,
-                } => {
-                    if self.emit(ConnEvent::Disconnected { code }).await.is_err() {
-                        return;
-                    }
-                    let after_ready = up_for.is_some();
-                    let stable = up_for.is_some_and(|d| d >= STABLE_AFTER);
-                    if stable {
-                        (attempt, quick) = (0, 0);
-                    }
-                    if code == Some(close::PROTOCOL_VIOLATION) {
-                        violations += 1;
-                    } else if after_ready {
-                        violations = 0;
-                    }
-                    match code {
-                        Some(close::REPLACED) => Next::Hold(Phase::SessionReplaced),
-                        Some(close::SESSION_REVOKED | close::REMOVED) => {
+            let Ok(step) = self.settle(end).await else {
+                return;
+            };
+            match step {
+                Step::Stop(stop) => {
+                    let ev = match stop {
+                        Stop::ProtocolMismatch => ConnEvent::Phase(Phase::ProtocolMismatch),
+                        Stop::Expired => ConnEvent::SignedOut(SignedOutWhy::Expired),
+                        Stop::Ended(why) => {
                             // The in-memory pair goes first; the keychain delete runs on a
                             // blocking thread and finishes even if this is cancelled.
                             tokio::select! {
@@ -467,52 +388,22 @@ impl Actor {
                                 () = self.cancel.cancelled() => return,
                                 () = self.api.clear() => {}
                             }
-                            Next::Stop(Phase::NeedsAuth)
+                            ConnEvent::SignedOut(why)
                         }
-                        Some(close::AUTH_INVALID) if auth_retry || after_ready => {
-                            auth_retry = false;
-                            let refreshed = tokio::select! {
-                                biased;
-                                () = self.cancel.cancelled() => return,
-                                r = self.api.force_refresh(&token) => r,
-                            };
-                            match refreshed {
-                                Ok(_) => {
-                                    info!("access token refused (4003): refreshed, reconnecting");
-                                    redial(&mut quick)
-                                }
-                                Err(e) if e.kind == ApiKind::SessionExpired => {
-                                    Next::Stop(Phase::NeedsAuth)
-                                }
-                                Err(e) => {
-                                    warn!(error = %e, "refresh after 4003 failed");
-                                    Next::Backoff { offline: false }
-                                }
-                            }
-                        }
-                        // The server was not reading fast enough for us: READY resyncs.
-                        Some(close::SLOW_CONSUMER) => redial(&mut quick),
-                        // Once may be a fluke; twice is this client's bug, and retrying would
-                        // only repeat it.
-                        Some(close::PROTOCOL_VIOLATION) if violations >= 2 => {
+                    };
+                    let _ = self.emit(ev).await;
+                    return;
+                }
+                Step::Hold(hold) => {
+                    let phase = match hold {
+                        Hold::Replaced => Phase::SessionReplaced,
+                        Hold::Refused { attempts } => {
                             warn!(
                                 "the server closed 4000 twice: this client sends something it refuses"
                             );
-                            Next::Hold(Phase::Unavailable { attempts: attempt })
+                            Phase::Unavailable { attempts }
                         }
-                        // A reset, an end without a close, or a server restart, on a session that
-                        // was stable: the path or the Lobby is likely back already.
-                        None | Some(close::GOING_AWAY) if stable => redial(&mut quick),
-                        _ => Next::Backoff { offline: false },
-                    }
-                }
-            };
-            match next {
-                Next::Stop(phase) => {
-                    let _ = self.emit(ConnEvent::Phase(phase)).await;
-                    return;
-                }
-                Next::Hold(phase) => {
+                    };
                     if self.emit(ConnEvent::Phase(phase)).await.is_err() {
                         return;
                     }
@@ -522,55 +413,83 @@ impl Actor {
                     if self.wait(None, Wake::RetryOnly).await.is_err() {
                         return;
                     }
-                    (attempt, quick, violations) = (0, 0, 0);
-                    auth_retry = true;
+                    self.redial.held();
                 }
-                Next::Now => {}
-                Next::Backoff { offline } => {
-                    let upcoming = attempt + 1;
-                    let Some(delay) = self.policy.delay_before(upcoming, rand::random()) else {
-                        let failed = attempt;
-                        warn!(attempts = failed, "giving up until Try now");
-                        let phase = Phase::Unavailable { attempts: failed };
-                        if self.emit(ConnEvent::Phase(phase)).await.is_err() {
-                            return;
-                        }
-                        if self.wait(None, Wake::RetryOrResume).await.is_err() {
-                            return;
-                        }
-                        (attempt, quick) = (0, 0);
-                        auth_retry = true;
-                        continue;
-                    };
-                    let phase = if offline {
-                        Phase::Offline { retry_in: delay }
-                    } else {
-                        Phase::Reconnecting {
-                            attempt: upcoming,
-                            max: self.policy.max_attempts,
-                            retry_in: delay,
-                        }
-                    };
-                    info!(
-                        attempt = upcoming,
-                        ?delay,
-                        offline,
-                        "reconnecting after a wait"
-                    );
+                Step::Now => {}
+                Step::GiveUp(phase) => {
+                    warn!(attempts = self.redial.attempt(), "giving up until Try now");
+                    if self.emit(ConnEvent::Phase(phase)).await.is_err() {
+                        return;
+                    }
+                    if self.wait(None, Wake::RetryOrResume).await.is_err() {
+                        return;
+                    }
+                    self.redial.asked();
+                }
+                Step::Wait {
+                    phase,
+                    delay,
+                    attempt,
+                } => {
+                    let offline = matches!(phase, Phase::Offline { .. });
+                    info!(attempt, ?delay, offline, "reconnecting after a wait");
                     if self.emit(ConnEvent::Phase(phase)).await.is_err() {
                         return;
                     }
                     match self.wait(Some(delay), Wake::RetryOrResume).await {
                         Err(Gone) => return,
-                        Ok(Woken::Timer) => attempt = upcoming,
-                        Ok(Woken::Asked) => {
-                            (attempt, quick) = (0, 0);
-                            auth_retry = true;
-                        }
+                        Ok(how) => self.redial.woke(how),
                     }
                 }
             }
         }
+    }
+
+    async fn settle(&mut self, end: End) -> Result<Step, Gone> {
+        match end {
+            End::Closed {
+                code,
+                token,
+                up_for,
+            } => {
+                self.emit(ConnEvent::Disconnected).await?;
+                match self.redial.closed(code, up_for, rand::random()) {
+                    AfterClose::Refresh => {
+                        let outcome = self.refresh(&token).await?;
+                        Ok(self.redial.refreshed(outcome, rand::random()))
+                    }
+                    AfterClose::Step(step) => Ok(step),
+                }
+            }
+            End::Other(ended) => {
+                match ended {
+                    Ended::NeedsAuth | Ended::ProtocolMismatch => {}
+                    Ended::Failed { .. } | Ended::Dead { .. } => {
+                        self.emit(ConnEvent::Disconnected).await?;
+                    }
+                }
+                Ok(self.redial.ended(ended, rand::random()))
+            }
+        }
+    }
+
+    async fn refresh(&self, refused: &AccessToken) -> Result<Refresh, Gone> {
+        let refreshed = tokio::select! {
+            biased;
+            () = self.cancel.cancelled() => return Err(Gone),
+            r = self.api.force_refresh(refused) => r,
+        };
+        Ok(match refreshed {
+            Ok(_) => {
+                info!("access token refused (4003): refreshed, reconnecting");
+                Refresh::Done
+            }
+            Err(e) if e.kind == ApiKind::SessionExpired => Refresh::SessionExpired,
+            Err(e) => {
+                warn!(error = %e, "refresh after 4003 failed");
+                Refresh::Failed
+            }
+        })
     }
 
     async fn wait(&self, delay: Option<Duration>, wake: Wake) -> Result<Woken, Gone> {
@@ -632,11 +551,11 @@ impl Actor {
                     ApiKind::SessionExpired | ApiKind::KeychainUnavailable
                 ) {
                     info!(error = %e, "no usable session");
-                    End::NeedsAuth
+                    End::Other(Ended::NeedsAuth)
                 } else {
                     // A refresh the server did not answer: it may just be down, so not Offline.
                     warn!(error = %e, "could not get an access token");
-                    End::Failed(DialFailure::Other)
+                    End::Other(Ended::Failed { no_network: false })
                 };
                 if let Ok(Ok(mut ws)) = dialed {
                     close_gracefully(&mut ws).await;
@@ -662,11 +581,12 @@ impl Actor {
             Ok(Ok(ws)) => ws,
             Ok(Err(e)) => {
                 warn!(error = %e.message, no_network = e.failure == DialFailure::NoNetwork, "connect failed");
-                return Ok(End::Failed(e.failure));
+                let no_network = e.failure == DialFailure::NoNetwork;
+                return Ok(End::Other(Ended::Failed { no_network }));
             }
             Err(_) => {
                 warn!("connect timed out");
-                return Ok(End::Failed(DialFailure::Other));
+                return Ok(End::Other(Ended::Failed { no_network: false }));
             }
         };
         // From here the socket exists, so a cancel still closes it with 1000.
@@ -688,7 +608,7 @@ impl Actor {
         };
         let (ready, heartbeat) = match greeted {
             Ok(greeted) => greeted,
-            Err(Handshake::ProtocolMismatch) => return Ok(End::ProtocolMismatch),
+            Err(Handshake::ProtocolMismatch) => return Ok(End::Other(Ended::ProtocolMismatch)),
             Err(Handshake::Closed(code)) => {
                 info!(?code, "closed during the handshake");
                 return Ok(End::Closed {
@@ -699,7 +619,7 @@ impl Actor {
             }
             Err(Handshake::Failed(why)) => {
                 warn!(%why, "connect failed");
-                return Ok(End::Failed(DialFailure::Other));
+                return Ok(End::Other(Ended::Failed { no_network: false }));
             }
         };
         info!("connected");
@@ -724,8 +644,8 @@ impl Actor {
                 token,
                 up_for: Some(up_for),
             }),
-            Ok(SessionEnd::Dead) => Ok(End::Dead { up_for }),
-            Ok(SessionEnd::NeedsAuth) => Ok(End::NeedsAuth),
+            Ok(SessionEnd::Dead) => Ok(End::Other(Ended::Dead { up_for })),
+            Ok(SessionEnd::NeedsAuth) => Ok(End::Other(Ended::NeedsAuth)),
             Err(Gone) => {
                 self.flush_queued(&mut ws, socket).await;
                 close_gracefully(&mut ws).await;
@@ -937,26 +857,10 @@ impl Actor {
     }
 }
 
-/// Dial again at once, unless that was already done since the last stable session: a path that
-/// keeps failing right after READY gets the normal backoff.
-fn redial(quick: &mut u32) -> Next {
-    *quick += 1;
-    if *quick > 1 {
-        Next::Backoff { offline: false }
-    } else {
-        Next::Now
-    }
-}
-
 #[derive(Clone, Copy)]
 enum Wake {
     RetryOrResume,
     RetryOnly,
-}
-
-enum Woken {
-    Timer,
-    Asked,
 }
 
 enum SessionEnd {

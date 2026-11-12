@@ -4,7 +4,7 @@
 use lobby_protocol::UserId;
 use tracing::{info, warn};
 
-use super::{Session, UiEffect, UiEffects, io::Op};
+use super::{Session, UiEffect, UiEffects, account::Leave, io::Op};
 use crate::{
     ApiError, copy,
     issues::{Issue, IssueKind},
@@ -32,8 +32,10 @@ impl Session {
         action: OwnerAction,
         result: Result<(), ApiError>,
     ) -> UiEffects {
-        if matches!(action, OwnerAction::MakeOwner) && self.heir.as_ref() == Some(user) {
-            self.heir = None;
+        if matches!(action, OwnerAction::MakeOwner)
+            && matches!(&self.leave, Leave::HandingOver(heir) if heir == user)
+        {
+            self.leave = Leave::No;
             self.handed_over(user, result);
             return UiEffects::default();
         }

@@ -77,7 +77,7 @@ impl Driven {
 
     /// The connection drops, and the next one brings `ready`.
     async fn back_with(&mut self, ready: ServerMsg) {
-        self.fake.emit(ConnEvent::Disconnected { code: None });
+        self.fake.emit(ConnEvent::Disconnected);
         self.fake
             .emit(ConnEvent::Phase(Phase::Connecting { attempt: 0 }));
         self.until("away", |s| s.state.phase != Phase::Connected)
@@ -217,7 +217,7 @@ async fn back_from_away_the_feed_shows_what_was_edited_and_deleted_meanwhile() {
     let away = || ConnEvent::Phase(Phase::Connecting { attempt: 0 });
     let gone = |s: &Snapshot| s.state.phase != Phase::Connected;
 
-    d.fake.emit(ConnEvent::Disconnected { code: None });
+    d.fake.emit(ConnEvent::Disconnected);
     d.fake.emit(away());
     d.until("away", gone).await;
     d.fake.emit(ConnEvent::Msg(ready(3, 2, true)));
@@ -229,7 +229,7 @@ async fn back_from_away_the_feed_shows_what_was_edited_and_deleted_meanwhile() {
     let right = [(1, "hi".to_owned()), (2, "the cat".to_owned())];
     assert_eq!(feed(&d.snapshot), right);
 
-    d.fake.emit(ConnEvent::Disconnected { code: None });
+    d.fake.emit(ConnEvent::Disconnected);
     d.fake.emit(away());
     d.until("away again", gone).await;
     // Away long enough that the Lobby starts the feed over.
