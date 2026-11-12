@@ -25,16 +25,15 @@ Preconditions:
 
 - Two clients signed in. Header `heartbeat_ms` shortens heartbeats where a scenario needs it.
 
-- **Presence.** On `b`, wait `/lobby/members/alice/presence` = `online`. After `{"close": "a"}` (Layer 4) it reads offline.
+- **Presence.** On `b`, wait `/lobby/members/alice/presence` = `online`. After `{"close": "a"}` it reads offline.
 - **Server restart.** `{"server": "stop"}`, wait `/lobby/connection/title` = Connection lost (`/lobby/connection` is null while calm), open the bell and `{"click": "connection-try-now"}` or `{"server": "start"}`, then wait `/lobby/phase` = `connected`.
 - **Freeze.** `{"server": "freeze"}` / `"thaw"` makes a half-open socket (Layer 3 only).
 - **Wake and idle.** `{"action": "wake"}`, `{"action": "idle"}`, `{"action": "active"}` are injected host events, never the person's input.
 - **DND.** `{"right_click": "member-alice"}` (a right-click on any row opens its Member Card at the pointer; a left-click opens nothing, and Esc closes the card), `{"click": "presence-dnd"}` (the switch: `/lobby/member_panel/own/dnd`; click it again to turn it off), then wait on `b`.
 - **Nothing moves.** `{"mark": "m"}` before the drop, then `{"wait": {"unchanged": "member-list", "since": "m"}}` after the return.
-- **Proof.** `sign-in-and-presence`, `sign-in-and-presence-small`, `reconnect-server-restart` (the `t4-*` scenarios are out of the suite, see the README). Take a `shot` of `title-bar` or `notification-center`.
+- **Proof.** `sign-in-and-presence`, `sign-in-and-presence-small`, `reconnect-server-restart`. Take a `shot` of `title-bar` or `notification-center`.
 
 ## Gotchas
 
-- `t4-unavailable` leans on the tests' short reconnect policy and is `layer3_only`.
 - Never wait out the 10-minute idle. Inject `idle`.
 - Real sleep/resume and the OS idle signal need the person.

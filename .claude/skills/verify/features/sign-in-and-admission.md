@@ -4,7 +4,7 @@ A person enters a Lobby's address, then an email, then the six-digit Magic Code 
 
 ## Sub-features
 
-- `url-step` enters the Lobby address and refuses a remote `http://` Lobby. A local Lobby that https did not reach offers "Use http://…" in the feedback line.
+- `url-step` enters the Lobby address and refuses a remote `http://` Lobby.
 - `magic-code` signs a Member in with an emailed code. The cells submit by themselves once the sixth digit is in.
 - `rail` is the row of step chips across the top (Lobby › Email › Code › Name). A done chip shows what was settled; pressing the Lobby or Email chip goes back to that step.
 - `bootstrap` lets a fresh Lobby's owner name itself and set the Lobby up, without a Vouch. Anyone earlier lands on "{name} isn't open yet".
@@ -30,7 +30,7 @@ Preconditions:
 - **Rail.** `/auth/rail` lists the chips (`stage`, `at` = `done`, `current` or `ahead`, `value`, `back`). Press `chip-lobby` or `chip-email` to go back.
 - **Vouch.** On `b`, Ask to Join with a new email and a name. On `a`, `{"click": "notification-bell"}` then `{"click": "vouch-carol"}`. On `b`, `{"click": "check-again"}`. Both clients then show carol at `/lobby/members/carol/presence`.
 - **Sign Out.** `{"right_click": "member-<you>"}`, then `{"click": "sign-out"}`. Wait `/auth/step` = `Email` on that client; the other client stays signed in.
-- **Proof.** `sign-in-and-presence`, `sign-in-and-presence-small`, `setup-first-member`, `ask-to-join-and-vouch` (`tb1-auth-errors` and `t5-locked-and-sign-out` are out of the suite, see the README). Add a `shot` of `auth` for visual checks.
+- **Proof.** `sign-in-and-presence`, `sign-in-and-presence-small`, `setup-first-member`, `ask-to-join-and-vouch`. Add a `shot` of `auth` for visual checks.
 
 ## Gotchas
 

@@ -31,10 +31,10 @@ Preconditions:
 - **Kept.** `{"close": "a"}`, `{"open": "a"}`, then check the same paths.
 - **Size.** `{"press": "ctrl-="}`, `ctrl--`, `ctrl-0`; or `{"click": "size-larger"}` / `size-smaller`. Check `/settings/ui_scale` (a whole percent) and `/settings/shown/font_size` (16 at 100). 125 is not a step: use 120 or 130.
 - **Sidebar.** `ctrl-alt-right` at the minimum, or `{"drag": "sidebar-edge", "by": [100, 0]}`; check `/lobby/sidebar_collapsed` and `/lobby/sidebar_width` (design pixels); `{"click": "members-toggle"}` brings it back.
-- Scenarios, all out of the suite and in git history (see the README): `t14b-ui-scale`, `t14b-ui-scale-small` (480x400, 80 to 150), `t14b-collapse-sidebar` and `t14b-live` (all three kept across a restart, both layers), `t14a-settings` (the cog, Close to tray, restart), `t14c-cog` and `t14c-cog-small` (the cog on the URL step, Sign In and over the Lobby, at 480x400 and 150 percent), `t14d-leave` (the owner cannot, dismiss, then leave one of two Lobbies and land in the other, the other client sees the departure) and `t14d-leave-small` (480x400 and 150 percent, leaving the last Lobby ends on the URL step), `t14d-live` (avatar, icon and leave on the real binaries, both layers), `t14d-icon` and `t14d-icon-small` (any Member sets, replaces and removes the icon; the title bar and the menu draw it; at 480x400 and 150 percent), `t14d-avatar` and `t14d-avatar-small` (a picture set, seen by the second client in the roster and on loaded Messages, a refused file, Remove; at 480x400 and 150 percent), `t14c-rename` and `t14c-rename-small` (the Name row: invalid, taken, saved, seen by a second client), `t14a-appearance` (always dark, Size, both layers; it dates from the tabs), `t14a-appearance-small` (480×400).
+- No scenario in the suite covers Settings: write one in `target/verify/` from the recipes above.
 
 ## Gotchas
 
-- Scenario shots are not byte-stable between runs: a Lobby's mark colour comes from its random port and the feed shows the clock. Only the render tests (`target/ui-shots/lobby_view`, ...) are exact, so a pass that must change nothing compares those.
+- Scenario shots are not byte-stable between runs: a Lobby's mark colour comes from its random port and the feed shows the clock.
 - `window.rem_size` is what lays everything out, and `appearance::apply` sets it through `Theme.font_size`. The OS window's minimum size cannot change at run time: at 480x400 and 150 percent some content scrolls.
 - The DWM window border follows the OS, not the theme.

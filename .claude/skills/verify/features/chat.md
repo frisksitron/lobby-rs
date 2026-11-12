@@ -25,12 +25,12 @@ Preconditions:
 - Two clients signed in (the sign-in prefix). For history, the header's `history` (`{"author": "bob", "count": 120}`) stores Messages before the server starts.
 
 - **Send.** `{"type": "hello", "into": "composer"}`, `{"press": "enter"}`, then wait `/lobby/feed` contains `{"author": "alice", "text": "hello", "pending": false}`. Do the same wait on `b`.
-- **Rows.** `/lobby/chat/rows` holds dividers, groups and pending states. Also check `/lobby/chat/at_bottom`, `/lobby/unseen` and `/lobby/chat/typing`.
+- **Rows.** `/lobby/chat/rows` holds dividers, groups and pending states. Also check `/lobby/chat/at_bottom`, `/lobby/chat/unseen` and `/lobby/chat/typing`.
 - **Formatting.** `{"click": "format-bold"}` (`format-menu` when small), then check `/lobby/formats_on`.
 - **Load Older.** `{"scroll": "feed-list", "to": "load-older"}`, `{"click": "load-older"}`, then wait for the first Message that was in view to be `visible` and `load-older` to be `gone`. The kit scroller scrolls to a row's top only, so the rows move up by what sat above them: `unchanged` no longer holds.
 - **Backfill.** Layer 3 `{"network": "down"}` on a client in `own_paths`, send from the other client, then `{"network": "up"}`. Or close and reopen the client in Layer 4.
 - **Timeout.** Layer 3 `{"advance": 5100}` past the send deadline, then check `/lobby/composer` and `/issues`.
-- **Proof.** `chat`, `chat-load-older` (the other `t9-*` scenarios are out of the suite, see the README). Take a `shot` of `feed-list`, `composer` or `typing-line`.
+- **Proof.** `chat`, `chat-load-older` (Layer 3 only). Take a `shot` of `feed-list`, `composer` or `typing-line`.
 
 ## Gotchas
 

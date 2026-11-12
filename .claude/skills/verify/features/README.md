@@ -5,18 +5,18 @@ The maintained source for verifying what a Member sees and does in the desktop a
 ## Baseline preconditions
 
 - Every run starts from nothing. The harness creates the server, its database, its mail sink and the Members named in the scenario header (`members`; `alice` has the email `alice@lobby.test` and signs in with `{code:alice@lobby.test}`). Each client gets an empty data directory.
-- Layer 3: `LOBBY_SCENARIO=<name> cargo nextest run -p lobby-desktop --test e2e_ui`. Layer 4: `cargo xtask drive <name>`.
+- Layer 3: `LOBBY_SCENARIO=<name> cargo nextest run -p lobby-desktop --test e2e_ui`. Layer 4: `cargo xtask drive <name>`, for a scenario without `advance`, `network`, `paste`, `freeze`/`thaw` or a seeded header (see `../SKILL.md`).
 - Run `../scripts/doctor.ps1` when a run misbehaves. Never drive or kill a `lobby` this run did not start.
 
 ## Scenarios in the suite
 
-Only 23 scenarios in `tests/scenarios/` run in `cargo nextest run --workspace`, one for each main flow. A feature file can name a scenario that is not in the suite. To check that behaviour, write the scenario again from the feature file's recipe in `target/verify/`, or add it to the suite with the change that needs it.
+The scenarios in `crates/lobby-desktop/tests/scenarios/` run in `cargo nextest run --workspace` and cover the main flows. A feature file's recipe can describe behaviour that no scenario covers. To check that behaviour, write a scenario from the recipe in `target/verify/`, or add it to the suite with the change that needs it.
 
 ## Driving conventions
 
 - Start from the sign-in prefix in `../SKILL.md`, then act through element ids (`click`, `type` + `into`, `press`) and check through the model (`wait`/`expect` on dump paths).
 - Wait on client `b` for anything other Members should see.
-- Check small layouts with a header `"size": [480, 400]` or `{"action": "resize:480x400"}`.
+- Check small layouts with a header `"size": [480, 400]`, or on Layer 4 only `{"action": "resize:480x400"}`.
 - Never sleep and never wait out a real timer.
 
 ## Proof and skip reporting

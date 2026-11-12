@@ -10,7 +10,7 @@ The surface is the Windows desktop app `lobby` (crate `lobby-desktop`) talking t
 Hard rules (the person uses this PC while you work):
 
 - Never use SendInput, move the mouse, take the focus, or raise a window. The harness never does. Do not add tools that do.
-- Never sleep or wait out a real timer (idle after 10 min, toast expiry, backoff). Wait for something the person would see. Prove timers in Layer 1 with `advance_clock`, or Layer 3 with `{"advance": ms}`.
+- Never sleep or wait out a real timer (idle after 10 min, toast expiry, backoff). Wait for something the person would see. Prove timers on Layer 3 with `{"advance": ms}`, or in a unit test with `advance_clock`.
 - Kill only processes you started, by PID. Never by image name: another agent's drive or the person's own `lobby` may be running.
 - Check the UI at 680×480 (default) and at 480×400 (minimum).
 
@@ -19,10 +19,10 @@ Hard rules (the person uses this PC while you work):
 There is no long-lived instance to start. Each run starts and stops its own server and clients.
 
 - **Layer 3, in process (default, fastest).** `LOBBY_SCENARIO=<part of a name> cargo nextest run -p lobby-desktop --test e2e_ui`. Each scenario runs a real in-process `lobby-server` behind a chaos proxy with an SMTP sink, plus one real `Shell` per client. Ready means the test started; there is nothing to poll. Add `LOBBY_RENDER_TESTS=1` for pictures, which needs a Vulkan or GL driver. It supports everything, including `network`, `advance`, `freeze`/`thaw` and `{code:<email>}`.
-- **Layer 4, real binaries.** `cargo xtask drive <name-or-path> [--instances a,b] [--no-build] [--visible]`. It builds `lobby-server` and `lobby --features automation` into `./target` unless `--no-build` is given. It starts the server on free ports with scratch data, then one `lobby` per client with instance id `tV-drive-<driver pid>-<client>`. Each window opens off screen without activation. Ready is the line `drive <name>: server http://127.0.0.1:<port>, clients a, b (pipes tV-drive-<pid>-*)`. Each step then prints `ok` or `FAIL` with its line number. Use Layer 4 for DirectX and DirectWrite pixels, real Quit and restart, Credential Manager, window resizes and real window sizes (`drive_only` scenarios). Its servers mail into the driver's own SMTP sink, so `{code:<email>}` works there too. It does not support `freeze`/`thaw`, `network` or `advance`. It drives only a server of its own: a deployed Lobby's mail is out of its reach, so nothing could sign in there.
+- **Layer 4, real binaries.** `cargo xtask drive <name-or-path> [--instances a,b] [--no-build] [--visible]`. It builds `lobby-server` and `lobby --features automation` into `./target` unless `--no-build` is given. It starts the server on free ports with scratch data, then one `lobby` per client with instance id `tV-drive-<driver pid>-<client>`. Each window opens off screen without activation. Ready is the line `drive <name>: server http://127.0.0.1:<port>, clients a, b (pipes tV-drive-<pid>-*)`. Each step then prints `ok` or `FAIL` with its line number. Use Layer 4 for DirectX and DirectWrite pixels, real Quit and restart, Credential Manager, window resizes and real window sizes. Its servers mail into the driver's own SMTP sink, so `{code:<email>}` works there too. It does not support `freeze`/`thaw`, `network`, `advance` or `paste`, and it refuses a scenario whose header has `layer3_only`, `history`, `sent_files` or `own_paths`. It fills only `{lobby}`, `{lobby2}`, `{host}`, `{host2}` and the codes. It drives only a server of its own: a deployed Lobby's mail is out of its reach, so nothing could sign in there.
 - **Teardown** is automatic. The driver quits each client through the Quit flow, stops the server, and removes its Credential Manager entries. The next run removes entries left by drivers that died.
 
-Use one shared target dir (`./target`). In a git worktree, set `CARGO_TARGET_DIR` to the main checkout's `target` so the build reuses compiled dependencies.
+Use one shared target dir (`./target`).
 
 ## Doctor
 
@@ -32,7 +32,7 @@ Run this first whenever anything looks off (a pipe that will not open, a stuck d
 pwsh -NoProfile -File .claude/skills/verify/scripts/doctor.ps1
 ```
 
-It is read-only. It reports:
+It changes no file and ends no process. It runs `cargo xtask check-toolchain`, which waits for the build lock. It reports:
 
 - the toolchain check;
 - whether the drive binaries are older than the newest source change;
@@ -63,37 +63,36 @@ A driven client shows `LOBBY_AUTOMATION` only in its environment, so the doctor 
      {"wait": {"path": "/lobby/phase", "eq": "connected"}, "timeout_ms": 5000}
      ```
 4. Handles are element ids, never coordinates. To see what exists, add `{"dump": "x"}`. The dump has `/elements/<id>` (bounds, visibility, accessible name) and the view model (`/route`, `/auth/step`, `/lobby/phase`, `/lobby/members/<name>/…`, `/lobby/chat/rows`, `/lobby/connection`, `/lobby/voice/controls`, `/issues`, `/lobbies`, `/window/width`, …). An element without an id needs `.test_support()` in its builder. Icon-only buttons need an `accessibility_label`, which is their name in the dump.
-5. "Nothing moves" is `{"mark": "m"}` … `{"wait": {"unchanged": "<id>", "since": "m"}}`. Window size changes go through `{"action": "resize:480x400"}`, or a header `"size": [480, 400]`.
+5. "Nothing moves" is `{"mark": "m"}` … `{"wait": {"unchanged": "<id>", "since": "m"}}`. Window size changes go through a header `"size": [480, 400]`, or on Layer 4 only `{"action": "resize:480x400"}`.
 
 ## Evidence
 
 Where proof lands:
 
 - **Layer 3.** `target/ui-shots/scenarios/<scenario>/`: `transcript.jsonl` (every step, client, time and failure), `<client>-failed.json` (the dump a failed wait saw), `<client>-<name>.png|json` for `shot` and `dump` steps.
-- **Layer 4.** `target/drive/<scenario>/out/` holds the same files. `target/drive/<scenario>/server/server.log` and `clients/<client>/logs/` hold the processes' logs.
-- **Layer 2 crops.** `target/ui-shots/<test>/<size>/<step>.png`.
+- **Layer 4.** `target/drive/<scenario>/out/` holds `transcript.jsonl` and the `shot` and `dump` files. `target/drive/<scenario>/server/server.log` and `clients/<client>/logs/` hold the processes' logs.
 
 What counts as proof:
 
 - **Drive the user path.** Clicks, typing and key presses on the real views. No internal setters and no test-only endpoints.
 - **Capture the action and the state it produced.** Use a `wait`/`expect` on the model, plus a `shot` of the region, not just the last screen.
 - **Check side effects on the other client.** For anything a Member shares, the second client must see it: wait on client `b` too.
-- **Read the shots.** Open the PNGs. Layer 2 and 3 draw with the bundled Figtree in all four weights, on wgpu and Cosmic text; judge how text weight and hierarchy come out on the real DirectWrite on Layer 4 shots.
+- **Read the shots.** Open the PNGs. Layer 3 draws with the bundled Figtree in all four weights, on wgpu and Cosmic text, with motion reduced; judge motion, and how text weight and hierarchy come out on the real DirectWrite, on Layer 4 shots.
 - **Name the exact command, the scenario file and the output folder** in your report.
 
 A run is a pass only if every step printed `ok` (Layer 4) or the test passed (Layer 3). "Inconclusive" or a check on the wrong layer is not a pass.
 
 ## Cleanup
 
-- A finished drive cleans up after itself. After a drive you interrupted, run the doctor. End only the `lobby`/`lobby-server` PIDs your run started (the drive's ready line names its `tV-drive-<pid>` prefix): `Stop-Process -Id <pid>`. The next drive removes stale Credential Manager entries.
+- A finished drive cleans up after itself. After a drive you interrupted, run the doctor. End only the `lobby`/`lobby-server` PIDs your run started: `Stop-Process -Id <pid>`. The next drive removes stale Credential Manager entries.
 - Evidence survives cleanup. A rerun of the same scenario name replaces `target/drive/<name>/`. Before re-running, copy `out/` to `target/verify/evidence/<name>-<label>/` if you need the earlier pictures.
 - Delete throwaway scenarios in `target/verify/` when done. Keep the evidence.
 
 ## Helpers
 
-- `.claude/skills/verify/scripts/doctor.ps1`: read-only health check, see Doctor.
+- `.claude/skills/verify/scripts/doctor.ps1`: the health check, see Doctor.
 - `xtask/scripts/focus-watch.ps1`: logs the foreground window and cursor during a run, to prove nothing took the focus.
-- `xtask/scripts/resize-check.ps1`: 200 rapid resizes and maximize/restore with PrintWindow. Run it after changes near the window, the renderer or gpui-kit's version.
+- `xtask/scripts/resize-check.ps1 -ProcessId <pid of a client you started>`: resizes the window through a list of sizes and captures each with PrintWindow; `-Stress 200` adds rapid resizes. `-Maximize` activates the window, so use it only with the person's leave. Run it after changes near the window, the renderer or gpui-kit's version.
 
 ## Feature map
 
