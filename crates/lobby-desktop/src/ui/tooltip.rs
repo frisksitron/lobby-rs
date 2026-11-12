@@ -117,15 +117,57 @@ struct Trigger {
 #[derive(Default)]
 struct Alive(Rc<()>);
 
-/// A window without the host draws no tooltip.
-pub(crate) fn with_tooltip<E>(control: E, text: SharedString) -> E
+/// A window without the host draws no tooltip. GPUI takes one hover listener per element and the
+/// control keeps that for itself, so this returns what the control's listener calls.
+pub(crate) fn with_tooltip<E>(
+    control: E,
+    text: SharedString,
+) -> (E, impl Fn(bool, &mut Window, &mut App) + 'static)
 where
     E: StatefulInteractiveElement + ParentElement,
 {
     let trigger = Rc::new(RefCell::new(Trigger::default()));
     let seen = trigger.clone();
     let hovered = trigger.clone();
-    control
+    let on_hover = move |entered: bool, window: &mut Window, cx: &mut App| {
+        let trigger = hovered.borrow();
+        let (Some(id), Some(host)) = (trigger.id.clone(), TooltipHost::of(window, cx)) else {
+            return;
+        };
+        let bounds = trigger.bounds;
+        let alive = trigger.alive.clone();
+        let overlay = host.update(cx, |host, _| {
+            if entered {
+                if host.pressed == Some(bounds) {
+                    return None;
+                }
+                host.hovered = Some((id, alive));
+            } else if host.hovered.as_ref().is_some_and(|(h, _)| *h == id) {
+                host.hovered = None;
+            } else {
+                // Hover events run in reverse paint order: the next control may have taken
+                // the tooltip before this one hears that the pointer left.
+                return None;
+            }
+            Some(host.overlay.clone())
+        });
+        let Some(overlay) = overlay else {
+            return;
+        };
+        let text = text.clone();
+        overlay.update(cx, |overlay, cx| {
+            if entered {
+                let request = TooltipRequest::new(bounds, move |_, cx| {
+                    let text = text.clone();
+                    AnyView::from(cx.new(|_| TooltipText(text)))
+                });
+                overlay.request_show(request, window, cx);
+            } else {
+                overlay.request_hide(window, cx);
+            }
+        });
+    };
+    let control = control
         .on_prepaint(move |bounds, window, _| {
             let id = window.with_global_id("tooltip-trigger".into(), |id, _| id.clone());
             // Element state lives while the element is drawn, so this token dies with it.
@@ -139,44 +181,6 @@ where
                 bounds,
             };
         })
-        .on_hover(move |entered, window, cx| {
-            let trigger = hovered.borrow();
-            let (Some(id), Some(host)) = (trigger.id.clone(), TooltipHost::of(window, cx)) else {
-                return;
-            };
-            let bounds = trigger.bounds;
-            let alive = trigger.alive.clone();
-            let overlay = host.update(cx, |host, _| {
-                if *entered {
-                    if host.pressed == Some(bounds) {
-                        return None;
-                    }
-                    host.hovered = Some((id, alive));
-                } else if host.hovered.as_ref().is_some_and(|(h, _)| *h == id) {
-                    host.hovered = None;
-                } else {
-                    // Hover events run in reverse paint order: the next control may have taken
-                    // the tooltip before this one hears that the pointer left.
-                    return None;
-                }
-                Some(host.overlay.clone())
-            });
-            let Some(overlay) = overlay else {
-                return;
-            };
-            let text = text.clone();
-            overlay.update(cx, |overlay, cx| {
-                if *entered {
-                    let request = TooltipRequest::new(bounds, move |_, cx| {
-                        let text = text.clone();
-                        AnyView::from(cx.new(|_| TooltipText(text)))
-                    });
-                    overlay.request_show(request, window, cx);
-                } else {
-                    overlay.request_hide(window, cx);
-                }
-            });
-        })
         .on_mouse_down(MouseButton::Left, move |_, window, cx| {
             let Some(host) = TooltipHost::of(window, cx) else {
                 return;
@@ -187,7 +191,8 @@ where
                 host.overlay.update(cx, |overlay, cx| overlay.hide(cx));
                 cx.notify();
             });
-        })
+        });
+    (control, on_hover)
 }
 
 /// The tooltip of an element that is not one of Lobby's controls, for gpui's own `.tooltip(..)`:

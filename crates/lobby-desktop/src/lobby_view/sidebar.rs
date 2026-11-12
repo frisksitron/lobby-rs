@@ -8,13 +8,13 @@
 use std::{
     collections::{HashMap, HashSet},
     rc::Rc,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
 use gpui_kit::{
-    Animation, AnimationExt as _, AnyElement, AnyView, App, AppContext as _, Axis, Context, Entity,
-    EventEmitter, FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _, Render,
-    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled as _, Subscription,
+    AnyElement, AnyView, App, AppContext as _, Axis, Context, Div, Entity, EventEmitter,
+    FocusHandle, InteractiveElement as _, IntoElement, ParentElement as _, Render, SharedString,
+    StatefulInteractiveElement as _, StyleRefinement, Styled as _, Subscription,
     TestSupportExt as _, Window,
     base::{
         HandleEdge, InteractiveElementExt as _, ResizeHandleContext, ResizeHandleRenderer,
@@ -22,7 +22,7 @@ use gpui_kit::{
         slider::{SliderEvent, SliderState},
         transition,
     },
-    deferred, div, ease_out_quint, linear_color_stop, linear_gradient,
+    deferred, div, linear_color_stop, linear_gradient,
     prelude::FluentBuilder as _,
     px,
 };
@@ -32,6 +32,7 @@ use super::BODY_TOP;
 use super::member_list::{MemberGroups, OpenPanel, member_groups};
 use super::own_card::OwnCard;
 use crate::scale::{u, window_scale};
+use crate::ui::motion::{Reveal, Side};
 use crate::{
     components::{
         BORDER, MEMBER_ROW_GAP, MediaImages, SURFACE_PAD, SURFACE_RADIUS, Sharer, VoiceBarActions,
@@ -60,7 +61,6 @@ pub const SIDEBAR_STEP: f32 = 16.;
 /// A dragged edge goes this far under [`SIDEBAR_MIN`] before the sidebar puts itself away, so a
 /// drag that overshoots the minimum by a hair does not lose it.
 const COLLAPSE_SLACK: f32 = 20.;
-const SHEET_IN: Duration = Duration::from_millis(220);
 
 /// How the member list sits in a window.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -195,6 +195,8 @@ pub struct MemberSidebar {
     open: bool,
     focus: FocusHandle,
     pub member_panel: Option<OpenPanel>,
+    /// The card as last drawn open, which it shows while it fades out.
+    pub(super) card_drawn: Option<OpenPanel>,
     /// The open card holds the focus, so Escape reaches it.
     pub(super) card_focus: FocusHandle,
     /// The signed-in Member's name field and picture picker, made the first time their own card
@@ -271,6 +273,7 @@ impl MemberSidebar {
             open: false,
             focus: cx.focus_handle(),
             member_panel: None,
+            card_drawn: None,
             card_focus: cx.focus_handle(),
             own_card: None,
             refocus_card: false,
@@ -377,8 +380,10 @@ impl MemberSidebar {
         let style = StyleRefinement::default();
         let style = match this.layout(window, cx) {
             SidebarLayout::Docked(width) => style.flex_shrink_0().w(u(width)).mr(u(SHEET_INSET)),
-            SidebarLayout::Sheet if this.open => style.absolute().inset_0(),
-            SidebarLayout::Sheet | SidebarLayout::Collapsed => style,
+            // Folded too, so a folding sheet keeps its box while it goes; an empty root there
+            // takes no presses.
+            SidebarLayout::Sheet => style.absolute().inset_0(),
+            SidebarLayout::Collapsed => style,
         };
         AnyView::from(sidebar.clone())
             .cached(style)
@@ -544,13 +549,15 @@ impl Render for MemberSidebar {
             SidebarLayout::Sheet => (None, true),
             SidebarLayout::Collapsed => return div().children(card).into_any_element(),
         };
-        if narrow && !self.open {
+        // Sampled while folded too: opening then starts from folded, not open at once.
+        let reveal = narrow.then(|| Reveal::sheet("members-sheet", self.open, window, cx));
+        if reveal.is_some_and(|r| !r.is_drawn()) {
             return div().children(card).into_any_element();
         }
         let panel_w = shown.unwrap_or(FOLDED_SHEET_W);
         let panel = self.panel(panel_w, narrow, cx);
         // Each root fills the box `cached` gives it in the Lobby body.
-        if !narrow {
+        let Some(reveal) = reveal else {
             // The Lobby body's padding gives the sheet its air above and below.
             return div()
                 .relative()
@@ -560,39 +567,54 @@ impl Render for MemberSidebar {
                 .child(self.edge(cx))
                 .children(card)
                 .into_any_element();
-        }
-        div()
-            .relative()
-            .size_full()
-            .child(
-                div()
-                    .id("members-backdrop")
-                    .test_support()
-                    .absolute()
-                    .inset_0()
-                    .bg(cx.theme().overlay)
-                    .on_click(cx.listener(|this, _, window, cx| this.set_open(false, window, cx))),
-            )
-            // The docked sheet's place: below the title bar by the body's air, inset at the right
-            // and the bottom.
-            .child(
-                div()
-                    .id("members-sheet")
-                    .track_focus(&self.focus)
-                    .absolute()
-                    .top(u(BODY_TOP))
-                    .right(u(SHEET_INSET))
-                    .bottom(u(SHEET_INSET))
-                    .child(panel)
-                    .with_animation(
-                        "members-in",
-                        Animation::new(SHEET_IN).with_easing(ease_out_quint()),
-                        move |d, delta| d.mr(u(-(panel_w + SHEET_INSET) * (1. - delta))),
-                    ),
-            )
-            .children(card)
-            .into_any_element()
+        };
+        let sidebar = cx.weak_entity();
+        unfolded_sheet(reveal, panel, &self.focus, cx, move |window, cx| {
+            let _ = sidebar.update(cx, |this, cx| this.set_open(false, window, cx));
+        })
+        .children(card)
+        .into_any_element()
     }
+}
+
+/// The member sheet unfolded over the small window: `panel` at the right, below the title bar by
+/// the body's air and inset at the right and the bottom, over the dimmed window, which folds it on
+/// a press. It slides in from the edge and fades with `reveal`. Folding, the sheet takes no
+/// presses and the dimmed window lets them through.
+pub fn unfolded_sheet(
+    reveal: Reveal,
+    panel: AnyElement,
+    focus: &FocusHandle,
+    cx: &App,
+    on_fold: impl Fn(&mut Window, &mut App) + 'static,
+) -> Div {
+    let open = !reveal.is_closing();
+    let shown = reveal.opacity();
+    div()
+        .relative()
+        .size_full()
+        .child(
+            div()
+                .id("members-backdrop")
+                .test_support()
+                .absolute()
+                .inset_0()
+                .bg(cx.theme().overlay)
+                .when(shown < 1., |d| d.opacity(shown))
+                .when(open, |d| {
+                    d.on_click(move |_, window, cx| on_fold(window, cx))
+                }),
+        )
+        .child(
+            div()
+                .id("members-sheet")
+                .when(open, |d| d.track_focus(focus))
+                .absolute()
+                .top(u(BODY_TOP))
+                .right(u(SHEET_INSET))
+                .bottom(u(SHEET_INSET))
+                .child(reveal.apply(div().h_full().child(panel), Side::Right)),
+        )
 }
 
 #[cfg(test)]

@@ -19,7 +19,7 @@ use crate::components::{
     PICKER_W, PickerModel, PickerView, Place, Pointer, ShareToolbar, ShareView, Sharer, ToolbarAt,
     Whose, esc_hint, fullscreen_frame, panel_fit, panel_frame,
 };
-use crate::kit::WindowExt as _;
+use crate::kit::{WindowExt as _, dialog};
 use crate::scale::device;
 
 /// How long the Esc hint stays up. A second Esc inside it leaves fullscreen.
@@ -144,7 +144,7 @@ impl LobbyView {
         });
         let body = view.clone();
         let lobby = cx.weak_entity();
-        window.open_dialog(cx, move |dialog, window, _| {
+        dialog::open(window, cx, move |dialog, window, _| {
             let lobby = lobby.clone();
             dialog
                 .close_button(false)

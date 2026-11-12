@@ -65,8 +65,8 @@ pub use connection_notice::{
 pub use controls::{confirm_alert, page_select, step_input};
 pub use draft_strip::{DRAFT_STRIP_H, draft_strip};
 pub use feed::{
-    ChangeMessage, Feed, FeedAction, FeedRow, MessageChange, MessageRow, Pending, card_max_w,
-    feed_row, feed_rows, typing_indicator,
+    ChangeMessage, Feed, FeedAction, FeedRow, MessageChange, MessageRow, Pending, TypingLine,
+    card_max_w, feed_row, feed_rows,
 };
 pub use floating_sheet::floating_sheet;
 pub use icon_disc::IconDisc;

@@ -14,7 +14,7 @@ use crate::components::{
     TilePress, VoiceFace, VoiceStatsDialog, VoiceStrip, Waits, card_surface, pictures,
     stats_dialog_width, voice_bar_model,
 };
-use crate::kit::WindowExt as _;
+use crate::kit::{WindowExt as _, dialog};
 use crate::scale::{design_viewport, device, u};
 use crate::voice_shared::VoiceShared;
 
@@ -127,7 +127,7 @@ impl LobbyView {
         let lobby = cx.weak_entity();
         let body = cx.new(|cx| VoiceStatsDialog::new(self.session.clone(), cx));
         let view = body.clone();
-        window.open_dialog(cx, move |dialog, window, _| {
+        dialog::open(window, cx, move |dialog, window, _| {
             let lobby = lobby.clone();
             dialog
                 .title("Voice stats")

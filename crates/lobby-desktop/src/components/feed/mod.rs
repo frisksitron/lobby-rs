@@ -16,17 +16,17 @@ use std::{
     collections::{HashMap, HashSet},
     rc::Rc,
     sync::{Arc, Weak},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use chrono::NaiveDate;
 use gpui_kit::{
     Animation, AnimationExt as _, AnyElement, App, AppContext as _, Context, Entity, FontWeight,
     HighlightStyle, Hsla, ImageSource, InteractiveElement as _, IntoElement, ParentElement as _,
-    Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled as _,
+    RenderOnce, Role, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled as _,
     Subscription, TestSupportExt as _, Window,
     assets::IconName,
-    base::{SelectionFormat, TextSelection, TextView, TextViewStyle, v_flex},
+    base::{SelectionFormat, TextSelection, TextView, TextViewStyle, spring, v_flex},
     div, linear_color_stop, linear_gradient,
     prelude::FluentBuilder as _,
     pulsating_between, px, relative, rems,
@@ -51,7 +51,7 @@ use crate::{
         message_scroller::{MessageScroller, MessageScrollerState},
     },
     scale::{device_in, u},
-    ui::{self, Icon, Separator, Spinner},
+    ui::{self, Icon, Separator, Spinner, motion},
 };
 
 /// The avatar beside a Message.
@@ -117,6 +117,9 @@ pub struct Feed {
     /// has been laid out and the New divider placed after it.
     seen_before: Option<MessageId>,
     spacer: Rc<Cell<f32>>,
+    /// When each Message that came in while the feed followed its end arrived, by row key, until
+    /// its row has risen into place.
+    arrivals: HashMap<SharedString, Instant>,
     /// The rows or the window changed: the blank row grows back while the feed follows the tail,
     /// then is trimmed to what the rows leave free.
     refill: bool,
@@ -153,6 +156,7 @@ impl Feed {
             new_divider: None,
             seen_before,
             spacer: Rc::new(Cell::new(0.)),
+            arrivals: HashMap::new(),
             refill: true,
             window_h: 0.,
             rem: 0.,
@@ -264,17 +268,26 @@ impl Feed {
         let removed = prefix + 1..old.len() - suffix + 1;
         let added = new.len() - prefix - suffix;
         self.changes.push(Change::Splice(removed.clone(), added));
+        let (gone, came) = (
+            &old[prefix..old.len() - suffix],
+            &new[prefix..new.len() - suffix],
+        );
+        let before: HashSet<&SharedString> = gone
+            .iter()
+            .filter_map(|r| r.as_message().map(|m| &m.key))
+            .collect();
+        let fresh: Vec<&MessageRow> = came
+            .iter()
+            .filter_map(FeedRow::as_message)
+            .filter(|m| !before.contains(&m.key))
+            .collect();
+        let sent = fresh.iter().any(|m| m.mine && m.pending.is_some());
+        // Below a Message already in the feed they came in; a page of older ones lands above.
+        let below = old[..prefix].iter().any(|r| r.as_message().is_some());
+        if (near || sent) && below && !cx.reduce_motion() {
+            self.arrived(gone, came, &fresh, cx.background_executor().now());
+        }
         if suffix == 0 {
-            let before: HashSet<&SharedString> = old[prefix..]
-                .iter()
-                .filter_map(|r| r.as_message().map(|m| &m.key))
-                .collect();
-            let fresh: Vec<&MessageRow> = new[prefix..]
-                .iter()
-                .filter_map(FeedRow::as_message)
-                .filter(|m| !before.contains(&m.key))
-                .collect();
-            let sent = fresh.iter().any(|m| m.mine && m.pending.is_some());
             let mut others = fresh.iter().filter(|m| !m.mine);
             if near || sent {
                 self.changes.push(Change::ToEnd);
@@ -300,6 +313,33 @@ impl Feed {
                 None => new.len() - suffix,
             };
             self.changes.push(Change::ToItem(at + 1));
+        }
+    }
+
+    /// Notes `now` for the `fresh` rows of a change that replaced `gone` with `came`. A sent
+    /// Message's row takes a new key once the Lobby has it: that row goes on from its pending
+    /// row's instant, so it rises once. Your own Message sent from elsewhere has none and stays.
+    fn arrived(&mut self, gone: &[FeedRow], came: &[FeedRow], fresh: &[&MessageRow], now: Instant) {
+        let kept: HashSet<&SharedString> = came
+            .iter()
+            .filter_map(|r| r.as_message().map(|m| &m.key))
+            .collect();
+        let mut sending = gone
+            .iter()
+            .filter_map(FeedRow::as_message)
+            .filter(|m| m.pending.is_some() && !kept.contains(&m.key))
+            .filter_map(|m| self.arrivals.remove(&m.key))
+            .collect::<Vec<Instant>>()
+            .into_iter();
+        for m in fresh {
+            let at = if m.mine && m.pending.is_none() {
+                sending.next()
+            } else {
+                Some(now)
+            };
+            if let Some(at) = at {
+                self.arrivals.insert(m.key.clone(), at);
+            }
         }
     }
 
@@ -380,15 +420,34 @@ impl Feed {
         let load = on_load_older;
         let unseen = self.unseen.get();
         let scrolled_up = !self.at_bottom(cx);
+        let now = cx.background_executor().now();
+        let rising: HashMap<SharedString, f32> = self
+            .arrivals
+            .iter()
+            .filter_map(|(key, at)| {
+                motion::arrived(now.saturating_duration_since(*at)).map(|came| (key.clone(), came))
+            })
+            .collect();
+        self.arrivals.retain(|key, _| rising.contains_key(key));
+        if !rising.is_empty() {
+            window.request_animation_frame();
+        }
         // The room above and below is in the first and last rows, not the list's padding: the
         // wheel stops where the rows end, so it never reached the list's bottom padding.
         let scroller = MessageScroller::new("feed-scroller", self.scroller.clone(), {
             move |ix, _window, cx| match ix.checked_sub(1) {
-                Some(ix) if ix + 1 == rows.len() => div()
-                    .pb(u(FOOT_ROOM))
-                    .child(feed_row(&rows, ix, older, &load, on_link, &cards, cx))
-                    .into_any_element(),
-                Some(ix) => feed_row(&rows, ix, older, &load, on_link, &cards, cx),
+                Some(ix) => {
+                    let row = feed_row(&rows, ix, older, &load, on_link, &cards, cx);
+                    let row = match rows[ix].as_message().and_then(|m| rising.get(&m.key)) {
+                        Some(&came) => motion::arriving(div().child(row), came).into_any_element(),
+                        None => row,
+                    };
+                    if ix + 1 == rows.len() {
+                        div().pb(u(FOOT_ROOM)).child(row).into_any_element()
+                    } else {
+                        row
+                    }
+                }
                 None => div()
                     .pt(u(6.))
                     .child(div().h(px(spacer.get()))) // px: window pixels
@@ -931,44 +990,69 @@ fn pending_mark(key: &SharedString, p: Pending, muted: Hsla) -> AnyElement {
     }
 }
 
-pub fn typing_indicator(line: SharedString, cx: &App) -> AnyElement {
-    let muted = cx.theme().muted_foreground;
-    let dot = |i: usize| {
-        div().size(u(4.)).rounded_full().bg(muted).with_animation(
-            ("typing-dot", i),
-            Animation::new(Duration::from_millis(1200))
-                .repeat()
-                .with_max_fps(PULSE_FPS)
-                .with_easing(pulsating_between(0.25, 1.)),
-            move |d, delta| {
-                let phase = (delta + (2 - i) as f32 / 3.) % 1.;
-                d.opacity(0.25 + 0.75 * phase)
-            },
-        )
-    };
-    div()
-        .id("typing-line")
-        .absolute()
-        .bottom_0()
-        .left_0()
-        .right_0()
-        .h(u(FOOT_ROOM))
-        .px(u(GUTTER_X))
-        .flex()
-        .items_center()
-        .text_xs()
-        .text_color(muted)
-        .child(
-            div()
-                .flex_shrink_0()
-                .w(u(AVATAR_COLUMN))
-                .flex()
-                .items_center()
-                .justify_center()
-                .gap(u(3.))
-                .children((0..3).map(dot)),
-        )
-        .child(div().ml(u(AVATAR_GAP)).min_w_0().truncate().child(line))
-        .test_support()
-        .into_any_element()
+/// Who is typing, floating over the feed's foot. It fades in and out on [`motion::QUICK`] and keeps
+/// its words while it fades out. Draw it on every frame of its view, typing or not.
+#[derive(IntoElement)]
+pub struct TypingLine {
+    line: Option<SharedString>,
+}
+
+impl TypingLine {
+    pub fn new(line: Option<SharedString>) -> Self {
+        Self { line }
+    }
+}
+
+impl RenderOnce for TypingLine {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let last = window.use_keyed_state("typing-line-last", cx, |_, _| None::<SharedString>);
+        if self.line.is_some() && *last.read(cx) != self.line {
+            last.update(cx, |last, _| last.clone_from(&self.line));
+        }
+        let target = if self.line.is_some() { 1. } else { 0. };
+        let shown = spring(("typing-line", "shown"), target, motion::QUICK, window, cx);
+        let Some(line) = last.read(cx).clone().filter(|_| shown > 0.) else {
+            return gpui_kit::Empty.into_any_element();
+        };
+        let muted = cx.theme().muted_foreground;
+        let dot = |i: usize| {
+            let pulse = pulsating_between(0.25, 1.);
+            // The offset goes on the time, before the pulse: added after, it wrapped from full to
+            // dim in one frame.
+            let offset = (2 - i) as f32 / 3.;
+            div().size(u(4.)).rounded_full().bg(muted).with_animation(
+                ("typing-dot", i),
+                Animation::new(Duration::from_millis(1200))
+                    .repeat()
+                    .with_max_fps(PULSE_FPS),
+                move |d, t| d.opacity(pulse((t + offset) % 1.)),
+            )
+        };
+        div()
+            .id("typing-line")
+            .absolute()
+            .bottom_0()
+            .left_0()
+            .right_0()
+            .h(u(FOOT_ROOM))
+            .px(u(GUTTER_X))
+            .flex()
+            .items_center()
+            .text_xs()
+            .text_color(muted)
+            .when(shown < 1., |d| d.opacity(shown))
+            .child(
+                div()
+                    .flex_shrink_0()
+                    .w(u(AVATAR_COLUMN))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .gap(u(3.))
+                    .children((0..3).map(dot)),
+            )
+            .child(div().ml(u(AVATAR_GAP)).min_w_0().truncate().child(line))
+            .test_support()
+            .into_any_element()
+    }
 }

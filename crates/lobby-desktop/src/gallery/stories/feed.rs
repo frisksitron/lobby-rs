@@ -11,7 +11,7 @@ use lobby_client::{
 use lobby_protocol::Username;
 
 use crate::components::{
-    Cards, FeedRow, FormatBar, MessageRow, Pending, Slot, feed_row, mark_color, typing_indicator,
+    Cards, FeedRow, FormatBar, MessageRow, Pending, Slot, TypingLine, feed_row, mark_color,
 };
 use crate::gallery::{
     Gallery, Section,
@@ -148,7 +148,7 @@ pub(super) fn feed(g: &mut Gallery, _: &mut Window, cx: &mut Context<Gallery>) -
         .rounded_md()
         .border_1()
         .border_color(cx.theme().border)
-        .child(typing_indicator("bob is typing…".into(), cx));
+        .child(TypingLine::new(Some("bob is typing…".into())));
     vec![
         Section::new(
             "rows",

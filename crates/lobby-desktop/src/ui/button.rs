@@ -14,19 +14,23 @@
 use std::rc::Rc;
 
 use gpui_kit::{
-    AnyElement, App, Background, ClickEvent, ElementId, Hsla, InteractiveElement, Interactivity,
-    IntoElement, KeyBinding, MouseButton, NoAction, ParentElement, Refineable as _, RenderOnce,
-    SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Toggled, Window,
+    AnyElement, App, Background, ClickEvent, ElementId, Entity, Hsla, InteractiveElement,
+    Interactivity, IntoElement, KeyBinding, MouseButton, NoAction, ParentElement, Refineable as _,
+    RenderOnce, SharedString, StatefulInteractiveElement as _, StyleRefinement, Styled, Toggled,
+    Window,
     base::{self, GlobalState, Selectable, StyledExt as _, h_flex},
     div,
     prelude::FluentBuilder as _,
     relative,
 };
 
-use super::{Icon, Size, Spinner, focus, tooltip::with_tooltip};
+use super::{Icon, Size, Spinner, focus, motion, tooltip::with_tooltip};
 use crate::kit::{ActiveTheme as _, Colorize as _, menu::DropdownMenu};
+use crate::scale::u;
 
 const LOADING_OPACITY: f32 = 0.8;
+/// How far a button's content gives way under a press.
+const PRESS_GIVE: f32 = 1.5;
 
 /// The key context of a control that Enter and Space press while it has the focus. GPUI runs a
 /// key binding before the focused element sees the key, so without this a dialog's Enter =
@@ -264,6 +268,31 @@ impl Paint {
             None => style,
         }
     }
+
+    /// This paint with what `style` sets laid over it.
+    fn under(self, style: &StyleRefinement) -> Self {
+        Self {
+            bg: style
+                .background
+                .as_ref()
+                .and_then(|fill| fill.color())
+                .unwrap_or(self.bg),
+            fg: style.text.color.unwrap_or(self.fg),
+            edge: style.border_color.or(self.edge),
+        }
+    }
+
+    /// `t` of the way to `to`.
+    fn toward(self, to: Self, t: f32) -> Self {
+        Self {
+            bg: motion::mix_fill(self.bg, to.bg, t),
+            fg: motion::mix(self.fg, to.fg, t),
+            edge: match (self.edge, to.edge) {
+                (Some(from), Some(to)) => Some(motion::mix(from, to, t)),
+                (from, to) => to.or(from),
+            },
+        }
+    }
 }
 
 type States = (Paint, Paint, Paint, Paint, Paint);
@@ -281,8 +310,9 @@ fn edged(states: States, edge: Hsla, faded: Hsla) -> States {
 
 struct Look {
     rest: StyleRefinement,
-    hover: StyleRefinement,
-    active: StyleRefinement,
+    paint: Paint,
+    hover: Paint,
+    active: Paint,
     selected: StyleRefinement,
     disabled: StyleRefinement,
 }
@@ -397,17 +427,36 @@ fn look(variant: Variant, size: Size, cx: &App) -> Look {
     geometry.refine(&rest.refinement());
     Look {
         rest: geometry,
-        hover: hover.refinement(),
-        active: active.refinement(),
+        paint: rest,
+        hover,
+        active,
         selected: selected.refinement(),
         disabled: disabled.refinement(),
     }
+}
+
+/// Where the pointer is, as the button's own listeners report it.
+#[derive(Default)]
+struct Touch {
+    hovered: bool,
+    pressed: bool,
+}
+
+fn touch(state: &Entity<Touch>, cx: &mut App, change: impl FnOnce(&mut Touch)) {
+    state.update(cx, |touch, cx| {
+        let was = (touch.hovered, touch.pressed);
+        change(touch);
+        if was != (touch.hovered, touch.pressed) {
+            cx.notify();
+        }
+    });
 }
 
 impl RenderOnce for Button {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let Look {
             rest,
+            paint,
             hover,
             active,
             selected,
@@ -426,12 +475,30 @@ impl RenderOnce for Button {
         // A menu's trigger has no command of its own: its popover opens on Enter and Space.
         let pressable = on_click.is_some();
 
+        // Hover and press show at once and blend back on Quick. A selected or inert button
+        // shows neither.
+        let state = window.use_keyed_state((self.id.clone(), "touch"), cx, |_, _| Touch::default());
+        let live = interactive && !self.selected;
+        let (hovered, pressed) = {
+            let touch = state.read(cx);
+            (live && touch.hovered, live && touch.pressed)
+        };
+        let hovered = motion::snap_in((self.id.clone(), "hover"), hovered, window, cx);
+        let pressed = motion::snap_in((self.id.clone(), "press"), pressed, window, cx);
+
         base.style().refine(&rest);
         if square {
             base.style()
                 .refine(&StyleRefinement::default().w(self.size.height()).px_0());
         }
         base.style().refine(&instance);
+        if hovered > 0. || pressed > 0. {
+            let shown = paint
+                .under(&instance)
+                .toward(hover, hovered)
+                .toward(active, pressed);
+            base.style().refine(&shown.refinement());
+        }
         let icon_size = self.size.icon();
         let icon = self.icon.map(|icon| {
             if loading {
@@ -459,27 +526,18 @@ impl RenderOnce for Button {
                         .child(label),
                 )
             })
-            .children(self.children);
+            .children(self.children)
+            // The press gives way inside the button: its box, and so the layout and the place a
+            // click lands, stay where they are.
+            .when(pressed > 0., |content| {
+                content.relative().top(u(PRESS_GIVE * pressed))
+            });
         let ring = focused.then(|| focus::ring(base.style(), window, cx));
         let ring_color = cx.theme().ring;
         let name = self.accessibility_label.or(self.label);
         let tooltip = self.tooltip;
 
         let button = base
-            .when(!self.selected && interactive, |this| {
-                this.active(move |mut style| {
-                    style.refine(&active);
-                    style
-                })
-            })
-            // GPUI refreshes the hover state only while a hover style is registered, so a selected
-            // or inert button keeps an empty one rather than none.
-            .hover(move |mut style| {
-                if interactive && !self.selected {
-                    style.refine(&hover);
-                }
-                style
-            })
             // Base puts the selected and disabled styles over the caller's, so the caller's are
             // laid on again inside each.
             .styles(|styles| {
@@ -502,6 +560,7 @@ impl RenderOnce for Button {
                 this.opacity(LOADING_OPACITY)
             })
             .when(!self.disabled, |this| {
+                let state = state.clone();
                 this.on_mouse_down(MouseButton::Left, move |_, window, cx| {
                     if loading {
                         cx.stop_propagation();
@@ -511,7 +570,28 @@ impl RenderOnce for Button {
                     // the composer's caret and selection.
                     window.prevent_default();
                     GlobalState::suppress_text_selection(cx);
+                    touch(&state, cx, |t| t.pressed = true);
                 })
+            })
+            // GPUI stops reporting the hover while a press is held, so a release inside says the
+            // pointer is over the button again.
+            .capture_any_mouse_up({
+                let state = state.clone();
+                move |_, _, cx| {
+                    touch(&state, cx, |t| {
+                        t.hovered |= t.pressed;
+                        t.pressed = false;
+                    })
+                }
+            })
+            // Every button hears every release outside it: only a pressed one has work to do.
+            .on_mouse_up_out(MouseButton::Left, {
+                let state = state.clone();
+                move |_, _, cx| {
+                    if state.read(cx).pressed {
+                        touch(&state, cx, |t| t.pressed = false);
+                    }
+                }
             })
             .map(|this| match (loading, on_click) {
                 (true, _) => this.on_click(|_, _, cx| cx.stop_propagation()),
@@ -520,10 +600,20 @@ impl RenderOnce for Button {
                 }
                 (false, None) => this,
             });
-        let button = match tooltip {
-            Some(text) => with_tooltip(button, text),
-            None => button,
+        let (button, tip) = match tooltip {
+            Some(text) => {
+                let (button, tip) = with_tooltip(button, text);
+                (button, Some(tip))
+            }
+            None => (button, None),
         };
-        button.children(ring)
+        button
+            .on_hover(move |entered, window, cx| {
+                touch(&state, cx, |t| t.hovered = *entered);
+                if let Some(tip) = &tip {
+                    tip(*entered, window, cx);
+                }
+            })
+            .children(ring)
     }
 }

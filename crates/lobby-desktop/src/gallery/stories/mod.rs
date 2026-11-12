@@ -3,6 +3,7 @@ mod feed;
 mod floating_sheet;
 mod member_list;
 mod members;
+pub(super) mod motion;
 mod notifications;
 mod title_bar;
 mod viewer;
@@ -111,7 +112,7 @@ device_select(&endpoints, &chosen, window, cx)",
     Story {
         name: "Voice stats",
         description: "How your media reaches the SFU, refreshed each second: the path, round trip, loss, jitter and what is sent and received. Opened from your own Member panel while In Voice.",
-        usage: "window.open_dialog(cx, |d, _, _| d.title(\"Voice stats\").child(body.clone()))
+        usage: "dialog::open(window, cx, |d, _, _| d.title(\"Voice stats\").child(body.clone()))
 VoiceStatsList::new(session.state().and_then(|s| s.voice.stats.clone()))",
         render: voice::voice_stats,
     },
@@ -136,7 +137,7 @@ VoiceStatsList::new(session.state().and_then(|s| s.voice.stats.clone()))",
     Story {
         name: "Feed rows",
         description: "The chat feed's rows: history, day and New dividers, a group's first and later Messages, one's own on its way, files, and the typing line.",
-        usage: "feed_row(&rows, ix, older, &load, on_link, &cards, cx)\ntyping_indicator(line, cx)",
+        usage: "feed_row(&rows, ix, older, &load, on_link, &cards, cx)\nTypingLine::new(line)",
         render: feed::feed,
     },
     Story {
@@ -186,6 +187,12 @@ VoiceStatsList::new(session.state().and_then(|s| s.voice.stats.clone()))",
         description: "Lobby's controls over gpui-kit's base layer, in the app's theme: its buttons in each variant and state, and the small ones the components share.",
         usage: "ui::Button::new(\"voice-join\").variant(ui::Variant::Primary).size(ui::Size::Page).icon(IconName::Phone).label(\"Join Voice\")\nui::Switch::new(\"do-not-disturb\").checked(on).accessibility_label(\"Do Not Disturb\").on_change(on_change)\nui::Slider::new(&volume).accessibility_label(\"Volume\")",
         render: controls::controls,
+    },
+    Story {
+        name: "Motion",
+        description: "Each moment that moves, drawn by the app's own code, with a button that sets it off: a press, a popup, a dialog, a switch, a Message coming in, typing, speaking, the members sheet and a wrong Magic Code. Near-critical springs: Quick (~130 ms), Move (~200 ms) and Open (~235 ms), nothing past its mark.",
+        usage: "ui::motion::{QUICK, MOVE, OPEN}\nReveal::new(id, open, window, cx).apply(surface, Side::Top)\nReveal::sheet(id, open, window, cx)\nmotion::arriving(row, motion::arrived(since)?)\nspring(id, target, motion::QUICK, window, cx)",
+        render: motion::motion,
     },
 ];
 

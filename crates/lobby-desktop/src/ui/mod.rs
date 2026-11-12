@@ -8,6 +8,7 @@ mod empty;
 mod field;
 mod focus;
 mod icon;
+pub mod motion;
 mod separator;
 mod size;
 mod skeleton;

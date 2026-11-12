@@ -31,8 +31,8 @@ use super::{
 /// and below the sheet.
 const DOCKED_H: f32 = 480. - TITLE_BAR_HEIGHT - BODY_TOP - SHEET_INSET;
 /// The small window's view under its title bar, and the sheet's height in it.
-const VIEW: (f32, f32) = (480., 360.);
-const FOLDED_H: f32 = VIEW.1 - BODY_TOP - SHEET_INSET;
+pub(super) const VIEW: (f32, f32) = (480., 360.);
+pub(super) const FOLDED_H: f32 = VIEW.1 - BODY_TOP - SHEET_INSET;
 /// How tall the list's fade is where it meets the foot or the sheet's end.
 const FADE_H: f32 = 16.;
 
@@ -129,7 +129,13 @@ fn list(me: bool, cx: &App) -> Div {
 
 /// A sheet `width` wide and `height` tall with `foot` at its foot; without a foot its list ends
 /// at the sheet's rounded end.
-fn sheet(width: f32, height: f32, me: bool, foot: Option<VoiceBarModel>, cx: &App) -> Div {
+pub(super) fn sheet(
+    width: f32,
+    height: f32,
+    me: bool,
+    foot: Option<VoiceBarModel>,
+    cx: &App,
+) -> Div {
     let sidebar = cx.theme().sidebar;
     floating_sheet(cx)
         .w(u(width))
@@ -170,8 +176,8 @@ fn sheet(width: f32, height: f32, me: bool, foot: Option<VoiceBarModel>, cx: &Ap
         }))
 }
 
-/// The small window's view, dimmed, with the sheet unfolded at the right.
-fn folded(cx: &App) -> AnyElement {
+/// The small window's view under its title bar, a few lines standing for the feed.
+pub(super) fn small_view(cx: &App) -> Div {
     let theme = cx.theme();
     let line = |w: f32| div().h(u(8.)).w(u(w)).rounded_full().bg(theme.muted);
     div()
@@ -195,6 +201,12 @@ fn folded(cx: &App) -> AnyElement {
                 .child(line(120.))
                 .child(line(220.)),
         )
+}
+
+/// The small window's view, dimmed, with the sheet unfolded at the right.
+fn folded(cx: &App) -> AnyElement {
+    let theme = cx.theme();
+    small_view(cx)
         .child(div().absolute().inset_0().bg(theme.overlay))
         .child(
             div()

@@ -10,7 +10,38 @@ pub use gpui_kit::component::{
 };
 
 pub mod dialog {
+    use gpui_kit::{
+        App, Window,
+        component::{
+            WindowExt as _,
+            dialog::{Dialog, DialogEntrance},
+        },
+    };
+
     pub use gpui_kit::component::dialog::{AlertDialog, DialogFooter};
+
+    /// Opens a dialog that fades in as it settles a short way into place, on the theme's motion
+    /// (`appearance::apply`), and leaves the same way.
+    pub fn open(
+        window: &mut Window,
+        cx: &mut App,
+        build: impl Fn(Dialog, &mut Window, &mut App) -> Dialog + 'static,
+    ) {
+        window.open_dialog(cx, move |dialog, window, cx| {
+            build(dialog.entrance(DialogEntrance::FadeSlide), window, cx)
+        });
+    }
+
+    /// [`open`] for an alert.
+    pub fn open_alert(
+        window: &mut Window,
+        cx: &mut App,
+        build: impl Fn(AlertDialog, &mut Window, &mut App) -> AlertDialog + 'static,
+    ) {
+        window.open_alert_dialog(cx, move |alert, window, cx| {
+            build(alert.entrance(DialogEntrance::FadeSlide), window, cx)
+        });
+    }
 }
 
 pub mod menu {

@@ -16,7 +16,9 @@ use gpui_kit::{
     InteractiveElement as _, IntoElement, ParentElement as _, Pixels, Point, SharedString,
     Styled as _, TestSupportExt as _, Window,
     base::{POPUP_PRIORITY, Positioner},
-    deferred, div, ease_out_quint, relative,
+    deferred, div, ease_out_quint,
+    prelude::FluentBuilder as _,
+    relative,
 };
 use lobby_client::{Intent, LobbyState, Phase, Volume, local_date};
 use lobby_protocol::{Presence, UserId, VoiceState};
@@ -34,7 +36,10 @@ use crate::components::{
 };
 use crate::kit::ActiveTheme as _;
 use crate::scale::{device, u};
-use crate::ui::{self, Skeleton};
+use crate::ui::{
+    self, Skeleton,
+    motion::{Reveal, Side},
+};
 
 /// The sidebar's groups. The signed-in Member is first in whichever group they are in. While
 /// not connected the last known groups stay (`known` is false and the sidebar dims them), so
@@ -286,9 +291,16 @@ impl MemberSidebar {
             .into_any_element()
     }
 
-    /// What the open panel shows for `row`, if it is the row it opened from.
-    fn panel_model(&self, row: &MemberRowModel, cx: &App) -> Option<MemberPanelModel> {
-        let open = self.member_panel.as_ref().filter(|p| p.user == row.id)?;
+    /// What the panel `open` shows for `row`, if it is the row it opened from.
+    fn panel_model(
+        &self,
+        row: &MemberRowModel,
+        open: &OpenPanel,
+        cx: &App,
+    ) -> Option<MemberPanelModel> {
+        if open.user != row.id {
+            return None;
+        }
         let session = self.session.read(cx);
         let state = session.state()?;
         let own = self
@@ -323,6 +335,7 @@ impl MemberSidebar {
 
     /// The open panel, for the automation model.
     pub fn open_panel_model(&self, cx: &App) -> Option<MemberPanelModel> {
+        let open = self.member_panel.as_ref()?;
         let state = self.session.read(cx).state()?;
         let groups = self.groups(state);
         let row = groups
@@ -330,8 +343,8 @@ impl MemberSidebar {
             .iter()
             .chain(&groups.online)
             .chain(&groups.offline)
-            .find(|r| self.member_panel.as_ref().is_some_and(|p| p.user == r.id))?;
-        self.panel_model(row, cx)
+            .find(|r| r.id == open.user)?;
+        self.panel_model(row, open, cx)
     }
 
     /// Where the card's slider stands, in percent, for the automation model.
@@ -346,16 +359,23 @@ impl MemberSidebar {
 
     /// The open Member Card, drawn at the pointer and above everything, whether the list is on
     /// screen or not. Escape closes it (the Lobby view catches the key wherever the focus is), and
-    /// so does a press outside.
+    /// so does a press outside. Called on every frame, open or not: it fades out after it closes.
     pub(super) fn card_layer(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         let refocus = std::mem::take(&mut self.refocus_card);
-        let open = self.member_panel.as_ref()?;
+        let reveal = Reveal::new("member-card", self.member_panel.is_some(), window, cx);
+        if let Some(open) = &self.member_panel {
+            self.card_drawn = Some(open.clone());
+        } else if !reveal.is_drawn() {
+            self.card_drawn = None;
+        }
+        let open = self.card_drawn.clone()?;
         let (user, at) = (open.user.clone(), open.at);
-        if refocus {
+        let closing = reveal.is_closing();
+        if refocus && !closing {
             window.focus(&self.card_focus, cx);
         }
         let state = self.session.read(cx).state()?;
@@ -366,7 +386,7 @@ impl MemberSidebar {
             .chain(&groups.online)
             .chain(&groups.offline)
             .find(|r| r.id == user)?;
-        let model = self.panel_model(row, cx)?;
+        let model = self.panel_model(row, &open, cx)?;
         let panel = MemberPanel::new(model);
         let panel = match &self.own_card {
             Some(own) if row.is_me => panel.name_field(own.read(cx).field().clone()),
@@ -374,16 +394,17 @@ impl MemberSidebar {
             _ => panel,
         };
         let panel = panel.actions(self.card_actions(row, cx));
-        let card = div()
-            .id("member-card")
-            .track_focus(&self.card_focus)
-            .on_mouse_down_out(cx.listener(move |this, _, _, cx| {
-                this.close_member_panel(&user, cx);
-            }));
+        let card = div().id("member-card").when(!closing, |card| {
+            card.track_focus(&self.card_focus)
+                .on_mouse_down_out(cx.listener(move |this, _, _, cx| {
+                    this.close_member_panel(&user, cx);
+                }))
+        });
         let card = ui::popover_surface(card, cx)
             .p(u(MEMBER_CARD_PAD))
             .child(panel)
             .test_support();
+        let card = reveal.apply(card, Side::Top);
         Some(
             deferred(
                 Positioner::corner(Anchor::TopLeft, at)

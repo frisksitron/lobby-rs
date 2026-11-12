@@ -3,12 +3,14 @@
 //! it is called with the same settings, so the Shell calls it at startup and on every change.
 
 use crate::kit::{Theme, ThemeConfig, ThemeMode, ThemeRegistry};
-use crate::scale::{BASE_MONO, BASE_RADIUS, BASE_RADIUS_LG, BASE_REM};
-use gpui_kit::{App, px};
+use crate::scale::{BASE_MONO, BASE_RADIUS, BASE_RADIUS_LG, BASE_REM, u};
+use crate::ui;
+use gpui_kit::{App, base::Easing, px};
 use lobby_client::Settings;
-use std::rc::Rc;
+use std::{rc::Rc, time::Duration};
 
 const NAME: &str = "Living Room";
+const DIALOG_FOR: Duration = Duration::from_millis(180);
 const FILE: &str = include_str!("../themes/living-room.json");
 
 fn living_room(cx: &mut App) -> Rc<ThemeConfig> {
@@ -47,6 +49,12 @@ pub fn apply(settings: &Settings, cx: &mut App) {
         toasts.margins.top = px(top); // px: theme unit
         let docked = crate::lobby_view::SidebarLayout::Docked(crate::lobby_view::SIDEBAR_SLIM_W);
         toasts.margins.right = crate::lobby_view::toast_right_margin(docked, scale);
+        // The kit's dialogs fade in and settle 4 px on the Open spring's curve. The attachment
+        // progress ring reads the duration too, so it stays at the kit's 180 ms.
+        let motion = &mut theme.motion;
+        motion.duration_normal = DIALOG_FOR;
+        motion.easing_enter = Easing::Custom(Rc::new(ui::motion::open_curve));
+        motion.distance_short = u(4.);
     });
 }
 

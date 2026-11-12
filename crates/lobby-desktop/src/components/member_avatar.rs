@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use gpui_kit::{
     Animation, AnimationExt as _, AnyElement, App, ElementId, Hsla, ImageSource, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div,
+    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, base::spring, div,
     prelude::FluentBuilder as _, pulsating_between,
 };
 use lobby_protocol::{Presence, VoiceState};
@@ -17,6 +17,7 @@ use super::{
 };
 use crate::kit::ActiveTheme as _;
 use crate::scale::u;
+use crate::ui::motion;
 
 /// The speaking ring sits one pixel outside the avatar.
 const RING: f32 = 2.;
@@ -127,12 +128,19 @@ impl MemberAvatar {
 }
 
 impl RenderOnce for MemberAvatar {
-    fn render(self, _window: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let surface = self.surface.unwrap_or(cx.theme().background);
         let voice = self.state.voice;
         // Speaking is live; the last known one would ring for nobody.
         let speaking =
             self.state.known && voice.is_some_and(|v| v.speaking && !v.muted && !v.joining);
+        let ring = spring(
+            (self.id.clone(), "ring"),
+            if speaking { 1. } else { 0. },
+            motion::QUICK,
+            window,
+            cx,
+        );
         let joining = voice.is_some_and(|v| v.joining);
         let offline = self.state.known && self.state.presence == Some(Presence::Offline);
         let badge_size = (self.size.px() / 3.).round();
@@ -158,8 +166,8 @@ impl RenderOnce for MemberAvatar {
                             .image(self.image),
                     ),
             )
-            .when(speaking, |d| {
-                let ring = div()
+            .when(ring > 0., |d| {
+                let circle = div()
                     .absolute()
                     .top_0()
                     .left_0()
@@ -168,17 +176,18 @@ impl RenderOnce for MemberAvatar {
                     .border(u(RING))
                     .border_color(voice_accent(cx.theme()));
                 d.child(if self.still {
-                    ring.opacity(STILL_RING_OPACITY).into_any_element()
+                    circle.opacity(STILL_RING_OPACITY * ring).into_any_element()
                 } else {
-                    ring.with_animation(
-                        self.id.clone(),
-                        Animation::new(Duration::from_millis(1100))
-                            .repeat()
-                            .with_max_fps(PULSE_FPS)
-                            .with_easing(pulsating_between(RING_OPACITY.0, RING_OPACITY.1)),
-                        |ring, delta| ring.opacity(delta),
-                    )
-                    .into_any_element()
+                    circle
+                        .with_animation(
+                            self.id.clone(),
+                            Animation::new(Duration::from_millis(1100))
+                                .repeat()
+                                .with_max_fps(PULSE_FPS)
+                                .with_easing(pulsating_between(RING_OPACITY.0, RING_OPACITY.1)),
+                            move |circle, pulse| circle.opacity(pulse * ring),
+                        )
+                        .into_any_element()
                 })
             })
             .children(badge.map(|badge| {

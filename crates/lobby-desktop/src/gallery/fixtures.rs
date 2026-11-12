@@ -270,6 +270,7 @@ pub struct Held {
     /// Input level at 72 %, and the two Off, Gentle or Strong selects, for the Voice rows: one set
     /// for the steps on and one for the steps off, since a select shows one value at a time.
     pub voice_controls: [crate::voice_settings::VoiceControls; 2],
+    pub motion: super::stories::motion::MotionDemo,
 }
 
 impl Held {
@@ -405,6 +406,7 @@ impl Held {
             center_heights: Default::default(),
             picture: picture(160, 160),
             in_voice: [false; 4],
+            motion: super::stories::motion::MotionDemo::new(window, cx),
         }
     }
 

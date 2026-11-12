@@ -18,6 +18,8 @@ use crate::kit::{
     menu::{ContextMenuExt as _, PopupMenu},
 };
 use crate::scale::u;
+use std::{f32::consts::TAU, time::Duration};
+
 use gpui_kit::{
     Animation, AnimationExt as _, App, Bounds, Context, ElementInputHandler, Entity,
     EntityInputHandler, EventEmitter, Focusable as _, InteractiveElement as _, IntoElement,
@@ -211,6 +213,17 @@ const CELL: f32 = FIELD_H;
 const CELL_GAP: f32 = 4.;
 const GROUP_GAP: f32 = 20.;
 
+/// A wrong code's shake: out to one side, a small swing back, and still.
+const SHAKE: Duration = Duration::from_millis(250);
+const SHAKE_PEAK: f32 = 4.;
+/// Where [`shake`] is furthest out.
+const SHAKE_PEAK_AT: f32 = 0.19;
+
+/// One swing that dies out over the shake, `t` from 0 to 1: it swings back a sixth as far.
+fn shake(t: f32) -> f32 {
+    (t * TAU).sin() * (1. - t).powi(2)
+}
+
 #[derive(IntoElement)]
 pub struct CodeInput {
     state: Entity<OtpState>,
@@ -322,9 +335,9 @@ impl RenderOnce for CodeInput {
             Some(n) => row
                 .with_animation(
                     SharedString::from(format!("code-wrong-{n}")),
-                    Animation::new(std::time::Duration::from_millis(420)),
+                    Animation::new(SHAKE),
                     |row, t| {
-                        let sway = (t * std::f32::consts::PI * 6.).sin() * 7. * (1. - t);
+                        let sway = SHAKE_PEAK * shake(t) / shake(SHAKE_PEAK_AT);
                         row.ml(u(sway)).mr(u(-sway))
                     },
                 )

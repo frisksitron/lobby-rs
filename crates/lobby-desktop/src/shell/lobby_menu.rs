@@ -19,7 +19,7 @@ use tracing::info;
 use super::{LobbyRoute, QuitState, Route, Shell};
 use crate::components::{LobbyAction, confirm_alert};
 use crate::hand_over::HandOverView;
-use crate::kit::WindowExt as _;
+use crate::kit::{WindowExt as _, dialog};
 use crate::scale::device;
 use crate::session_entity::{SessionEntity, SessionUiEvent};
 
@@ -348,7 +348,7 @@ impl Shell {
             }
         };
         let Some(heirs) = heirs else {
-            window.open_alert_dialog(cx, move |alert, _, _| {
+            dialog::open_alert(window, cx, move |alert, _, _| {
                 let (ok, origin, closed) = (ok.clone(), origin.clone(), closed.clone());
                 let alert = alert
                     .title(title.clone())
@@ -367,7 +367,7 @@ impl Shell {
             });
             return;
         };
-        window.open_dialog(cx, move |dialog, window, cx| {
+        dialog::open(window, cx, move |dialog, window, cx| {
             let (ok, origin, closed) = (ok.clone(), origin.clone(), closed.clone());
             let hand_over = move |heir, cx: &mut gpui_kit::App| {
                 let intent = Intent::HandOverAndLeave(heir);

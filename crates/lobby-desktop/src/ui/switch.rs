@@ -17,7 +17,7 @@ use gpui_kit::{
     prelude::FluentBuilder as _,
 };
 
-use super::focus;
+use super::{focus, motion};
 use crate::{
     kit::ActiveTheme as _,
     scale::{device, u},
@@ -123,23 +123,23 @@ impl RenderOnce for Switch {
         } else {
             theme.radius
         };
-        let spring_move = theme.motion_tokens().spring_move;
         let handle = window
             .use_keyed_state(self.id.clone(), cx, |_, cx| cx.focus_handle())
             .read(cx)
             .clone();
         let focused = handle.is_focused(window) && !self.embedded && !disabled;
 
-        // The thumb's place is geometry, not a semantic state: a checked style that set `left`
-        // would outrank the instance style.
-        let travel: Pixels = device(track_w - thumb - INSET * 2., window);
-        let thumb_x = spring(
+        // The thumb's place and the track's colour are geometry and paint, not semantic states: a
+        // checked style would outrank the instance style, and would colour the track at once
+        // while the thumb still travels. Both follow one spring.
+        let on = spring(
             (self.id.clone(), "thumb"),
-            if checked { travel } else { Pixels::ZERO },
-            spring_move,
+            if checked { 1. } else { 0. },
+            motion::MOVE,
             window,
             cx,
         );
+        let thumb_x: Pixels = device(track_w - thumb - INSET * 2., window) * on;
 
         let mut track = SwitchTrack::new((self.id.clone(), "track"))
             .checked(checked)
@@ -153,12 +153,8 @@ impl RenderOnce for Switch {
             .border_1()
             .border_color(clear)
             .p_px()
-            .when(!checked, |track| track.bg(unchecked_bg))
-            .styles(|styles| {
-                styles
-                    .checked(|style| style.bg(checked_bg))
-                    .disabled(|style| style.bg(disabled_bg))
-            });
+            .bg(motion::mix_fill(unchecked_bg, checked_bg, on))
+            .styles(|styles| styles.disabled(|style| style.bg(disabled_bg)));
         let ring: Option<AnyElement> = focused.then(|| focus::ring(track.style(), window, cx));
         let track = track
             .when(focused, |track| track.border_color(ring_color))

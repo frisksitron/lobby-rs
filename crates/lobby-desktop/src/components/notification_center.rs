@@ -2,18 +2,20 @@
 //! below the bar, the header stays and the sections scroll. A handled request keeps its row for a
 //! few seconds with what happened, then folds away, so the list never jumps under the pointer.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::time::Duration;
 
 use gpui_kit::{
     Anchor, Animation, AnimationExt as _, AnyElement, App, Hsla, InteractiveElement as _,
-    IntoElement, ParentElement as _, Pixels, RenderOnce, SharedString,
+    IntoElement, ParentElement as _, Pixels, Point, RenderOnce, SharedString,
     StatefulInteractiveElement as _, Styled as _, TestSupportExt as _, Window,
     assets::IconName,
-    base::{Popover, Scrollbar, ScrollbarAxis, v_flex},
-    canvas, div,
+    base::{
+        ElementExt as _, POPUP_PRIORITY, Popover, Positioner, Scrollbar, ScrollbarAxis, v_flex,
+    },
+    canvas, deferred, div,
     prelude::FluentBuilder as _,
     relative,
 };
@@ -25,7 +27,10 @@ use lobby_protocol::{AccessRequestId, UnixMs};
 
 use crate::kit::ActiveTheme as _;
 use crate::scale::{design_viewport, u};
-use crate::ui::{self, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Icon};
+use crate::ui::{
+    self, Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle, Icon,
+    motion::{Reveal, Side},
+};
 use crate::{
     components::{
         BAR_CONTROL_H, BarButton, Callback, ConnectionAction, ConnectionNotice, ConnectionTone,
@@ -280,36 +285,40 @@ impl RenderOnce for NotificationBell {
             .icon(IconName::Bell)
             .accessibility_label("Notifications")
             .tooltip("Notifications");
-        let rows = Rc::new(self.rows);
-        let decisions = Rc::new(self.decisions);
         // Hanging from the title bar, never over it: the window below the bar, less a margin, the
         // popover's padding and its offset from the bell.
         let max_h = (design_viewport(window).1 - TITLE_BAR_HEIGHT - 16. - 24. - 8.).max(120.);
-        let (on_dismiss, on_open_change, on_action, open, on_decide) = (
-            self.on_dismiss,
-            self.on_open_change,
-            self.on_action,
-            self.open,
-            self.on_decide,
-        );
-        let connection = self.connection;
-        let popover = Popover::new("notifications-popover")
-            .anchor(Anchor::TopRight)
-            .offset(u(POPOVER_OFFSET).to_pixels(window.rem_size()))
-            .trigger(trigger)
-            .open(open)
-            .on_open_change(move |open, window, cx| on_open_change(*open, window, cx))
-            .content(move |_, window, cx| {
-                let scroll = window
-                    .use_keyed_state("notification-sections-scroll", cx, |_, _| {
-                        gpui_kit::ScrollHandle::new()
-                    })
-                    .read(cx)
-                    .clone();
-                let heights = window
-                    .use_keyed_state("notification-row-heights", cx, |_, _| RowHeights::default())
-                    .read(cx)
-                    .clone();
+        let (on_open_change, open) = (self.on_open_change, self.open);
+        let reveal = Reveal::new("notification-center", open, window, cx);
+        // Base's popover drops its content as it closes, so the closing fade draws the same list
+        // where it last stood, inert. The two share the scroll and the row heights, which live
+        // until the fade ends: the next opening starts at the top.
+        let (scroll, heights) = if reveal.is_drawn() {
+            let scroll = window
+                .use_keyed_state("notification-sections-scroll", cx, |_, _| {
+                    gpui_kit::ScrollHandle::new()
+                })
+                .read(cx)
+                .clone();
+            let heights = window
+                .use_keyed_state("notification-row-heights", cx, |_, _| RowHeights::default())
+                .read(cx)
+                .clone();
+            (scroll, heights)
+        } else {
+            (gpui_kit::ScrollHandle::new(), RowHeights::default())
+        };
+        let stood = window
+            .use_keyed_state("notification-center-stood", cx, |_, _| {
+                Rc::new(Cell::new(Point::default()))
+            })
+            .read(cx)
+            .clone();
+        let list = {
+            let (rows, decisions, connection) = (self.rows, self.decisions, self.connection);
+            let (on_dismiss, on_action, on_decide) =
+                (self.on_dismiss, self.on_action, self.on_decide);
+            move |cx: &App| {
                 let list = render_list(
                     Contents {
                         connection: connection.as_ref().map(|(n, h)| (n, h)),
@@ -328,11 +337,30 @@ impl RenderOnce for NotificationBell {
                 );
                 let surface = v_flex().id("content").occlude().tab_group();
                 ui::popover_surface(surface, cx).p_3().child(list)
+            }
+        };
+        let leaving = reveal.is_closing().then(|| {
+            let surface = reveal.apply(list(cx), Side::Top);
+            deferred(Positioner::corner(Anchor::TopLeft, stood.get()).child(surface))
+                .with_priority(POPUP_PRIORITY)
+        });
+        let popover = Popover::new("notifications-popover")
+            .anchor(Anchor::TopRight)
+            .offset(u(POPOVER_OFFSET).to_pixels(window.rem_size()))
+            .trigger(trigger)
+            .open(open)
+            .on_open_change(move |open, window, cx| on_open_change(*open, window, cx))
+            .content(move |_, _, cx| {
+                let surface = list(cx).on_prepaint(move |bounds, window, _| {
+                    stood.set(bounds.origin - reveal.offset(Side::Top, window));
+                });
+                reveal.apply(surface, Side::Top)
             });
         // The wrapper, not the trigger, occludes: the popover listens on its own wrapper.
         BarButton::slot(popover, dot)
             .debug_selector(|| "notification-bell".into())
             .flex_shrink_0()
+            .children(leaving)
     }
 }
 

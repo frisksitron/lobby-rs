@@ -34,7 +34,10 @@ use crate::kit::{
     menu::{DropdownMenu as _, PopupMenuItem},
 };
 use crate::scale::{design_viewport, device, u};
-use crate::ui;
+use crate::ui::{
+    self,
+    motion::{Reveal, Side},
+};
 /// Keeps the connection label near the name; narrower windows shrink it further.
 pub const TRIGGER_MAX: f32 = 260.;
 /// The trigger's padding, also kept by the lone app mark so it never moves between routes.
@@ -101,13 +104,16 @@ pub enum LobbyAction {
 #[derive(Default)]
 struct LobbyMenu {
     open: Option<(LobbyOrigin, Point<Pixels>)>,
+    /// The menu as last opened, which it shows while it fades out.
+    drawn: Option<(LobbyOrigin, Point<Pixels>)>,
     /// A press landed in it: the kit's menu closing under that press leaves it open.
     pressed: bool,
 }
 
 impl LobbyMenu {
     fn show(&mut self, origin: LobbyOrigin, at: Point<Pixels>, cx: &mut Context<Self>) {
-        self.open = Some((origin, at));
+        self.open = Some((origin.clone(), at));
+        self.drawn = Some((origin, at));
         self.pressed = false;
         cx.notify();
     }
@@ -242,10 +248,23 @@ impl RenderOnce for LobbySwitcher {
                 ),
             );
         let state = window.use_keyed_state("lobby-menu", cx, |_, _| LobbyMenu::default());
-        let lobby_menu = state.read(cx).open.clone().and_then(|(origin, at)| {
-            let entry = self.entries.iter().find(|e| e.origin == origin)?;
-            Some(lobby_menu(entry, at, &state, &self.on_pick, window, cx))
-        });
+        let reveal = Reveal::new("lobby-menu", state.read(cx).open.is_some(), window, cx);
+        let lobby_menu = reveal
+            .is_drawn()
+            .then(|| state.read(cx).drawn.clone())
+            .flatten()
+            .and_then(|(origin, at)| {
+                let entry = self.entries.iter().find(|e| e.origin == origin)?;
+                Some(lobby_menu(
+                    entry,
+                    at,
+                    &state,
+                    reveal,
+                    &self.on_pick,
+                    window,
+                    cx,
+                ))
+            });
         let (entries, on_pick, icons) = (self.entries, self.on_pick, self.icons);
         let rows_state = state.clone();
         let menu = trigger
@@ -293,6 +312,7 @@ fn lobby_menu(
     entry: &SwitcherEntry,
     at: Point<Pixels>,
     state: &Entity<LobbyMenu>,
+    reveal: Reveal,
     on_pick: &Callback<SwitcherPick>,
     window: &Window,
     cx: &App,
@@ -341,13 +361,18 @@ fn lobby_menu(
         .w(u(LOBBY_MENU_WIDTH));
     let panel = ui::popover_surface(panel, cx)
         .p(u(MEMBER_CARD_PAD))
-        // A disabled line stops its press before it bubbles here, so pressing one closes both.
-        .on_any_mouse_down(move |_, _, cx| pressed.update(cx, |m, _| m.pressed = true))
-        .on_mouse_down_out(move |_, _, cx| closed.update(cx, |m, cx| m.close(cx)))
+        .when(!reveal.is_closing(), |panel| {
+            // A disabled line stops its press before it bubbles here, so pressing one closes
+            // both.
+            panel
+                .on_any_mouse_down(move |_, _, cx| pressed.update(cx, |m, _| m.pressed = true))
+                .on_mouse_down_out(move |_, _, cx| closed.update(cx, |m, cx| m.close(cx)))
+        })
         .child(line_with_end(icon, remove, cx))
         .child(separator(cx))
         .child(leave)
         .test_support();
+    let panel = reveal.apply(panel, Side::Left);
     deferred(
         Positioner::corner(Anchor::TopLeft, at)
             .margin(device(WINDOW_MARGIN, window))

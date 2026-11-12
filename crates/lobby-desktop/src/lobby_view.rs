@@ -44,21 +44,21 @@ pub use member_list::{MemberGroups, OpenPanel, member_groups, sharers};
 pub use share::{ESC_HINT_FOR, Esc, Picker, Shown, Viewing};
 pub use sidebar::{
     FOLDED_SHEET_W, MAIN_MIN, MemberSidebar, NARROW_BELOW, SHEET_INSET, SIDEBAR_MAX, SIDEBAR_MIN,
-    SIDEBAR_SLIM_W, SIDEBAR_STEP, SIDEBAR_W, SidebarEvent, SidebarLayout,
+    SIDEBAR_SLIM_W, SIDEBAR_STEP, SIDEBAR_W, SidebarEvent, SidebarLayout, unfolded_sheet,
 };
 pub use toasts::toast_right_margin;
 pub(crate) use toasts::{connection_toast, issue_toast};
 pub use voice::VoiceDevices;
 
-use crate::kit::{ActiveTheme as _, Theme, WindowExt as _};
+use crate::kit::{ActiveTheme as _, Theme, WindowExt as _, dialog};
 use crate::scale::{design_viewport, device, u, window_scale};
 use crate::{
     components::attachment_dialog::dialog_width,
     components::{
         ActionContext, AppTitleBar, AttachmentDialog, Callback, CardAction, ConnectionNotice,
         DecisionRow, LobbySwitcher, MediaImages, MessageChange, SwitcherCurrent, SwitcherPick,
-        TITLE_BAR_HEIGHT, VoiceBarActions, VoiceBarModel, VoiceStatsDialog, busy_screen,
-        connection_notice, typing_indicator, voice_bar_model,
+        TITLE_BAR_HEIGHT, TypingLine, VoiceBarActions, VoiceBarModel, VoiceStatsDialog,
+        busy_screen, connection_notice, voice_bar_model,
     },
     issues::IssueCenter,
     lobbies::Lobbies,
@@ -565,10 +565,8 @@ impl LobbyView {
         let title: SharedString = attachment.name.clone().into();
         let view = cx.new(|cx| AttachmentDialog::new(attachment, images, lobby.clone(), cx));
         let body = view.clone();
-        window.open_dialog(cx, move |dialog, window, cx| {
+        dialog::open(window, cx, move |dialog, window, cx| {
             let lobby = lobby.clone();
-            // Not `.centered()`: the kit's slide-down entrance holds a centred dialog at the
-            // window's top for most of its run, then drops it into place.
             dialog
                 .title(title.clone())
                 .w(device(dialog_width(design_viewport(window).0), window))
@@ -720,7 +718,7 @@ impl LobbyView {
             .child(feed)
             // Who is typing floats over the foot, of the rows or of an empty feed, so nothing
             // moves. Here, outside the cached feed, its dots render this view and not the rows.
-            .children(typing.map(|line| typing_indicator(line, cx)))
+            .child(TypingLine::new(typing))
             // A soft edge where the feed meets the viewer or the title bar, instead of a hard cut
             // through a line of text.
             .child(

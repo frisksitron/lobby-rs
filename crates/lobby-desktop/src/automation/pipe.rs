@@ -43,7 +43,7 @@ use crate::{TokioRuntime, host::NativeWindow, shell::Shell};
 const POLL: Duration = Duration::from_millis(50);
 const SETTLE_FRAME: Duration = Duration::from_millis(50);
 const SETTLE_WITHIN: Duration = Duration::from_secs(1);
-/// Longer than a dialog's exit transition (250 ms in gpui-kit).
+/// Longer than a dialog's exit transition (180 ms, set in `appearance::apply`).
 const COVERED_WITHIN: Duration = Duration::from_secs(2);
 
 pub fn pipe_name(instance: Option<&str>) -> String {
