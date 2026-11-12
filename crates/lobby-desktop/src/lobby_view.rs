@@ -34,7 +34,7 @@ use gpui_kit::{
 };
 use lobby_client::{Intent, Issue, IssueKind, LobbyState, Phase, UiEffect, local_time};
 use lobby_protocol::{AccessRequestId, Attachment, MessageId, UnixMs};
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 use composer::composer_placeholder;
 pub use composer::{ComposerEvent, ComposerView, RESTORE_AFTER_PAUSE};
@@ -56,9 +56,9 @@ use crate::{
     components::attachment_dialog::dialog_width,
     components::{
         ActionContext, AppTitleBar, AttachmentDialog, Callback, CardAction, ConnectionNotice,
-        DecisionRow, LobbySwitcher, MediaImages, MessageChange, SwitcherCurrent, SwitcherPick,
-        TITLE_BAR_HEIGHT, TypingLine, VoiceBarActions, VoiceBarModel, VoiceStatsDialog,
-        busy_screen, connection_notice, voice_bar_model,
+        LobbySwitcher, MediaImages, MessageChange, SwitcherCurrent, SwitcherPick, TITLE_BAR_HEIGHT,
+        TypingLine, VoiceBarActions, VoiceBarModel, VoiceStatsDialog, busy_screen,
+        connection_notice, voice_bar_model,
     },
     issues::IssueCenter,
     lobbies::Lobbies,
@@ -161,14 +161,10 @@ pub struct LobbyView {
     in_voice_since: Option<std::time::Instant>,
     /// The Lobby the title bar showed at the last render, kept while the Session closes.
     bar_lobby: Option<SwitcherCurrent>,
-    vouching: HashMap<AccessRequestId, DecisionRow>,
     /// The Ask to Join toasts on screen, so a request that was handled takes its toast with it.
     decision_toasts: BTreeSet<AccessRequestId>,
-    /// Requests this Member just handled: their rows say so for [`SETTLE_FOR`], then fold away
-    /// (a Decline goes out only then, so Undo can take it back). Each with its timer.
-    ///
-    /// [`SETTLE_FOR`]: crate::components::SETTLE_FOR
-    settled: BTreeMap<AccessRequestId, (DecisionRow, Task<()>)>,
+    /// Requests this Member acted on, until their rows fold away.
+    decisions: BTreeMap<AccessRequestId, decisions::Decision>,
     copied_until: Option<std::time::Instant>,
     copied_timer: Option<Task<()>>,
     /// Over the monitor or window this Member shares, while they share one.
@@ -332,9 +328,8 @@ impl LobbyView {
             center_open: false,
             in_voice_since: None,
             bar_lobby: None,
-            vouching: HashMap::new(),
             decision_toasts: BTreeSet::new(),
-            settled: BTreeMap::new(),
+            decisions: BTreeMap::new(),
             copied_until: None,
             copied_timer: None,
             overlay: None,

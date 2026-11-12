@@ -401,8 +401,8 @@ fn lobby(origin: String, view: &Entity<LobbyView>, window: &Window, cx: &App) ->
         "notifications": notifications,
         "decisions": v.decisions(cx).iter().map(|d| json!({
             "name": d.username.as_ref(),
-            "deciding": d.deciding,
-            "settled": d.settled.map(|s| format!("{s:?}")),
+            "deciding": d.stage.deciding(),
+            "settled": d.stage.settled().map(|s| format!("{s:?}")),
         })).collect::<Vec<_>>(),
     })
 }

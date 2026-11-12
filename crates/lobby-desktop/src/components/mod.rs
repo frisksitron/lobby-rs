@@ -83,8 +83,9 @@ pub use member_row::{MemberRow, MemberRowActions, MemberRowModel, voice_box};
 pub use mention_menu::mention_menu;
 pub use mic_meter::{Meter, MicMeterBar, lit_segments, mic_hint};
 pub use notification_center::{
-    ActionContext, Decide, DecisionRow, FOLD_FOR, NotificationBell, NotificationRow, SETTLE_FOR,
-    Settled, action_button, decision_rows, notification_icon, notification_rows, row_action,
+    ActionContext, Decide, DecisionRow, FOLD_FOR, NotificationBell, NotificationRow, RowStage,
+    SETTLE_FOR, Settled, action_button, decision_rows, notification_icon, notification_rows,
+    row_action,
 };
 pub use notification_entry::{Detail, LEAD_SIZE, Lead, NotificationEntry};
 pub use section_label::section_label;

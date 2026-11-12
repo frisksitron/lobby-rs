@@ -1,7 +1,7 @@
 //! The Notification Center's Decisions on access requests: Vouch, Decline and its Undo. Each row
 //! keeps its place until it folds away, so the next one never slides under the pointer.
 
-use gpui_kit::{Context, Window};
+use gpui_kit::{Context, Task, Window};
 use lobby_client::Intent;
 use lobby_protocol::{AccessRequest, AccessRequestId, UnixMs};
 
@@ -9,14 +9,54 @@ use super::{
     LobbyView,
     toasts::{DecisionToast, decision_toast},
 };
-use crate::components::{Decide, DecisionRow, FOLD_FOR, SETTLE_FOR, Settled, decision_rows};
+use crate::components::{
+    Decide, DecisionRow, FOLD_FOR, RowStage, SETTLE_FOR, Settled, decision_rows,
+};
 use crate::kit::WindowExt as _;
+
+/// A request this Member acted on, until its row folds away.
+pub(super) struct Decision {
+    /// The request as it stood when the Member acted.
+    row: DecisionRow,
+    stage: Stage,
+}
+
+enum Stage {
+    /// The Vouch went out: the row waits for the Lobby to say the person is in.
+    Vouching,
+    /// The row says what happened for [`SETTLE_FOR`]. A Decline goes out when that is over, unless
+    /// Undo took it back.
+    Settled {
+        how: Settled,
+        _timer: Task<()>,
+    },
+    Folding {
+        how: Settled,
+        _timer: Task<()>,
+    },
+}
+
+impl Decision {
+    /// The row the Center shows for it. While the Vouch waits the Lobby's own row stands in.
+    fn settled_row(&self) -> Option<DecisionRow> {
+        let stage = match &self.stage {
+            Stage::Vouching => return None,
+            Stage::Settled { how, .. } => RowStage::Settled(*how),
+            Stage::Folding { how, .. } => RowStage::Folding(*how),
+        };
+        Some(DecisionRow {
+            stage,
+            ..self.row.clone()
+        })
+    }
+}
 
 impl LobbyView {
     /// A Decision from the Notification Center. Vouch goes out at once and its row waits for the
     /// Lobby to say the person is in. Decline shows "Declined dave · Undo" at once and goes out
     /// only when [`SETTLE_FOR`] is over, unless Undo took it back. Either way the row keeps its
-    /// place until it folds away, so the next one never slides under the pointer.
+    /// place until it folds away, so the next one never slides under the pointer. A request whose
+    /// row already says what happened takes neither; a Vouch still waiting may be pressed again.
     pub fn decide(
         &mut self,
         id: AccessRequestId,
@@ -34,28 +74,40 @@ impl LobbyView {
                 .find(|r| r.id == id)
                 .map(|r| DecisionRow::new(r, now))
         });
+        let acted = self.decisions.get(&id).map(|d| &d.stage);
+        let vouch_again = what == Decide::Vouch && matches!(acted, Some(Stage::Vouching));
+        let row = row.filter(|_| acted.is_none() || vouch_again);
         match what {
             Decide::Vouch => {
                 let Some(row) = row else { return };
-                self.vouching.insert(id.clone(), row);
+                self.decisions.insert(
+                    id.clone(),
+                    Decision {
+                        row,
+                        stage: Stage::Vouching,
+                    },
+                );
                 self.session
                     .update(cx, |s, cx| s.dispatch(Intent::Vouch(id.clone()), cx));
             }
             Decide::Decline => {
-                let Some(row) = row.filter(|_| !self.settled.contains_key(&id)) else {
-                    return;
-                };
+                let Some(row) = row else { return };
                 tracing::info!(request = id.as_str(), "decline: waiting out the undo");
                 self.settle(id, row, Settled::Declining, cx);
             }
             Decide::Undo => {
-                if self
-                    .settled
-                    .get(&id)
-                    .is_some_and(|(r, _)| r.settled == Some(Settled::Declining) && !r.folding)
-                {
+                if matches!(
+                    self.decisions.get(&id),
+                    Some(Decision {
+                        stage: Stage::Settled {
+                            how: Settled::Declining,
+                            ..
+                        },
+                        ..
+                    })
+                ) {
                     tracing::info!(request = id.as_str(), "decline undone");
-                    self.settled.remove(&id);
+                    self.decisions.remove(&id);
                     cx.notify();
                 }
             }
@@ -94,27 +146,31 @@ impl LobbyView {
     fn settle(
         &mut self,
         id: AccessRequestId,
-        mut row: DecisionRow,
+        row: DecisionRow,
         how: Settled,
         cx: &mut Context<Self>,
     ) {
-        row.settled = Some(how);
-        row.deciding = false;
         let key = id.clone();
         let timer = cx.background_executor().timer(SETTLE_FOR);
         let task = cx.spawn(async move |this, cx| {
             timer.await;
             let _ = this.update(cx, |v, cx| v.fold(key, cx));
         });
-        self.settled.insert(id, (row, task));
+        let stage = Stage::Settled { how, _timer: task };
+        self.decisions.insert(id, Decision { row, stage });
         cx.notify();
     }
 
     fn fold(&mut self, id: AccessRequestId, cx: &mut Context<Self>) {
-        let Some((row, _)) = self.settled.get_mut(&id) else {
+        let Some(Decision {
+            stage: Stage::Settled { how, .. },
+            ..
+        }) = self.decisions.get(&id)
+        else {
             return;
         };
-        if row.settled == Some(Settled::Declining) {
+        let how = *how;
+        if how == Settled::Declining {
             let still_waiting = self
                 .session
                 .read(cx)
@@ -125,19 +181,19 @@ impl LobbyView {
                     .update(cx, |s, cx| s.dispatch(Intent::Decline(id.clone()), cx));
             }
         }
-        let Some((row, task)) = self.settled.get_mut(&id) else {
+        let Some(decision) = self.decisions.get_mut(&id) else {
             return;
         };
-        row.folding = true;
         let key = id.clone();
         let timer = cx.background_executor().timer(FOLD_FOR);
-        *task = cx.spawn(async move |this, cx| {
+        let task = cx.spawn(async move |this, cx| {
             timer.await;
             let _ = this.update(cx, |v, cx| {
-                v.settled.remove(&key);
+                v.decisions.remove(&key);
                 cx.notify();
             });
         });
+        decision.stage = Stage::Folding { how, _timer: task };
         cx.notify();
     }
 
@@ -149,25 +205,24 @@ impl LobbyView {
             return;
         };
         let pending = |id: &AccessRequestId| state.access_requests.iter().any(|r| &r.id == id);
-        let handled: Vec<AccessRequestId> = self
-            .vouching
-            .keys()
-            .filter(|id| !pending(id))
-            .cloned()
+        let vouching: Vec<AccessRequestId> = self
+            .decisions
+            .iter()
+            .filter(|(_, d)| matches!(d.stage, Stage::Vouching))
+            .map(|(id, _)| id.clone())
             .collect();
+        let handled: Vec<&AccessRequestId> = vouching.iter().filter(|id| !pending(id)).collect();
         // A refused Vouch (still pending, no longer deciding) stops waiting.
-        let refused: Vec<AccessRequestId> = self
-            .vouching
-            .keys()
+        let refused: Vec<&AccessRequestId> = vouching
+            .iter()
             .filter(|id| pending(id) && !state.deciding.contains(*id))
-            .cloned()
             .collect();
         for id in refused {
-            self.vouching.remove(&id);
+            self.decisions.remove(id);
         }
         for id in handled {
-            if let Some(row) = self.vouching.remove(&id) {
-                self.settle(id, row, Settled::VouchedIn, cx);
+            if let Some(decision) = self.decisions.remove(id) {
+                self.settle(id.clone(), decision.row, Settled::VouchedIn, cx);
             }
         }
     }
@@ -176,11 +231,16 @@ impl LobbyView {
         let Some(state) = self.session.read(cx).state() else {
             return Vec::new();
         };
+        let settled: Vec<DecisionRow> = self
+            .decisions
+            .values()
+            .filter_map(Decision::settled_row)
+            .collect();
         let mut rows: Vec<DecisionRow> = decision_rows(state, UnixMs::now())
             .into_iter()
-            .filter(|r| !self.settled.contains_key(&r.id))
+            .filter(|r| !settled.iter().any(|s| s.id == r.id))
             .collect();
-        rows.extend(self.settled.values().map(|(row, _)| row.clone()));
+        rows.extend(settled);
         // A row that left the Lobby's list keeps its place in it.
         rows.sort_by(|a, b| {
             AccessRequest::list_order(a.created_at, &a.id)

@@ -5,7 +5,7 @@ use lobby_client::{Issue, IssueKind, Phase};
 use lobby_protocol::{AccessRequestId, UnixMs};
 
 use crate::components::{
-    Callback, ConnectionAction, ConnectionNotice, DecisionRow, NotificationRow, Settled,
+    Callback, ConnectionAction, ConnectionNotice, DecisionRow, NotificationRow, RowStage, Settled,
     notification_center, row_action,
 };
 use crate::gallery::{Gallery, Section, fixtures::notice};
@@ -24,9 +24,7 @@ pub(super) fn request(n: u8, name: &str, ago: &str) -> DecisionRow {
         created_at: UnixMs(0),
         ago: ago.to_owned().into(),
         when: "Sat 24 Oct, 21:40".into(),
-        deciding: false,
-        settled: None,
-        folding: false,
+        stage: RowStage::Waiting { deciding: false },
     }
 }
 
@@ -132,15 +130,15 @@ pub(super) fn notifications(
     let decisions = vec![
         request(1, "carol", "5 min ago"),
         DecisionRow {
-            deciding: true,
+            stage: RowStage::Waiting { deciding: true },
             ..request(2, "dave", "1 h ago")
         },
         DecisionRow {
-            settled: Some(Settled::VouchedIn),
+            stage: RowStage::Settled(Settled::VouchedIn),
             ..request(3, "erin", "2 h ago")
         },
         DecisionRow {
-            settled: Some(Settled::Declining),
+            stage: RowStage::Settled(Settled::Declining),
             ..request(4, "mallory", "1 d ago")
         },
     ];

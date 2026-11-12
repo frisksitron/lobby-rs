@@ -146,9 +146,31 @@ pub struct DecisionRow {
     pub created_at: UnixMs,
     pub ago: SharedString,
     pub when: SharedString,
-    pub deciding: bool,
-    pub settled: Option<Settled>,
-    pub folding: bool,
+    pub stage: RowStage,
+}
+
+/// What a request's row shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowStage {
+    /// Vouch and Decline, both disabled while the Lobby answers one of them.
+    Waiting { deciding: bool },
+    /// What happened to the request. A Decline can still be undone.
+    Settled(Settled),
+    /// The same, folding away: no Undo any more.
+    Folding(Settled),
+}
+
+impl RowStage {
+    pub fn settled(self) -> Option<Settled> {
+        match self {
+            Self::Waiting { .. } => None,
+            Self::Settled(how) | Self::Folding(how) => Some(how),
+        }
+    }
+
+    pub fn deciding(self) -> bool {
+        matches!(self, Self::Waiting { deciding: true })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,9 +188,7 @@ impl DecisionRow {
             created_at: request.created_at,
             ago: time_ago(request.created_at, now).into(),
             when: local_date_time(request.created_at).into(),
-            deciding: false,
-            settled: None,
-            folding: false,
+            stage: RowStage::Waiting { deciding: false },
         }
     }
 }
@@ -178,7 +198,9 @@ pub fn decision_rows(state: &LobbyState, now: UnixMs) -> Vec<DecisionRow> {
         .access_requests
         .iter()
         .map(|r| DecisionRow {
-            deciding: state.deciding.contains(&r.id),
+            stage: RowStage::Waiting {
+                deciding: state.deciding.contains(&r.id),
+            },
             ..DecisionRow::new(r, now)
         })
         .collect()
@@ -269,7 +291,10 @@ impl RenderOnce for NotificationBell {
     fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let (danger, warning, accent) = (theme.danger, theme.warning, voice_accent(theme));
-        let waiting = self.decisions.iter().any(|d| d.settled.is_none());
+        let waiting = self
+            .decisions
+            .iter()
+            .any(|d| matches!(d.stage, RowStage::Waiting { .. }));
         // The dot says something wants a look: something went wrong (red), the Lobby is not
         // calm (its tone), or people wait to join (the app's accent).
         let dot = match &self.connection {
@@ -411,8 +436,9 @@ fn decision_row(
         cx,
     ))
     .detail(Some(Detail::Wrapped(row.label.clone())));
-    let entry = match row.settled {
-        Some(outcome) => {
+    let folding = matches!(row.stage, RowStage::Folding(_));
+    let entry = match row.stage {
+        RowStage::Settled(outcome) | RowStage::Folding(outcome) => {
             let vouched = outcome == Settled::VouchedIn;
             let (icon, icon_color, text, color) = if vouched {
                 (
@@ -430,7 +456,7 @@ fn decision_row(
                     .text_color(color)
                     .child(Icon::new(icon).size(u(ICON_SM)).text_color(icon_color))
                     .child(text)
-                    .when(outcome == Settled::Declining && !row.folding, |d| {
+                    .when(outcome == Settled::Declining && !folding, |d| {
                         d.child(
                             ui::Button::new(SharedString::from(format!("undo-{key}")))
                                 .size(ui::Size::Word)
@@ -441,15 +467,15 @@ fn decision_row(
                     }),
             )
         }
-        None => entry
+        RowStage::Waiting { deciding } => entry
             .action(
                 ui::Button::new(SharedString::from(format!("vouch-{}", row.username)))
                     .variant(ui::Variant::Primary)
                     .size(ui::Size::Word)
-                    .when(row.deciding, |b| b.icon(IconName::LoaderCircle))
+                    .when(deciding, |b| b.icon(IconName::LoaderCircle))
                     .label("Vouch")
-                    .loading(row.deciding)
-                    .disabled(row.deciding)
+                    .loading(deciding)
+                    .disabled(deciding)
                     .tooltip(format!("Let {name} in as a Member"))
                     .on_click(decide(Decide::Vouch)),
             )
@@ -458,12 +484,11 @@ fn decision_row(
                     .variant(ui::Variant::Outline)
                     .size(ui::Size::Word)
                     .label("Decline")
-                    .disabled(row.deciding)
+                    .disabled(deciding)
                     .on_click(decide(Decide::Decline)),
             ),
     };
-    let settled = row.settled.is_some();
-    let folding = row.folding;
+    let settled = row.stage.settled().is_some();
     let outer = div()
         .id(SharedString::from(format!("decision-{key}")))
         .debug_selector({
