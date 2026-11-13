@@ -267,7 +267,6 @@ impl Feed {
             .count();
         let removed = prefix + 1..old.len() - suffix + 1;
         let added = new.len() - prefix - suffix;
-        self.changes.push(Change::Splice(removed.clone(), added));
         let (gone, came) = (
             &old[prefix..old.len() - suffix],
             &new[prefix..new.len() - suffix],
@@ -287,31 +286,77 @@ impl Feed {
         if (near || sent) && below && !cx.reduce_motion() {
             self.arrived(gone, came, &fresh, cx.background_executor().now());
         }
-        if suffix == 0 {
-            let mut others = fresh.iter().filter(|m| !m.mine);
-            if near || sent {
-                self.changes.push(Change::ToEnd);
-                self.unseen.set(0);
-                self.first_unseen.set(None);
-            } else if let Some(first) = others.next() {
+        // News is what came after the newest Message the Lobby had confirmed, not a changed last
+        // row: sends on their way stay under it, and a page of older Messages can regroup every
+        // row under it, the newest too (a new day or a group's ten minutes now start elsewhere).
+        let id = |r: &FeedRow| r.as_message().and_then(|m| m.id);
+        let (oldest, newest) = (old.iter().find_map(id), old.iter().rev().find_map(id));
+        let older = fresh
+            .iter()
+            .any(|m| m.id.zip(oldest).is_some_and(|(id, oldest)| id < oldest));
+        let news: Vec<&MessageRow> = fresh
+            .iter()
+            .copied()
+            .filter(|m| m.id.zip(newest).is_none_or(|(id, newest)| id > newest))
+            .collect();
+        let tail = !news.is_empty() || (suffix == 0 && !older);
+        let to_end = tail && (near || sent);
+        if to_end {
+            self.unseen.set(0);
+            self.first_unseen.set(None);
+        } else if tail {
+            let mut others = news.iter().filter(|m| !m.mine);
+            if let Some(first) = others.next() {
                 if self.unseen.get() == 0 {
                     self.first_unseen.set(first.id);
                 }
                 self.unseen.set(self.unseen.get() + 1 + others.count());
             }
-        } else if !following && top.item_ix < removed.end {
-            // Older Messages arrived under the History row. The kit scrolls to a row's top only, so
-            // the first Message that was in view goes to the top (with its day divider): what was
-            // read stays in sight.
-            let first = old.iter().find_map(FeedRow::as_message).and_then(|first| {
-                new.iter()
-                    .position(|r| r.as_message().is_some_and(|m| m.key == first.key))
+        }
+        // What the Member is reading stays in sight: the Message at the top of the view, or,
+        // above the first Message (at the History row), the first Message in view. The kit
+        // scrolls to a row's top only, and a splice over the top row drops its offset.
+        let (mut held, mut to) = (None, None);
+        if !to_end
+            && !following
+            && top.item_ix < removed.end
+            && (top.item_ix >= removed.start || older)
+        {
+            let row = top.item_ix.saturating_sub(1);
+            let reading = old.iter().enumerate().skip(row).find_map(|(ix, r)| {
+                let key = &r.as_message()?.key;
+                let at = new
+                    .iter()
+                    .position(|n| n.as_message().is_some_and(|m| &m.key == key))?;
+                Some((ix, at))
             });
-            let at = match first {
-                Some(ix) if ix > 0 && matches!(new[ix - 1], FeedRow::Day { .. }) => ix - 1,
-                Some(ix) => ix,
-                None => new.len() - suffix,
-            };
+            match reading {
+                Some((ix, at)) if ix == row && top.item_ix > 0 => {
+                    held = (top.item_ix >= removed.start).then_some((ix, at));
+                }
+                Some((_, at)) if at > 0 && matches!(new[at - 1], FeedRow::Day { .. }) => {
+                    to = Some(at - 1);
+                }
+                Some((_, at)) => to = Some(at),
+                None => to = Some(new.len() - suffix),
+            }
+        }
+        match held {
+            // The rows above and below the one at the top are spliced apart, so the list keeps
+            // it and its offset. The kit measures it again as the second splice's neighbour.
+            Some((ix, at)) => {
+                let below = old.len() - suffix - ix - 1;
+                let (above, after) = (at - prefix, new.len() - suffix - at - 1);
+                self.changes.push(Change::Splice(prefix + 1..ix + 1, above));
+                self.changes
+                    .push(Change::Splice(at + 2..at + 2 + below, after));
+            }
+            None => self.changes.push(Change::Splice(removed, added)),
+        }
+        if to_end {
+            self.changes.push(Change::ToEnd);
+        }
+        if let Some(at) = to {
             self.changes.push(Change::ToItem(at + 1));
         }
     }
@@ -1054,5 +1099,202 @@ impl RenderOnce for TypingLine {
             .child(div().ml(u(AVATAR_GAP)).min_w_0().truncate().child(line))
             .test_support()
             .into_any_element()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Local, TimeZone as _};
+    use gpui_kit::{
+        Render, ScrollDelta, ScrollEvent, TestAppContext, VisualTestContext, point, size,
+    };
+    use lobby_client::PendingMessage;
+    use lobby_protocol::{AuthorRef, Message, UnixMs, UserId};
+
+    use super::*;
+    use crate::components::{Cards, Slot};
+
+    struct Chat {
+        feed: Feed,
+        state: Arc<LobbyState>,
+    }
+
+    impl Render for Chat {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            self.feed.sync(&self.state, day(), cx);
+            let on: FeedAction = Rc::new(|_, _| {});
+            let cards = Cards {
+                images: Rc::new(|_, _| Slot::Loading),
+                avatars: Rc::new(|_, _| None),
+                max_w: 400.,
+                on_open: Rc::new(|_, _, _, _| {}),
+                on_change: Rc::new(|_, _, _, _| {}),
+            };
+            let older = self.state.older;
+            let feed = self
+                .feed
+                .render(older, on.clone(), on, |_, _| {}, cards, window, cx);
+            div().size_full().child(feed)
+        }
+    }
+
+    fn day() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 11, 10).expect("a date")
+    }
+
+    /// Minutes after local noon, so no day divider falls among the Messages wherever this runs.
+    fn at(minute: i64) -> UnixMs {
+        let noon = day().and_hms_opt(12, 0, 0).expect("noon");
+        let noon = Local
+            .from_local_datetime(&noon)
+            .earliest()
+            .expect("noon here");
+        UnixMs(noon.timestamp_millis() + minute * 60_000)
+    }
+
+    fn user(name: &str) -> UserId {
+        let n = if name == "alice" { 1 } else { 2 };
+        format!("usr_{n:024}").parse().expect("a user id")
+    }
+
+    /// Message `id` from `who`, `id - 101` minutes after noon.
+    fn say(state: &mut LobbyState, id: i64, who: &str) {
+        let created_at = at(id - 101);
+        let id = MessageId::new(id).expect("an id");
+        let author = AuthorRef {
+            id: user(who),
+            username: who.to_owned(),
+            avatar: None,
+            deactivated: false,
+        };
+        let message = Message {
+            id,
+            author,
+            content: format!("line {}", id.get()),
+            attachments: Vec::new(),
+            nonce: format!("n{}", id.get()),
+            created_at,
+            edited_at: None,
+            rev: None,
+        };
+        state.chat.insert(id, message);
+    }
+
+    fn frame(cx: &mut VisualTestContext) {
+        cx.update(|window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        });
+    }
+
+    /// Alice, in the small window, with bob's Messages 101 to 131 a minute apart and what `tail`
+    /// adds. A group lasts ten minutes, so 101, 111, 121 and 131 start one. She has scrolled
+    /// Message 115 to the top of the view, and 12 pixels on into its row.
+    fn reading(
+        cx: &mut TestAppContext,
+        tail: impl FnOnce(&mut LobbyState),
+    ) -> (Entity<Chat>, &mut VisualTestContext) {
+        cx.update(gpui_kit::init);
+        let mut state = LobbyState {
+            phase: Phase::Connected,
+            me: Some(user("alice")),
+            history: History::Loaded,
+            older: Older::Available,
+            ..LobbyState::default()
+        };
+        for id in 101..=131 {
+            say(&mut state, id, "bob");
+        }
+        tail(&mut state);
+        let state = Arc::new(state);
+        let (chat, cx) = cx.add_window_view(|_, cx| Chat {
+            feed: Feed::new(None, cx),
+            state,
+        });
+        cx.simulate_resize(size(px(480.), px(400.)));
+        frame(cx);
+        chat.update(cx, |c, cx| {
+            let ix = c
+                .feed
+                .rows
+                .iter()
+                .position(|r| r.as_message().is_some_and(|m| m.key.as_ref() == "m115"));
+            let ix = ix.expect("Message 115 has a row") + 1;
+            c.feed.scroller.update(cx, |s, cx| s.scroll_to_item(ix, cx));
+        });
+        frame(cx);
+        cx.simulate_event(ScrollEvent {
+            position: point(px(240.), px(200.)),
+            delta: ScrollDelta::Pixels(point(px(0.), px(-12.))),
+            ..Default::default()
+        });
+        frame(cx);
+        let top = chat.update(cx, |c, cx| c.feed.scroller.read(cx).logical_scroll_top());
+        assert!(
+            top.offset_in_item > px(0.),
+            "scrolled into the row: {top:?}"
+        );
+        (chat, cx)
+    }
+
+    /// Bob's Messages 96 to 100 arrive in one snapshot with what `also` adds. Groups now start
+    /// at 96, 106, 116 and 126: every row under the page changes, the newest too.
+    fn older_page(
+        chat: &Entity<Chat>,
+        cx: &mut VisualTestContext,
+        also: impl FnOnce(&mut LobbyState),
+    ) {
+        chat.update(cx, |c, cx| {
+            let state = Arc::make_mut(&mut c.state);
+            for id in 96..=100 {
+                say(state, id, "bob");
+            }
+            also(state);
+            cx.notify();
+        });
+        frame(cx);
+        frame(cx);
+    }
+
+    fn reading_y(cx: &mut VisualTestContext) -> gpui_kit::Pixels {
+        let text = cx.debug_bounds("message-text-m115");
+        text.expect("Message 115 is drawn").origin.y
+    }
+
+    #[gpui_kit::test]
+    fn an_older_page_leaves_the_message_being_read_where_it_was(cx: &mut TestAppContext) {
+        let (chat, cx) = reading(cx, |_| {});
+        let before = reading_y(cx);
+        older_page(&chat, cx, |_| {});
+        assert_eq!(reading_y(cx), before, "Message 115 stays put");
+    }
+
+    /// Alice's own Messages and her send still on its way end the feed. Bob's new Message comes
+    /// in under her last one, in the same snapshot as an older page: news, though the last row
+    /// is still her send.
+    #[gpui_kit::test]
+    fn news_beside_an_older_page_is_news_under_a_pending_send(cx: &mut TestAppContext) {
+        let (chat, cx) = reading(cx, |state| {
+            for id in 132..=134 {
+                say(state, id, "alice");
+            }
+            state.pending.push(PendingMessage {
+                nonce: "n-pending".to_owned(),
+                draft: "on its way".to_owned(),
+                content: "on its way".to_owned(),
+                queued: false,
+                throttled: false,
+                at: at(33),
+                attachments: Vec::new(),
+            });
+        });
+        let before = reading_y(cx);
+        older_page(&chat, cx, |state| say(state, 135, "bob"));
+        let unseen = chat.update(cx, |c, _| c.feed.unseen());
+        assert_eq!(
+            unseen, 1,
+            "bob's new Message is counted, the older page is not"
+        );
+        assert_eq!(reading_y(cx), before, "Message 115 stays put");
     }
 }
