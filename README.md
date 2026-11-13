@@ -15,7 +15,7 @@ Everyone in a Lobby sees everything in it. There are no channels and no roles be
 
 ## Install the app
 
-The app runs on Windows 10 and 11.
+The app runs on Windows 10 and 11, and on Linux (see [Linux](#linux) below).
 
 1. Download `LobbySetup.exe` from the [latest release](../../releases/latest).
 2. Run it. It installs Lobby for your Windows user into `%LOCALAPPDATA%\Programs\Lobby`, with no
@@ -26,6 +26,18 @@ The app runs on Windows 10 and 11.
 Lobby updates itself. When a new release is out, the title bar shows its download, then
 **Restart to update**. If you quit instead, the update is in place the next time you start Lobby.
 To uninstall, use **Installed apps** in Windows Settings. Your Lobbies and settings stay.
+
+### Linux
+
+The app runs on 64-bit (x86_64) Linux with glibc 2.39 or newer (Ubuntu 24.04 and later) and a
+Wayland desktop session (GNOME, KDE, sway and the others; X11 is not supported). Ubuntu is the
+tested system. Chat and Voice work as on Windows. Sharing your screen and watching a Screen Share
+are not available on Linux yet. Download
+`install.sh` from the
+[latest release](../../releases/latest) and run it with `sh install.sh`. It downloads the app,
+checks it, and the app installs itself for your user into `~/.local/share/lobby`, adds Lobby to
+your launcher and opens `lobby://` links. Updating works as on Windows. To uninstall, run
+`~/.local/share/lobby/lobby --uninstall`. Your Lobbies and settings stay.
 
 ## Host a Lobby
 
