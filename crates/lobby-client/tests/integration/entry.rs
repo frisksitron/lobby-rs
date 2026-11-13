@@ -159,6 +159,9 @@ async fn a_new_code_waits_then_is_ready_then_is_capped() {
     let mut entry = Entering::at(&client, &origin(&env)).await;
     entry.send_code(&email).await;
     for sent in 1..CAP as usize {
+        // Each code's mail lands before the next is asked for: the Lobby mails every code on a
+        // task of its own, so two in flight can arrive in either order.
+        env.mail.code_number(&email, sent).await;
         assert_eq!(entry.view().resend, Resend::Wait, "after {sent} codes");
         clock.advance(RESEND_AFTER);
         entry
