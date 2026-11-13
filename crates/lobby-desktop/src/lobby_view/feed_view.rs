@@ -54,7 +54,7 @@ impl FeedView {
                 }
             }
         });
-        Self {
+        let mut this = Self {
             feed: Feed::new(seen_before, cx),
             session,
             images,
@@ -62,7 +62,12 @@ impl FeedView {
             column_w: 0.,
             _subscriptions: subscriptions,
             _midnight: midnight,
-        }
+        };
+        // A Lobby switched back to starts from the feed it kept. Without rows the Lobby view
+        // draws the empty feed in place of this view, so nothing would sync them until the
+        // Session's first update, which waits on the network.
+        this.sync(cx);
+        this
     }
 
     fn sync(&mut self, cx: &mut Context<Self>) {
