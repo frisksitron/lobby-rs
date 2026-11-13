@@ -129,12 +129,29 @@ pub trait DeviceSource: Send + Sync + 'static {
 pub struct SystemDevices;
 
 impl DeviceSource for SystemDevices {
+    #[cfg(not(target_os = "linux"))]
     fn list(&self) -> DeviceList {
-        let host = cpal::default_host();
-        DeviceList {
-            inputs: endpoints(&host, DeviceKind::Input),
-            outputs: endpoints(&host, DeviceKind::Output),
+        read_lists(&cpal::default_host())
+    }
+
+    /// The host Voice and the interface sounds use too (`pulse::listing_host`): a PulseAudio host
+    /// is a connection to the server. A server that went away leaves empty lists, and the next
+    /// read makes a new host.
+    #[cfg(target_os = "linux")]
+    fn list(&self) -> DeviceList {
+        let host = super::pulse::listing_host();
+        let lists = read_lists(&host);
+        if lists.inputs.devices.is_empty() && lists.outputs.devices.is_empty() {
+            super::pulse::forget(&host);
         }
+        lists
+    }
+}
+
+fn read_lists(host: &cpal::Host) -> DeviceList {
+    DeviceList {
+        inputs: endpoints(host, DeviceKind::Input),
+        outputs: endpoints(host, DeviceKind::Output),
     }
 }
 
@@ -143,11 +160,14 @@ fn endpoints(host: &cpal::Host, kind: DeviceKind) -> Endpoints {
         DeviceKind::Input => host.input_devices().map(|d| d.collect::<Vec<_>>()),
         DeviceKind::Output => host.output_devices().map(|d| d.collect::<Vec<_>>()),
     };
-    let devices = listed
-        .unwrap_or_default()
+    let devices = pickable(listed.unwrap_or_default())
         .iter()
         .filter_map(|device| {
             let id = device.id().ok()?.to_string();
+            if cfg!(target_os = "linux") && id.ends_with(".monitor") {
+                // PulseAudio offers what each speaker plays as a microphone, "Monitor of ...".
+                return None;
+            }
             let name = device
                 .description()
                 .map_or_else(|_| id.clone(), |d| d.name().to_owned());
@@ -167,10 +187,47 @@ fn endpoints(host: &cpal::Host, kind: DeviceKind) -> Endpoints {
     }
 }
 
+/// What a person can choose among. ALSA lists its plumbing as devices: a "null" sink, the sound
+/// server's plugin, a dozen surround layouts and every card as `hw:` and `plughw:`, most with the
+/// same description. Of those one can be told apart: a sound card (`sysdefault:`, named by its
+/// card), and only where no sound server owns the cards: behind PipeWire or PulseAudio a card
+/// cannot be opened, and the server's own devices are not ALSA's to list. The default has its own
+/// line already.
+#[cfg(target_os = "linux")]
+fn pickable(devices: Vec<cpal::Device>) -> Vec<cpal::Device> {
+    if devices
+        .first()
+        .is_none_or(|d| d.id().is_ok_and(|id| id.host() != cpal::HostId::Alsa))
+    {
+        return devices;
+    }
+    let ids: Vec<_> = devices
+        .iter()
+        .filter_map(|d| Some(d.id().ok()?.id().to_owned()))
+        .collect();
+    if ids.iter().any(|id| id == "pipewire" || id == "pulse") {
+        return Vec::new();
+    }
+    devices
+        .into_iter()
+        .filter(|d| d.id().is_ok_and(|id| id.id().starts_with("sysdefault:")))
+        .collect()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn pickable(devices: Vec<cpal::Device>) -> Vec<cpal::Device> {
+    devices
+}
+
 #[cfg(windows)]
 fn communications_default(kind: DeviceKind) -> Option<String> {
     let id = super::win::communications_endpoint(kind == DeviceKind::Input)?;
     Some(cpal::DeviceId::new(cpal::HostId::Wasapi, id).to_string())
+}
+
+#[cfg(not(windows))]
+fn communications_default(_: DeviceKind) -> Option<String> {
+    None
 }
 
 /// A list that tests and `LOBBY_FAKE_MEDIA=1` change by hand.
@@ -313,6 +370,9 @@ pub(crate) enum Change {
 pub(crate) struct Follower {
     choice: DeviceChoice,
     running: Target,
+    /// The default the stream was opened on, for a host that leaves it there when the default
+    /// moves.
+    default: Option<String>,
 }
 
 impl Follower {
@@ -323,6 +383,7 @@ impl Follower {
             Follower {
                 choice,
                 running: target,
+                default: endpoints.default.clone(),
             },
             fell_back,
         )
@@ -351,9 +412,20 @@ impl Follower {
     pub fn observe(&mut self, endpoints: &Endpoints) -> Change {
         let Resolved { target, fell_back } = endpoints.resolve(&self.choice);
         if target == self.running {
+            // Windows moves a stream that follows the default, and ALSA behind PipeWire does too,
+            // and both say so with a fault. PulseAudio's protocol pins a stream to the device it
+            // opened on, so there a moved default has to be noticed here.
+            if cfg!(target_os = "linux")
+                && target == Target::Default
+                && endpoints.default != self.default
+            {
+                self.default.clone_from(&endpoints.default);
+                return Change::Reopen { fell_back: None };
+            }
             return Change::Stay;
         }
         self.running = target;
+        self.default.clone_from(&endpoints.default);
         Change::Reopen { fell_back }
     }
 
@@ -363,6 +435,7 @@ impl Follower {
             Fault::Moved => {
                 let Resolved { target, fell_back } = endpoints.resolve(&self.choice);
                 self.running = target;
+                self.default.clone_from(&endpoints.default);
                 Change::Reopen { fell_back }
             }
             Fault::Gone => match (&self.choice, &self.running) {
@@ -377,6 +450,7 @@ impl Follower {
                 _ => {
                     let Resolved { target, fell_back } = endpoints.resolve(&self.choice);
                     self.running = target;
+                    self.default.clone_from(&endpoints.default);
                     Change::Reopen { fell_back }
                 }
             },
@@ -426,5 +500,43 @@ impl DeviceWatch {
     /// The lists, if they were read for the first time or changed since the last `take`.
     pub fn take(&self) -> Option<DeviceList> {
         self.fresh.lock().expect("device list lock").take()
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    fn device(id: &str) -> NamedDevice {
+        NamedDevice {
+            id: id.into(),
+            name: id.into(),
+        }
+    }
+
+    fn listed(default: &str) -> Endpoints {
+        Endpoints {
+            devices: vec![device("a"), device("b")],
+            default: Some(default.into()),
+            communications: None,
+        }
+    }
+
+    #[test]
+    fn a_stream_on_the_default_follows_it_when_it_moves() {
+        let (mut follower, _) = Follower::start(DeviceChoice::SystemDefault, &listed("a"));
+        assert_eq!(follower.observe(&listed("a")), Change::Stay);
+        assert_eq!(
+            follower.observe(&listed("b")),
+            Change::Reopen { fell_back: None }
+        );
+        assert_eq!(follower.observe(&listed("b")), Change::Stay);
+    }
+
+    #[test]
+    fn a_stream_on_a_chosen_device_ignores_the_default() {
+        let choice = DeviceChoice::Named(device("a"));
+        let (mut follower, _) = Follower::start(choice, &listed("a"));
+        assert_eq!(follower.observe(&listed("b")), Change::Stay);
     }
 }

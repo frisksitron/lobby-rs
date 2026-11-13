@@ -40,7 +40,8 @@ commands:
       Run a scenario of crates/lobby-desktop/tests/scenarios/ (a name or a path) against the
       real binaries: a lobby-server on free ports and one `lobby` per client, driven through
       its automation pipe without focus, mouse or Windows toasts. Output in
-      target/drive/<scenario>/out/.
+      target/drive/<scenario>/out/. On Linux the windows open in a headless sway (needs the
+      packages sway and grim) and `shot` is a grim picture; --visible uses the real desktop.
   gates
       Run fmt, both clippy runs, nextest, the doc tests and the seven checks in order, print each
       step's wall time and the total, and stop at the first failure.
@@ -48,7 +49,8 @@ commands:
       Build the release `lobby` for that GitHub repository's Releases (it installs and updates
       itself from them) and write dist/LobbySetup.exe, dist/latest.json and
       dist/release-notes.md (the newest changelog entry). CHANGELOG.md must have the workspace version on top
-      (Windows only).
+      (on Windows). On x86_64 Linux it writes dist/lobby-linux-x86_64 and dist/latest-linux.json
+      instead, and fails when the binary needs a newer glibc than ubuntu-24.04 has.
   release <version>
       Refuse a bad commit subject, write the changelog entry, bump the workspace to <version>,
       commit, tag v<version> and push both to origin. CI builds the tag with `dist` and

@@ -54,6 +54,7 @@ pub enum TestMotion {
 
 impl SourceId {
     /// The source keeps itself out of captures, so a share of it would never show a picture.
+    #[cfg(windows)]
     pub(super) fn blocks_capture(&self) -> bool {
         match self {
             #[cfg(windows)]
@@ -355,5 +356,15 @@ mod platform {
         attempt(DrawBorderSettings::WithoutBorder)
             .or_else(|_| attempt(DrawBorderSettings::Default))
             .map_err(|e| e.to_string())
+    }
+}
+
+#[cfg(not(windows))]
+mod platform {
+    use super::ScreenSource;
+    use crate::media::MediaError;
+
+    pub fn sources() -> Result<Vec<ScreenSource>, MediaError> {
+        Ok(Vec::new())
     }
 }

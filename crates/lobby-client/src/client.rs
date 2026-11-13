@@ -77,8 +77,8 @@ impl Client {
         })
     }
 
-    /// Each Session's connection probes at once when the OS reports a network change (Windows
-    /// only). Off by default so tests leave the machine's network alone.
+    /// Each Session's connection probes at once when the OS reports a network change (Windows and
+    /// Linux). Off by default so tests leave the machine's network alone.
     pub fn with_network_watch(mut self) -> Client {
         self.watch_network = true;
         self

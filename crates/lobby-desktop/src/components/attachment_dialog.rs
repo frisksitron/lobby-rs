@@ -82,12 +82,20 @@ impl AttachmentDialog {
         let media = self.images.read(cx).media().clone();
         let attachment = self.attachment.clone();
         self.busy = Some(cx.spawn_in(window, async move |this, cx| {
-            let Ok(Some(dest)) = pick.await else {
-                let _ = this.update(cx, |d, cx| {
-                    d.busy = None;
-                    cx.notify();
-                });
-                return;
+            let dest = match pick.await {
+                Ok(Ok(Some(dest))) => dest,
+                answer => {
+                    let no_dialog = matches!(answer, Ok(Err(_)));
+                    let _ = this.update_in(cx, |d, window, cx| {
+                        d.busy = None;
+                        if no_dialog {
+                            let issue = Issue::new(IssueKind::SaveFailed, copy::SAVE_DIALOG_FAILED);
+                            let _ = d.lobby.update(cx, |v, cx| v.notify(issue, window, cx));
+                        }
+                        cx.notify();
+                    });
+                    return;
+                }
             };
             let saved = media.save_as(&attachment, dest).await;
             let _ = this.update_in(cx, |d, window, cx| {

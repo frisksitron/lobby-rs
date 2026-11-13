@@ -26,12 +26,12 @@ use gpui_kit::{
     prelude::FluentBuilder as _,
     px,
 };
-use lobby_client::{LobbyState, UiEffect, Volume};
+use lobby_client::{Issue, LobbyState, UiEffect, Volume};
 
 use super::BODY_TOP;
 use super::member_list::{MemberGroups, OpenPanel, member_groups};
 use super::own_card::OwnCard;
-use crate::scale::{u, window_scale};
+use crate::scale::{u, visible_size, window_scale};
 use crate::ui::motion::{Reveal, Side};
 use crate::{
     components::{
@@ -179,6 +179,8 @@ pub enum SidebarEvent {
     StopWatching,
     VoiceStats,
     SignOut,
+    /// Something the Member should know, from a card.
+    Notify(Issue),
     /// The folded sheet went away: the composer takes the focus back.
     Folded,
     /// Escape closed a card, so the keyboard goes back to the composer.
@@ -350,7 +352,7 @@ impl MemberSidebar {
     pub fn layout(&self, window: &Window, cx: &App) -> SidebarLayout {
         let lobbies = self.lobbies.read(cx);
         sidebar_layout(
-            f32::from(window.viewport_size().width),
+            f32::from(visible_size(window).width),
             window_scale(window),
             lobbies.sidebar_width(),
             lobbies.sidebar_collapsed(),
@@ -390,10 +392,7 @@ impl MemberSidebar {
     /// `slack`, the sidebar is put away (its width stays for when it comes back); otherwise it is
     /// docked at the clamped width.
     fn resize(&mut self, wanted: Option<f32>, slack: f32, window: &Window, cx: &mut Context<Self>) {
-        let (window_px, scale) = (
-            f32::from(window.viewport_size().width),
-            window_scale(window),
-        );
+        let (window_px, scale) = (f32::from(visible_size(window).width), window_scale(window));
         if self.layout(window, cx) == SidebarLayout::Sheet {
             return;
         }
@@ -584,7 +583,7 @@ pub fn unfolded_sheet(
                 .test_support()
                 .absolute()
                 .inset_0()
-                .bg(cx.theme().overlay)
+                .bg(crate::appearance::overlay(cx))
                 .when(shown < 1., |d| d.opacity(shown))
                 .when(open, |d| {
                     d.on_click(move |_, window, cx| on_fold(window, cx))

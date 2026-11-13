@@ -54,6 +54,19 @@ windows = { workspace = true, features = ["Win32_Storage_EnhancedStorage", "Win3
 windows-registry.workspace = true
 raw-window-handle.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# The session's idle time (`host::linux`): the compositor's `ext-idle-notify-v1`, else GNOME's
+# Mutter over zbus's blocking API.
+zbus.workspace = true
+wayland-client.workspace = true
+wayland-protocols.workspace = true
+rustix.workspace = true
+ksni.workspace = true
+# The tray icon's pixmap is cut from the launcher icon's PNG.
+image = { workspace = true, features = ["png"] }
+# Files pasted from a file manager arrive as `file://` URIs (`files::pasted_paths`).
+url.workspace = true
+
 [target.'cfg(windows)'.build-dependencies]
 embed-resource.workspace = true
 
@@ -69,6 +82,10 @@ gpui-pre-wgpu = { workspace = true, features = ["test-support"] }
 image = { workspace = true, features = ["png", "jpeg"] }
 serde_json.workspace = true
 tempfile.workspace = true
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+# A notification daemon on the other end of a socket, without a bus (`host::notify_linux`).
+zbus = { workspace = true, features = ["p2p"] }
 
 [lints]
 workspace = true

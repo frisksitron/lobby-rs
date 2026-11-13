@@ -1,6 +1,7 @@
 # `cargo about` config for THIRD-PARTY-NOTICES.html, which each Release ships beside
-# LobbySetup.exe: the licence of every crate the Windows app is built from.
-targets = ["x86_64-pc-windows-msvc"]
+# LobbySetup.exe and lobby-linux-x86_64: the licence of every crate the Windows and Linux apps are
+# built from.
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
 ignore-build-dependencies = true
 ignore-dev-dependencies = true
 # Lobby's own crates are not third-party: they are publish = false.

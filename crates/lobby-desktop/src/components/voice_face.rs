@@ -99,7 +99,7 @@ fn screen_badge(tile: Tile, group: SharedString, surface: Hsla, cx: &App) -> Any
         hover,
     } = tile.paint(theme);
     // The tile's faint edge is lost on the bar's purple.
-    let ring = if tile == Tile::Faint {
+    let ring = if tile.faint() {
         theme.muted_foreground.opacity(0.45)
     } else {
         ring
@@ -221,7 +221,7 @@ impl RenderOnce for VoiceFace {
         };
         let sharer = Sharer::of(&row);
         let label = tile.label(&sharer);
-        let tip = if tile == Tile::Faint {
+        let tip = if tile.faint() {
             tile.tip(false).to_owned()
         } else {
             label.clone()

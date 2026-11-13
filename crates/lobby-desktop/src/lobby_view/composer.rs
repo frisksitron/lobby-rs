@@ -589,9 +589,9 @@ impl ComposerView {
             .map_or(RESTORE_AFTER_PAUSE, |at| now.duration_since(at));
         if typed.trim().is_empty() && quiet < RESTORE_AFTER_PAUSE {
             let wait = cx.background_executor().timer(RESTORE_AFTER_PAUSE - quiet);
-            self.restore_task = Some(cx.spawn_in(window, async move |this, cx| {
+            self.restore_task = Some(cx.spawn(async move |this, cx| {
                 wait.await;
-                let _ = this.update_in(cx, |v, window, cx| v.flush_restores(window, cx));
+                crate::in_window::update(&this, cx, |v, window, cx| v.flush_restores(window, cx));
             }));
             return;
         }
@@ -652,6 +652,17 @@ impl ComposerView {
 
     /// A paste into the composer: a URL over selected words links them. `false`: paste as
     /// usual.
+    /// Pasted text. On Linux, file URIs are files copied in a file manager: they attach, as
+    /// Windows' copied files do. `false`: the field pastes it as it is.
+    fn paste_text(&mut self, pasted: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        #[cfg(target_os = "linux")]
+        if let Some(paths) = crate::files::pasted_paths(pasted) {
+            self.attach_paths(&paths, cx);
+            return true;
+        }
+        self.paste_url(pasted, window, cx)
+    }
+
     pub fn paste_url(&mut self, pasted: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let (text, selection) = {
             let c = self.input.read(cx);
@@ -735,11 +746,16 @@ impl ComposerView {
     pub fn pick_files(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let picked = crate::files::pick_files(cx);
         self.picking = Some(cx.spawn_in(window, async move |this, cx| {
-            let picked = picked.await.ok().flatten();
+            let picked = picked.await;
             let _ = this.update(cx, |v, cx| {
                 v.picking = None;
-                if let Some(paths) = picked {
-                    v.attach_paths(&paths, cx);
+                match picked {
+                    Ok(Ok(Some(paths))) => v.attach_paths(&paths, cx),
+                    Ok(Err(_)) => {
+                        let issue = Issue::new(IssueKind::AttachRefused, copy::FILE_CHOOSER_FAILED);
+                        cx.emit(ComposerEvent::Notify(issue));
+                    }
+                    Ok(Ok(None)) | Err(_) => {}
                 }
             });
         }));
@@ -867,7 +883,7 @@ impl ComposerView {
                                 .any(|e| matches!(e, ClipboardEntry::String(_)));
                             composer
                                 .update(cx, |v, cx| match item.text().filter(|_| text) {
-                                    Some(text) => v.paste_url(&text, window, cx),
+                                    Some(text) => v.paste_text(&text, window, cx),
                                     None => v.paste_files(item, window, cx),
                                 })
                                 .unwrap_or(false)

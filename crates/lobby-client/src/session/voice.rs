@@ -787,6 +787,9 @@ impl Session {
     }
 
     fn try_watch(&mut self, sharer: &UserId, now: Instant) -> Result<(), VoiceError> {
+        if let Some(blocked) = crate::media::watch_blocked() {
+            return Err(VoiceError::Media(blocked));
+        }
         let call = self.voice_call().ok_or(VoiceError::NotInVoice)?;
         if !self.voice_active() {
             return Err(VoiceError::NotActive);

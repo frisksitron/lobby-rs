@@ -134,7 +134,8 @@ fn settings(shell: &Shell, cx: &App) -> Value {
 }
 
 fn model(shell: &Shell, window: &Window, cx: &App) -> Value {
-    let size = window.viewport_size();
+    let size = crate::scale::visible_size(window);
+    let margin = crate::kit::window_paddings(window);
     let lobbies: Vec<Value> = shell
         .switcher_entries(cx)
         .into_iter()
@@ -159,6 +160,8 @@ fn model(shell: &Shell, window: &Window, cx: &App) -> Value {
         "window": {
             "width": f32::from(size.width),
             "height": f32::from(size.height),
+            // Where the visible window starts in the surface the element bounds are measured in.
+            "margin": [f32::from(margin.left), f32::from(margin.top)],
             "active": window.is_window_active(),
             "hidden": shell.hidden_to_tray(),
         },
@@ -234,6 +237,7 @@ fn lobby(origin: String, view: &Entity<LobbyView>, window: &Window, cx: &App) ->
                     "sharing": r.sharing,
                     "tile": r.tile.map(|t| match t {
                         Tile::Faint => "faint",
+                        Tile::Unavailable => "unavailable",
                         Tile::Rest => "rest",
                         Tile::Coming => "coming",
                         Tile::OnScreen { .. } => "on_screen",

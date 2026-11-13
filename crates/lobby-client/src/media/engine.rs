@@ -257,6 +257,17 @@ impl VoiceHandle {
         Ok(())
     }
 
+    #[cfg(not(windows))]
+    pub fn start_share(
+        &mut self,
+        _: ScreenSource,
+        _: Quality,
+        _: ShareOpId,
+        _: Arc<OwnShareFeed>,
+    ) -> Result<(), MediaError> {
+        Err(MediaError::ShareUnsupported)
+    }
+
     pub fn stop_share(&mut self) {
         #[cfg(windows)]
         if let Some(share) = self.share.take() {

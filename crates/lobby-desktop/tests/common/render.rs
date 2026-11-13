@@ -118,6 +118,8 @@ pub fn open(rt: &tokio::runtime::Runtime, o: Opening) -> Rendered {
         shell.update(cx, |s, _| {
             s.set_idle_source(|| None);
             s.keep_in_tray(None);
+            #[cfg(target_os = "linux")]
+            s.set_minimizer(|_| {});
         })
     });
     if o.focused {
@@ -151,6 +153,8 @@ impl Rendered {
             );
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
+        // Show can replace the window (Linux).
+        self.window = self.cx.update(|cx| shell.read(cx).window());
         self.cx
             .update_window(self.window, |_, window, cx| {
                 use gpui_kit::test::TestWindowExt as _;

@@ -63,6 +63,15 @@ windows = { workspace = true, features = [
 ] }
 windows-core.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Voice's devices through PipeWire's or PulseAudio's own protocol (pure Rust, no libpulse): ALSA
+# lists no PipeWire device by name. Without a server cpal falls back to ALSA.
+cpal = { workspace = true, features = ["pulseaudio"] }
+# Lobby's own streams on that server, which carry the app's name, icon and role (cpal's cannot).
+pulseaudio.workspace = true
+# The netlink socket of the network watch (`netwatch::linux`).
+libc.workspace = true
+
 [dev-dependencies]
 lobby-client = { path = ".", features = ["test-support"] }
 lobby-server = { workspace = true, features = ["test-support"] }

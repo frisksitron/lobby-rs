@@ -20,12 +20,12 @@ use gpui_kit::{
     prelude::FluentBuilder as _,
     relative,
 };
-use lobby_client::{Intent, LobbyState, Phase, Volume, local_date};
+use lobby_client::{Intent, Issue, IssueKind, LobbyState, Phase, Volume, copy, local_date};
 use lobby_protocol::{Presence, UserId, VoiceState};
 
 use super::{
     forward,
-    own_card::{OwnCard, Renamed},
+    own_card::{ChooserFailed, OwnCard, Renamed},
     sidebar::{MemberSidebar, SidebarEvent},
     voice_active,
 };
@@ -68,6 +68,10 @@ impl MemberGroups {
 /// The tile of a share this person could show: one's own comes from this computer, a Member's
 /// from the Watch the Session runs.
 fn tile_of(state: &LobbyState, id: &UserId, is_me: bool, can_watch: bool) -> Tile {
+    // First: joining Voice would not help.
+    if lobby_client::watch_blocked().is_some() && !is_me {
+        return Tile::Unavailable;
+    }
     if !can_watch {
         return Tile::Faint;
     }
@@ -158,7 +162,7 @@ pub fn sharers(state: &LobbyState) -> Vec<Sharer> {
     member_groups(state)
         .in_voice
         .into_iter()
-        .filter(|r| r.tile.is_some_and(|t| t != Tile::Faint))
+        .filter(|r| r.tile.is_some_and(|t| !t.faint()))
         .map(|r| Sharer::of(&r))
         .collect()
 }
@@ -517,6 +521,11 @@ impl MemberSidebar {
         cx.observe(&own, |_, _, cx| cx.notify()).detach();
         cx.subscribe(&own, |this, _, _: &Renamed, _| this.refocus_card = true)
             .detach();
+        cx.subscribe(&own, |_, _, _: &ChooserFailed, cx| {
+            let issue = Issue::new(IssueKind::PictureFailed, copy::PICTURE_CHOOSER_FAILED);
+            cx.emit(SidebarEvent::Notify(issue));
+        })
+        .detach();
         self.own_card = Some(own.clone());
         own
     }

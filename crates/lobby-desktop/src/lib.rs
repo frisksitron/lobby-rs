@@ -16,6 +16,7 @@ pub mod gallery;
 pub mod hand_over;
 pub mod host;
 pub mod host_env;
+pub mod in_window;
 pub mod issues;
 pub mod kit;
 pub mod links;

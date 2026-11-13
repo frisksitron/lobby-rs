@@ -8,7 +8,9 @@
 //! (checked every 30 s) sets idle presence, and any input in the window ends idle at once. It also
 //! owns the Quit flow and the window close hook: the close button hides the window to the tray icon
 //! (where Show and Quit are), and without that icon it quits, so the process is never left with
-//! no way to reach it.
+//! no way to reach it. On Linux hiding minimizes the window, and Show replaces it with a new one
+//! for the same Shell (`reopen`) when the desktop will not bring it back: Mutter will not
+//! un-minimize one. The Shell always has a window.
 //!
 //! Every Lobby that answered at the URL step is saved in `Lobbies` and refreshed on READY; the last
 //! active one is restored at startup. The title bar's switcher moves between them: the Lobby being
@@ -31,6 +33,8 @@ mod kept;
 mod lobby_menu;
 mod presence;
 mod quit;
+#[cfg(target_os = "linux")]
+mod reopen;
 mod settings_page;
 mod switch;
 
@@ -61,11 +65,12 @@ use crate::{
     appearance,
     auth_view::{AuthView, AuthViewEvent},
     components::{
-        AddressForm, AppTitleBar, AuthScreen, BarButton, CONNECT_IDS, Feedback, LobbySwitcher,
-        MediaImages, StepRail, SwitcherEntry, busy_screen,
+        AddressForm, AppTitleBar, AuthScreen, BarButton, CONNECT_IDS, CloseRequested, Feedback,
+        LobbySwitcher, MediaImages, StepRail, SwitcherEntry, busy_screen,
     },
     entry_entity::{EntryChanged, EntryEntity},
     host::{self, single_instance},
+    in_window,
     issues::IssueCenter,
     kit::{ActiveTheme as _, TitleBar, WindowExt as _},
     lobbies::{Lobbies, LobbiesEvent},
@@ -251,6 +256,16 @@ pub struct Shell {
     pub quit: QuitState,
     window_host: host::WindowHost,
     native: Option<host::NativeWindow>,
+    setup: WindowSetup,
+    /// The OS window the Shell is in. On Linux a Show can replace it by a new one.
+    window: AnyWindowHandle,
+    /// What belongs to that one window, made again by [`Shell::bind_window`].
+    window_subscriptions: Vec<Subscription>,
+    #[cfg(target_os = "linux")]
+    reopen: reopen::Reopen,
+    /// Keeps the idle query's worker alive: dropping it stops the worker.
+    #[cfg(target_os = "linux")]
+    idle_watch: Option<host::IdleWatch>,
     /// Whether the window's close button hides it to the notification-area icon instead of
     /// quitting. Only while the icon exists: a hidden window with no icon could not be reached.
     has_tray: bool,
@@ -318,35 +333,16 @@ impl Shell {
         ]);
         appearance::apply(&deps.loaded.state.settings, cx);
         voice_shared::follow_settings(&deps.loaded.state.settings, cx);
-        let setup = deps.window;
-        let bounds = match setup.origin {
-            Some(origin) => Bounds::new(origin, setup.size),
-            None => Bounds::centered(setup.display, setup.size, cx),
-        };
-        let options = WindowOptions {
-            window_bounds: Some(if setup.maximized {
-                WindowBounds::Maximized(bounds)
-            } else {
-                WindowBounds::Windowed(bounds)
-            }),
-            window_min_size: Some(window_bounds::MIN_SIZE),
-            display_id: setup.display,
-            focus: setup.focus,
-            show: setup.show,
-            ..TitleBar::window_options()
-        };
+        let options = Self::window_options(&deps.window, None, cx);
         gpui_kit::open_window(options, cx, move |window, cx| {
             let shell = cx.new(|cx| Shell::new(deps, exit, window, cx));
-            // Without this GPUI destroys the window and, with QuitMode::Explicit, leaves a
-            // windowless process holding the session.
-            let weak = shell.downgrade();
-            window.on_window_should_close(cx, move |_window, cx| {
-                let _ = weak.update(cx, |shell, cx| shell.on_close_requested(cx));
-                false
-            });
             let weak = shell.downgrade();
             cx.on_action(move |_: &Quit, cx| {
                 let _ = weak.update(cx, |shell, cx| shell.quit(cx));
+            });
+            let weak = shell.downgrade();
+            cx.on_action(move |_: &CloseRequested, cx| {
+                let _ = weak.update(cx, |shell, cx| shell.on_close_requested(cx));
             });
             // At the app, so the size keys work on every route and over a dialog.
             let weak = shell.downgrade();
@@ -363,6 +359,84 @@ impl Shell {
             });
             shell
         })
+    }
+
+    /// `bounds` is where a window that was closed and comes back stood; `None` opens one by
+    /// `setup`.
+    fn window_options(
+        setup: &WindowSetup,
+        bounds: Option<WindowBounds>,
+        cx: &App,
+    ) -> WindowOptions {
+        let window_bounds = bounds.unwrap_or_else(|| {
+            let bounds = match setup.origin {
+                Some(origin) => Bounds::new(origin, setup.size),
+                None => Bounds::centered(setup.display, setup.size, cx),
+            };
+            if setup.maximized {
+                WindowBounds::Maximized(bounds)
+            } else {
+                WindowBounds::Windowed(bounds)
+            }
+        });
+        WindowOptions {
+            window_bounds: Some(window_bounds),
+            window_min_size: Some(window_bounds::MIN_SIZE),
+            display_id: setup.display,
+            focus: setup.focus,
+            show: setup.show,
+            #[cfg(target_os = "linux")]
+            app_id: Some(crate::host_env::APP_ID.to_owned()),
+            // GNOME grants no server-side decorations, and the kit draws its window controls only
+            // for a client-decorated window: ask for those everywhere.
+            #[cfg(target_os = "linux")]
+            window_decorations: Some(gpui_kit::WindowDecorations::Client),
+            ..TitleBar::window_options()
+        }
+    }
+
+    /// What belongs to one OS window, so it is made again for each window the Shell is shown in.
+    /// Without the close hook GPUI destroys the window and, with QuitMode::Explicit, leaves a
+    /// windowless process holding the session.
+    fn bind_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.window = window.window_handle();
+        let weak = cx.weak_entity();
+        window.on_window_should_close(cx, move |window, cx| {
+            let _ = weak.update(cx, |shell, cx| {
+                #[cfg(target_os = "linux")]
+                shell.learn_desktop(window);
+                #[cfg(not(target_os = "linux"))]
+                let _ = window;
+                shell.on_close_requested(cx)
+            });
+            false
+        });
+        self.window_subscriptions = vec![
+            // Coming back to the window is input too: idle ends now, not at the next check.
+            cx.observe_window_activation(window, |shell, window, cx| {
+                if window.is_window_active() {
+                    #[cfg(target_os = "linux")]
+                    {
+                        shell.learn_desktop(window);
+                        shell.window_is_up(cx);
+                    }
+                    shell.on_input(cx);
+                }
+            }),
+        ];
+        if self.setup.remember {
+            self.window_subscriptions.push(cx.observe_window_bounds(
+                window,
+                |shell, window, cx| {
+                    shell.remember_window(window, cx);
+                },
+            ));
+        }
+    }
+
+    /// The window the Shell is in now.
+    pub fn window(&self) -> AnyWindowHandle {
+        self.window
     }
 
     fn new(deps: ShellDeps, exit: Exit, window: &mut Window, cx: &mut Context<Self>) -> Self {
@@ -397,7 +471,7 @@ impl Shell {
         let started = started.or_else(|| StartedSession::restore(&client, &state, &signed_in));
         let lobbies = cx.new(|_| Lobbies::new(state_file, state).with_startup(signed_in, kept));
         let icons = cx.new(|_| LobbyIcons::new(client.clone(), paths.clone()));
-        let mut subscriptions = vec![
+        let subscriptions = vec![
             cx.observe(&icons, |_, _, cx| cx.notify()),
             cx.subscribe_in(
                 &url,
@@ -425,18 +499,7 @@ impl Shell {
                     let _ = shell.update(cx, |shell, cx| shell.on_system_wake(cx));
                 }
             }),
-            // Coming back to the window is input too: idle ends now, not at the next check.
-            cx.observe_window_activation(window, |shell, window, cx| {
-                if window.is_window_active() {
-                    shell.on_input(cx);
-                }
-            }),
         ];
-        if setup.remember {
-            subscriptions.push(cx.observe_window_bounds(window, |shell, window, cx| {
-                shell.remember_window(window, cx);
-            }));
-        }
         let idle_check = cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(IDLE_CHECK_EVERY).await;
@@ -477,6 +540,13 @@ impl Shell {
             quit: QuitState::Running,
             window_host,
             native: host::NativeWindow::of(window),
+            setup,
+            window: window.window_handle(),
+            window_subscriptions: Vec::new(),
+            #[cfg(target_os = "linux")]
+            reopen: reopen::Reopen::default(),
+            #[cfg(target_os = "linux")]
+            idle_watch: None,
             has_tray: false,
             hidden_to_tray: false,
             show_takes_focus: setup.focus,
@@ -505,6 +575,7 @@ impl Shell {
             quit_task: None,
             _subscriptions: subscriptions,
         };
+        shell.bind_window(window, cx);
         match (restore, started) {
             (Some(lobby), Some(started)) if started.origin == lobby.origin => {
                 info!(lobby = %lobby.origin, name = %lobby.name, "restoring the last active Lobby");
@@ -732,7 +803,7 @@ impl Shell {
         }
     }
 
-    pub fn sign_out(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn sign_out(&mut self, cx: &mut Context<Self>) {
         if self.quit != QuitState::Running || self.signing_out.is_some() {
             return;
         }
@@ -748,9 +819,9 @@ impl Shell {
         let (origin, info) = (origin.clone(), info.clone());
         info!(lobby = %origin, "signing out of this device");
         let task = session.update(cx, |s, cx| s.sign_out(cx));
-        self.signing_out = Some(cx.spawn_in(window, async move |this, cx| {
+        self.signing_out = Some(cx.spawn(async move |this, cx| {
             let _ = task.await;
-            let _ = this.update_in(cx, |shell, window, cx| {
+            in_window::update(&this, cx, |shell, window, cx| {
                 shell.signing_out = None;
                 shell.lobbies.update(cx, |l, cx| {
                     l.set_signed_in(&origin, false, cx);
@@ -893,7 +964,7 @@ impl Shell {
             window,
             |shell, _, ev: &LobbyViewEvent, window, cx| match ev {
                 LobbyViewEvent::ChangeLobby => shell.change_lobby(window, cx),
-                LobbyViewEvent::SignOut => shell.sign_out(window, cx),
+                LobbyViewEvent::SignOut => shell.sign_out(cx),
                 LobbyViewEvent::OpenSettings => shell.open_settings(window, cx),
                 LobbyViewEvent::LeaveSettings => shell.close_settings(window, cx),
                 LobbyViewEvent::Switch(pick) => shell.pick(pick.clone(), window, cx),
@@ -1080,6 +1151,16 @@ impl Shell {
 
 impl Render for Shell {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let content = self.content(window, cx);
+        #[cfg(target_os = "linux")]
+        return crate::components::dim_for_dialogs(content, window, cx);
+        #[cfg(not(target_os = "linux"))]
+        content
+    }
+}
+
+impl Shell {
+    fn content(&mut self, window: &mut Window, cx: &mut Context<Self>) -> gpui_kit::AnyElement {
         let theme = cx.theme();
         let background = theme.background;
         // Any key or click ends idle; capture runs before the views handle it. Ctrl+1…9 switch
@@ -1094,15 +1175,18 @@ impl Render for Shell {
                 this.on_key(ev, window, cx);
             }))
         };
-        let screen = |body: gpui_kit::AnyElement, bar: AppTitleBar, cx: &mut Context<Self>| {
-            input(div().id("shell"), cx)
+        let screen = |body: gpui_kit::AnyElement,
+                      bar: AppTitleBar,
+                      window: &Window,
+                      cx: &mut Context<Self>| {
+            let shell = input(div().id("shell"), cx)
                 .size_full()
                 .flex()
                 .flex_col()
                 .bg(background)
                 .child(bar)
-                .child(body)
-                .into_any_element()
+                .child(body);
+            crate::scale::round_to_window(shell, window, cx).into_any_element()
         };
         if self.quit != QuitState::Running {
             let current = self.current_origin().map(|o| {
@@ -1116,7 +1200,7 @@ impl Render for Shell {
                 "Quitting…"
             };
             let body = busy_screen("quitting", words, cx).into_any_element();
-            return screen(body, bar, cx);
+            return screen(body, bar, window, cx);
         }
         let bar = AppTitleBar::new()
             .left(self.switcher(cx))
@@ -1128,7 +1212,7 @@ impl Render for Shell {
                 }
             }));
         if let (Some(page), false) = (&self.settings, matches!(self.route, Route::Lobby(_))) {
-            return screen(page.clone().into_any_element(), bar, cx);
+            return screen(page.clone().into_any_element(), bar, window, cx);
         }
         match &self.route {
             Route::Lobby(lobby) => input(div().id("shell").size_full(), cx)
@@ -1151,9 +1235,11 @@ impl Render for Shell {
                     copy::CONNECT_SUBTITLE,
                 )
                 .child(form);
-                screen(connect.into_any_element(), bar, cx)
+                screen(connect.into_any_element(), bar, window, cx)
             }
-            Route::SignIn(sign_in) => screen(sign_in.auth.clone().into_any_element(), bar, cx),
+            Route::SignIn(sign_in) => {
+                screen(sign_in.auth.clone().into_any_element(), bar, window, cx)
+            }
         }
     }
 }

@@ -96,6 +96,11 @@ pub const PASTE: &str = "Paste";
 pub const SELECT_ALL: &str = "Select all";
 pub const OPEN: &str = "Open";
 pub const SAVE_FILE: &str = "Save…";
+pub const FILE_CHOOSER_FAILED: &str =
+    "The file chooser didn't open. Drag a file onto the window, or paste it.";
+pub const SAVE_DIALOG_FAILED: &str = "The save dialog didn't open.";
+/// A picture for an avatar or a Lobby's icon: there is no drop or paste to fall back on.
+pub const PICTURE_CHOOSER_FAILED: &str = "The file chooser didn't open.";
 
 pub fn new_messages(count: usize) -> String {
     match count {
@@ -119,6 +124,10 @@ pub const SHARE_NEEDS_VOICE: &str = "Join Voice to share or watch a screen.";
 /// The same as a tooltip, which has no full stop.
 pub const SHARE_NEEDS_VOICE_TIP: &str = "Join Voice to share or watch a screen";
 pub const WATCH_NEEDS_VOICE: &str = "Join Voice to watch";
+/// Linux has no H.264 decoder in Lobby yet, so a Member there sees a share but cannot watch it.
+pub const WATCH_UNAVAILABLE: &str = "Watching a Screen Share isn't available on Linux yet.";
+/// What a Member on Linux is told where sharing a screen would be.
+pub const SHARE_UNAVAILABLE: &str = "Sharing your screen isn't available on Linux yet.";
 /// After the title of such a window in the picker, which cannot pick it.
 pub const CANT_SHARE: &str = "can't be shared";
 
@@ -721,8 +730,12 @@ pub const DEVICE_COMMUNICATIONS: &str = "Communications default";
 pub const DEVICE_INPUT: &str = "Microphone";
 pub const DEVICE_OUTPUT: &str = "Speakers";
 pub const DEVICE_NOT_CONNECTED: &str = "not connected";
+#[cfg(windows)]
 pub const MIC_SILENT: &str = "Your microphone is sending silence. Check its mute switch and \
      Windows microphone privacy settings.";
+#[cfg(not(windows))]
+pub const MIC_SILENT: &str = "Your microphone is sending silence. Check its mute switch and \
+     your system's microphone privacy settings.";
 /// Under the meter, in the line that is kept for them.
 pub const MIC_TOO_QUIET: &str = "Very quiet. Raise the volume.";
 pub const MIC_TOO_LOUD: &str = "Too loud. Lower the volume.";

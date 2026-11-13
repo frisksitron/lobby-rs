@@ -3,9 +3,12 @@
 use lobby_desktop::{
     assets::LobbyAssets,
     gallery::{Gallery, STORIES, find},
+    host,
 };
 
 fn main() -> anyhow::Result<()> {
+    #[cfg(target_os = "linux")]
+    host::exit_unless_wayland_session();
     let initial = match std::env::args().nth(1) {
         None => None,
         Some(name) => match find(&name) {
@@ -16,16 +19,14 @@ fn main() -> anyhow::Result<()> {
             }
         },
     };
-    gpui_kit::application()
-        .with_assets(LobbyAssets)
-        .run(move |cx| {
-            gpui_kit::init(cx);
-            lobby_desktop::ui::init(cx);
-            cx.activate(true);
-            if let Err(e) = Gallery::open(initial, cx) {
-                eprintln!("cannot open the gallery window: {e}");
-                cx.quit();
-            }
-        });
+    host::application().with_assets(LobbyAssets).run(move |cx| {
+        gpui_kit::init(cx);
+        lobby_desktop::ui::init(cx);
+        cx.activate(true);
+        if let Err(e) = Gallery::open(initial, cx) {
+            eprintln!("cannot open the gallery window: {e}");
+            cx.quit();
+        }
+    });
     Ok(())
 }

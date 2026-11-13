@@ -16,5 +16,10 @@ serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 
+# `drive` on Linux removes a driven client's saved sessions from the Secret Service, as the
+# client's own keychain crate names them.
+[target.'cfg(target_os = "linux")'.dependencies]
+keyring.workspace = true
+
 [lints]
 workspace = true

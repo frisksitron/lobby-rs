@@ -15,11 +15,18 @@
 //! Clients keep their tokens in the real Credential Manager, one entry per client and Lobby origin,
 //! so `close`/`open` restores the session. The driver removes its run's entries when it ends, and
 //! at start those of earlier runs whose driver is gone (for example after Ctrl+C).
+//!
+//! On Linux the pipe is the app's Unix socket, the windows open in a headless compositor of the
+//! run's own, `shot` is a picture of that compositor, and the tokens are in the Secret Service
+//! (see `linux`).
+
+#[cfg(target_os = "linux")]
+mod linux;
 
 use std::{
     collections::BTreeMap,
     fs,
-    io::{BufRead as _, BufReader, Write as _},
+    io::{BufRead as _, BufReader, Read, Write},
     net::{TcpListener, TcpStream, UdpSocket},
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
@@ -335,6 +342,11 @@ impl Server {
             .spawn()
             .map_err(|e| format!("cannot start {}: {e}", bin.display()))?;
         self.child = Some(child);
+        #[cfg(target_os = "linux")]
+        {
+            let pid = self.child.as_ref().map_or(0, Child::id);
+            linux::record_server(std::process::id(), pid, &self.config)?;
+        }
         let until = Instant::now() + SERVER_WITHIN;
         while TcpStream::connect(("127.0.0.1", self.port)).is_err() {
             if Instant::now() >= until {
@@ -371,6 +383,24 @@ struct Client {
     pipe: Option<(mpsc::Sender<String>, mpsc::Receiver<String>)>,
     /// The header's `size`: the window is resized to it each time it opens.
     size: Option<(f64, f64)>,
+    /// Where its window opens: the run's headless compositor (none with `--visible`).
+    #[cfg(target_os = "linux")]
+    stage: Option<linux::Stage>,
+}
+
+/// The two ends of an open automation channel.
+type Channel = (Box<dyn Read + Send>, Box<dyn Write + Send>);
+
+#[cfg(windows)]
+fn connect(name: &str) -> std::io::Result<Channel> {
+    let file = fs::OpenOptions::new().read(true).write(true).open(name)?;
+    Ok((Box::new(file.try_clone()?), Box::new(file)))
+}
+
+#[cfg(unix)]
+fn connect(name: &str) -> std::io::Result<Channel> {
+    let socket = std::os::unix::net::UnixStream::connect(name)?;
+    Ok((Box::new(socket.try_clone()?), Box::new(socket)))
 }
 
 /// The instance id of `client` in run `run` (also its keychain profile).
@@ -383,8 +413,41 @@ impl Client {
         instance_id(self.run, &self.name)
     }
 
+    #[cfg(windows)]
     fn pipe_name(&self) -> String {
         format!(r"\\.\pipe\lobby-automation-{}", self.instance())
+    }
+
+    /// The app's socket is in its `XDG_RUNTIME_DIR`: the compositor's, or the person's own.
+    #[cfg(unix)]
+    fn pipe_name(&self) -> String {
+        #[cfg(target_os = "linux")]
+        let staged = self
+            .stage
+            .as_ref()
+            .map(|s| s.desktop.runtime_dir().to_owned());
+        #[cfg(not(target_os = "linux"))]
+        let staged = None;
+        let dir = staged.unwrap_or_else(|| {
+            std::env::var_os("XDG_RUNTIME_DIR").map_or_else(std::env::temp_dir, PathBuf::from)
+        });
+        dir.join(format!("lobby-automation-{}.sock", self.instance()))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn resize(&mut self, w: f64, h: f64) -> Result<(), String> {
+        let resized = self.request(&json!({"action": format!("resize:{w}x{h}")}))?;
+        if resized["ok"] != true {
+            return Err(format!("{}: resize to {w}×{h}: {resized}", self.name));
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "linux")]
+    fn resize(&mut self, w: f64, h: f64) -> Result<(), String> {
+        self.resize_window(w, h)
     }
 
     fn open(&mut self, bin: &Path, opts: &Options) -> Result<(), String> {
@@ -404,18 +467,38 @@ impl Client {
         if opts.visible {
             cmd.env("LOBBY_AUTOMATION_VISIBLE", "1");
         }
+        #[cfg(target_os = "linux")]
+        {
+            // The app's log is the first place a failed step is explained.
+            let log = fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(self.dir.join("app.log"))
+                .map_err(|e| e.to_string())?;
+            cmd.stdout(log.try_clone().map_err(|e| e.to_string())?)
+                .stderr(log)
+                .env("RUST_LOG", "info");
+            if let Some(stage) = &self.stage {
+                stage.desktop.env(&mut cmd);
+            }
+            // The Secret Service is on the person's session bus, wherever the window is.
+            if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_none()
+                && let Some(runtime) = std::env::var_os("XDG_RUNTIME_DIR")
+            {
+                cmd.env(
+                    "DBUS_SESSION_BUS_ADDRESS",
+                    format!("unix:path={}/bus", runtime.to_string_lossy()),
+                );
+            }
+        }
         self.child = Some(
             cmd.spawn()
                 .map_err(|e| format!("cannot start {}: {e}", bin.display()))?,
         );
         let until = Instant::now() + PIPE_WITHIN;
-        let file = loop {
-            match fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(self.pipe_name())
-            {
-                Ok(f) => break f,
+        let (read, write) = loop {
+            match connect(&self.pipe_name()) {
+                Ok(channel) => break channel,
                 Err(_) if Instant::now() < until => {
                     if let Some(Ok(Some(status))) = self.child.as_mut().map(Child::try_wait) {
                         return Err(format!("{} exited at start: {status}", self.name));
@@ -425,8 +508,8 @@ impl Client {
                 Err(e) => return Err(format!("{}'s pipe did not open: {e}", self.name)),
             }
         };
-        let mut reader = BufReader::new(file.try_clone().map_err(|e| e.to_string())?);
-        let mut write = file;
+        let mut reader = BufReader::new(read);
+        let mut write = write;
         let (requests, todo) = mpsc::channel::<String>();
         let (tx, answers) = mpsc::channel();
         // Ends when the driver drops its sender or the pipe closes (the app quit or was ended).
@@ -450,11 +533,10 @@ impl Client {
         if hello["ok"] != true {
             return Err(format!("{}: {hello}", self.name));
         }
+        #[cfg(target_os = "linux")]
+        self.place()?;
         if let Some((w, h)) = self.size {
-            let resized = self.request(&json!({"action": format!("resize:{w}x{h}")}))?;
-            if resized["ok"] != true {
-                return Err(format!("{}: resize to {w}×{h}: {resized}", self.name));
-            }
+            self.resize(w, h)?;
         }
         Ok(())
     }
@@ -531,13 +613,21 @@ impl Drop for Client {
 }
 
 /// The Credential Manager entries of a driven client: `<origin>.<service>`, as the keyring
-/// crate names them on Windows.
+/// crate names them on Windows. The same string names a Secret Service item on Linux.
 struct Tokens {
     targets: Vec<String>,
+    #[cfg(target_os = "linux")]
+    run: u32,
 }
 
 impl Tokens {
+    #[cfg(target_os = "linux")]
+    fn sweep_stale() {
+        linux::sweep_stale_tokens();
+    }
+
     /// Removes what earlier runs left behind: entries of a driver process that is gone.
+    #[cfg(not(target_os = "linux"))]
     fn sweep_stale() {
         for target in token_targets() {
             let Some((_, profile)) = target.split_once(TOKEN_SERVICE) else {
@@ -555,12 +645,16 @@ impl Tokens {
 
 impl Drop for Tokens {
     fn drop(&mut self) {
+        #[cfg(target_os = "linux")]
+        linux::forget_recorded(self.run, &self.targets);
+        #[cfg(not(target_os = "linux"))]
         for target in &self.targets {
             forget(target);
         }
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn token_targets() -> Vec<String> {
     if !cfg!(windows) {
         return Vec::new();
@@ -575,6 +669,7 @@ fn token_targets() -> Vec<String> {
         .collect()
 }
 
+#[cfg(not(target_os = "linux"))]
 fn forget(target: &str) {
     if cfg!(windows) {
         let _ = Command::new("cmdkey")
@@ -585,6 +680,7 @@ fn forget(target: &str) {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn process_alive(pid: u32) -> bool {
     Command::new("tasklist")
         .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
@@ -637,6 +733,9 @@ pub fn run(opts: &Options) -> Result<String, String> {
             header.clients.join(",")
         ));
     }
+    // Before the build, which takes minutes: a missing tool is the cheaper thing to hear first.
+    #[cfg(target_os = "linux")]
+    linux::require_tools(!opts.visible)?;
     if opts.build {
         build()?;
     }
@@ -644,7 +743,14 @@ pub fn run(opts: &Options) -> Result<String, String> {
     let bin = std::env::var_os("CARGO_TARGET_DIR")
         .map_or_else(|| crate::workspace_root().join("target"), PathBuf::from)
         .join("debug");
-    let (server_bin, client_bin) = (bin.join("lobby-server.exe"), bin.join("lobby.exe"));
+    let exe = std::env::consts::EXE_SUFFIX;
+    let (server_bin, client_bin) = (
+        bin.join(format!("lobby-server{exe}")),
+        bin.join(format!("lobby{exe}")),
+    );
+    // A driver that was killed leaves its servers running.
+    #[cfg(target_os = "linux")]
+    linux::sweep_stale_servers();
     let run_dir = crate::workspace_root().join("target/drive").join(&name);
     let _ = fs::remove_dir_all(&run_dir);
     let out = run_dir.join("out");
@@ -677,7 +783,14 @@ pub fn run(opts: &Options) -> Result<String, String> {
     let lobby2 = origins.get(1).cloned();
     let run = std::process::id();
     Tokens::sweep_stale();
-    // Declared before the clients, so it is dropped after they have quit.
+    // Declared before the clients, so it is dropped after they have quit. The compositor
+    // outlives the tokens' cleanup, which never needs it.
+    #[cfg(target_os = "linux")]
+    let desktop = if opts.visible {
+        None
+    } else {
+        Some(std::sync::Arc::new(linux::Desktop::start()?))
+    };
     let _tokens = Tokens {
         targets: header
             .clients
@@ -688,11 +801,18 @@ pub fn run(opts: &Options) -> Result<String, String> {
                     .map(move |o| format!("{o}.{TOKEN_SERVICE}{run}-{c}"))
             })
             .collect(),
+        #[cfg(target_os = "linux")]
+        run,
     };
+    #[cfg(target_os = "linux")]
+    linux::record_tokens(run, &_tokens.targets)?;
     let mut clients: BTreeMap<String, Client> = header
         .clients
         .iter()
-        .map(|c| {
+        .enumerate()
+        .map(|(slot, c)| {
+            #[cfg(not(target_os = "linux"))]
+            let _ = slot;
             (
                 c.clone(),
                 Client {
@@ -702,6 +822,11 @@ pub fn run(opts: &Options) -> Result<String, String> {
                     child: None,
                     pipe: None,
                     size: header.size.filter(|&wh| wh != (680., 480.)),
+                    #[cfg(target_os = "linux")]
+                    stage: desktop.as_ref().map(|desktop| linux::Stage {
+                        desktop: desktop.clone(),
+                        slot,
+                    }),
                 },
             )
         })
@@ -770,6 +895,10 @@ pub fn run(opts: &Options) -> Result<String, String> {
                             json!(slashes(&out.join(format!("{}-{dump}.json", line.on))));
                     }
                     let c = clients.get_mut(&line.on).ok_or("unknown client")?;
+                    #[cfg(target_os = "linux")]
+                    if let Some(done) = c.desktop_step(&step, &out) {
+                        return done;
+                    }
                     let answer = c.request(&step)?;
                     if answer["ok"] == true {
                         Ok(answer)

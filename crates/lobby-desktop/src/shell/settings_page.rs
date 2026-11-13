@@ -5,6 +5,7 @@ use gpui_kit::{AppContext as _, Context, Window};
 use tracing::info;
 
 use super::{LobbyRoute, QuitState, Route, Shell, SwitchTarget};
+use crate::in_window;
 use crate::kit::WindowExt as _;
 use crate::settings_view::{SettingsEvent, SettingsView};
 
@@ -31,7 +32,7 @@ impl Shell {
         }
         info!("opening Settings");
         let lobbies = self.lobbies.clone();
-        let tray = self.has_tray;
+        let tray = self.tray_hides();
         let (devices, session) = (self.devices, self.session().cloned());
         let page = cx.new(|cx| SettingsView::new(lobbies, tray, devices, session, cx));
         self.settings_events = Some(cx.subscribe_in(
@@ -75,9 +76,9 @@ impl Shell {
         info!(lobby = %origin, "left the Lobby");
         let task = session.update(cx, |s, cx| s.leave_lobby(cx));
         self.close_settings(window, cx);
-        self.signing_out = Some(cx.spawn_in(window, async move |this, cx| {
+        self.signing_out = Some(cx.spawn(async move |this, cx| {
             let _ = task.await;
-            let _ = this.update_in(cx, |shell, window, cx| {
+            in_window::update(&this, cx, |shell, window, cx| {
                 shell.signing_out = None;
                 shell.lobbies.update(cx, |l, cx| l.remove(&origin, cx));
                 if shell.back_to.as_ref() == Some(&origin) {

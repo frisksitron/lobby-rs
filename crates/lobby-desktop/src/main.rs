@@ -50,11 +50,10 @@ fn main() -> anyhow::Result<()> {
         .build()?;
     // A published build is its own setup and uninstaller. Never while driven: a drive must not
     // install anything.
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     if updates::published_repo().is_some()
         && !env.automation
-        && host::install::on_start(rt.handle(), updates::current_version())
-            == host::install::Startup::Exit
+        && host::install::on_start(rt.handle(), updates::current_version()) == host::Startup::Exit
     {
         logging::flush_and_drop();
         return Ok(());
@@ -83,6 +82,14 @@ fn main() -> anyhow::Result<()> {
         Instance::First(guard) => Some(guard),
         Instance::Unguarded => None,
     };
+    // Every start that opens no window is behind us (uninstall, handing over to the installed
+    // copy, a second launch): those work from a TTY, over SSH or under X11. From here on, a
+    // window is what is wanted, and nothing has touched the keychain or the network yet.
+    #[cfg(target_os = "linux")]
+    {
+        host::exit_unless_wayland_session();
+        host::note_launch_token();
+    }
     // This launch's own link takes the same way in as a second launch's.
     if let Some(link) = link {
         let _ = host_events.send(HostEvent::OpenLink(link));
@@ -137,7 +144,7 @@ fn main() -> anyhow::Result<()> {
     let driven = env.automation;
 
     clock.step("before GPUI");
-    gpui_kit::application()
+    host::application()
         .with_assets(LobbyAssets)
         .with_quit_mode(QuitMode::Explicit)
         .run(move |cx| {
@@ -160,15 +167,7 @@ fn main() -> anyhow::Result<()> {
                 Ok((window, shell)) => {
                     clock.step("main window");
                     clock.on_first_frame(window, cx);
-                    host_events_for(
-                        &env,
-                        &shell,
-                        window,
-                        host_events,
-                        host_incoming,
-                        instance,
-                        cx,
-                    );
+                    host_events_for(&env, &shell, host_events, host_incoming, instance, cx);
                     start_updates(update_feed, &update_client, &shell, on_exit, cx);
                     automation(&env, window, shell, cx);
                 }
@@ -183,12 +182,14 @@ fn main() -> anyhow::Result<()> {
     // instead.
     // A downloaded update goes in once the app has let go of everything, so the new one starts
     // clean. A driven app's exe is a dev build, which an update must not replace.
-    #[cfg(windows)]
+    #[cfg(any(windows, target_os = "linux"))]
     if let Some((staged, relaunch)) = swap_on_exit.take()
         && !driven
     {
         host::install::apply_update(&staged, relaunch);
     }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    let _ = (swap_on_exit, driven);
     info!("exited");
     logging::flush_and_drop();
     Ok(())
@@ -203,7 +204,7 @@ fn start_updates(
     cx: &mut App,
 ) {
     let (Some(feed), Some(dir)) = (
-        feed,
+        feed.filter(|_| cfg!(any(windows, target_os = "linux"))),
         std::env::current_exe()
             .ok()
             .and_then(|exe| exe.parent().map(ToOwned::to_owned)),
@@ -252,7 +253,6 @@ fn window_setup(env: &HostEnv, state: &Persisted, cx: &App) -> WindowSetup {
 fn host_events_for(
     env: &HostEnv,
     shell: &Entity<Shell>,
-    window: AnyWindowHandle,
     events: UnboundedSender<HostEvent>,
     incoming: UnboundedReceiver<HostEvent>,
     instance: Option<single_instance::Guard>,
@@ -260,22 +260,34 @@ fn host_events_for(
 ) {
     // A driven client's icon is registered but hidden, so a drive leaves the person's tray alone.
     let shown = !(cfg!(feature = "automation") && env.automation);
+    // Linux registers the icon on a thread of its own and the Shell takes it within a time limit:
+    // a stalled bus must not hold up the start.
+    #[cfg(target_os = "linux")]
+    let tray = Tray::register(&env.tray_tooltip(), shown, events);
+    #[cfg(not(target_os = "linux"))]
     let tray = Tray::add(&env.tray_tooltip(), shown, events);
+    #[cfg(not(target_os = "linux"))]
     if tray.is_none() {
         warn!("no tray icon: the close button quits");
     }
     shell.update(cx, |shell, cx| {
+        #[cfg(target_os = "linux")]
+        {
+            shell.keep_in_tray_when(tray, cx);
+            shell.keep_idle_watch(host::IdleWatch::start(lobby_desktop::shell::IDLE_AFTER));
+        }
+        #[cfg(not(target_os = "linux"))]
         if tray.is_some() {
             shell.keep_in_tray(tray);
         }
         if let Some(guard) = instance {
             shell.hold_instance(guard);
         }
-        shell.listen(incoming, window, cx);
+        shell.listen(incoming, cx);
     });
 }
 
-#[cfg(all(feature = "automation", windows))]
+#[cfg(feature = "automation")]
 fn automation(env: &HostEnv, window: AnyWindowHandle, shell: Entity<Shell>, cx: &mut App) {
     if !env.automation {
         return;
@@ -295,7 +307,7 @@ fn automation(env: &HostEnv, window: AnyWindowHandle, shell: Entity<Shell>, cx: 
     cx.set_global(channel);
 }
 
-#[cfg(not(all(feature = "automation", windows)))]
+#[cfg(not(feature = "automation"))]
 fn automation(env: &HostEnv, _: AnyWindowHandle, _: Entity<Shell>, _: &mut App) {
     if env.automation {
         warn!("LOBBY_AUTOMATION=1 has no effect: this build has no `automation` feature");

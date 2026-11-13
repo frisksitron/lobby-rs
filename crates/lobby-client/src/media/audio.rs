@@ -26,6 +26,8 @@ use cpal::{
 };
 use tracing::{info, warn};
 
+#[cfg(target_os = "linux")]
+use super::pulse;
 use super::{
     AudioSink, AudioSource, DEVICE_POLL, DEVICE_START_TIMEOUT, DeviceChoice, DeviceKind,
     DeviceSetup, FRAME, MediaConfig, MediaError, MicLevel, MicMeter, NamedDevice, SAMPLE_RATE,
@@ -138,6 +140,10 @@ pub(crate) fn start(
 ) -> Result<AudioThreads, MediaError> {
     let mut threads = Vec::new();
     let mut slots = Vec::new();
+    let purpose = match &reports {
+        Reports::Call(_) => Purpose::Voice,
+        Reports::Test(_) => Purpose::Test,
+    };
     #[cfg(feature = "test-support")]
     let mut broken = None;
 
@@ -158,13 +164,13 @@ pub(crate) fn start(
                 })?);
             }
             AudioSource::Device { setup, level } => {
-                slots.push(Slot::input(setup, mic, counters, level));
+                slots.push(Slot::input(setup, mic, counters, level, purpose));
             }
             #[cfg(feature = "test-support")]
             AudioSource::Broken(e) => broken = Some(e),
         }
         match sink {
-            AudioSink::Device(setup) => slots.push(Slot::output(setup, playout)),
+            AudioSink::Device(setup) => slots.push(Slot::output(setup, playout, purpose)),
             AudioSink::Null => {
                 threads.push(thread("lobby-playout", move || {
                     clocked_sink(&mut playout, |_| {}, &stop)
@@ -261,6 +267,7 @@ impl MicTest {
                     MicTx::new(ring, Arc::default()),
                     Arc::new(AudioCounters::default()),
                     level,
+                    Purpose::Test,
                 )]);
                 let mut report = |report: Report| reports.report(report);
                 match running.open_all(&mut report) {
@@ -331,7 +338,33 @@ impl FaultFlag {
     }
 }
 
-type Build = Box<dyn Fn(&cpal::Device, &Arc<FaultFlag>) -> Result<cpal::Stream, MediaError> + Send>;
+/// An open stream: dropping it closes it. cpal's, or on a Pulse server Lobby's own (`pulse`).
+pub(super) type Open = Box<dyn std::any::Any + Send>;
+
+/// What a stream is for. A desktop's sound settings show it and act on it (Linux).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Purpose {
+    /// The call: what Lobby plays of the others, and the microphone.
+    Voice,
+    /// Settings listening to the microphone, with no call on.
+    Test,
+    /// Lobby's short interface sounds.
+    Interface,
+}
+
+type Build = Box<dyn Fn(&cpal::Device, &Arc<FaultFlag>) -> Result<Open, MediaError> + Send>;
+
+/// cpal's default host. On Linux, without waiting on a sound server that does not answer, and the
+/// one host every caller shares.
+#[cfg(target_os = "linux")]
+pub(super) fn default_host() -> Arc<cpal::Host> {
+    pulse::host()
+}
+
+#[cfg(not(target_os = "linux"))]
+pub(super) fn default_host() -> cpal::Host {
+    cpal::default_host()
+}
 
 pub(super) fn device(
     host: &cpal::Host,
@@ -359,7 +392,7 @@ struct Slot {
     setup: DeviceSetup,
     build: Build,
     follower: Option<Follower>,
-    stream: Option<cpal::Stream>,
+    stream: Option<Open>,
     fault: Arc<FaultFlag>,
     moves: u32,
 }
@@ -370,6 +403,7 @@ impl Slot {
         mic: MicTx,
         counters: Arc<AudioCounters>,
         level: MicLevel,
+        purpose: Purpose,
     ) -> Slot {
         let mic = Arc::new(Mutex::new(mic));
         Slot::new(
@@ -378,7 +412,7 @@ impl Slot {
             Box::new(move |device, fault| {
                 let mic = mic.clone();
                 let counters = counters.clone();
-                input_stream(device, level.clone(), fault, move |sample| {
+                input_stream(device, purpose, level.clone(), fault, move |sample| {
                     let Ok(mut mic) = mic.try_lock() else {
                         return;
                     };
@@ -390,12 +424,12 @@ impl Slot {
         )
     }
 
-    fn output(setup: DeviceSetup, playout: Playout) -> Slot {
+    fn output(setup: DeviceSetup, playout: Playout, purpose: Purpose) -> Slot {
         let playout = Arc::new(Mutex::new(playout));
         Slot::new(
             DeviceKind::Output,
             setup,
-            Box::new(move |device, fault| output_stream(device, playout.clone(), fault)),
+            Box::new(move |device, fault| output_stream(device, purpose, playout.clone(), fault)),
         )
     }
 
@@ -482,13 +516,17 @@ impl Running {
         if self.slots.is_empty() {
             return Ok(());
         }
-        let host = cpal::default_host();
+        let host = default_host();
+        info!(host = host.id().name(), "audio host");
         for slot in &mut self.slots {
             let list = slot.setup.source.list();
             let (follower, mut fell_back) =
                 Follower::start(slot.setup.choice.clone(), list.of(slot.kind));
             slot.follower = Some(follower);
-            fell_back = slot.open(&host)?.or(fell_back);
+            fell_back = slot
+                .open(&host)
+                .map_err(|e| no_sound_server(&host, e))?
+                .or(fell_back);
             if let Some(wanted) = fell_back {
                 report(Report::FellBack(slot.kind, wanted));
             }
@@ -504,7 +542,7 @@ impl Running {
             while cmds.recv().is_ok() {}
             return;
         }
-        let host = cpal::default_host();
+        let host = default_host();
         let mut polled = Instant::now();
         loop {
             let mut asked = match cmds.recv_timeout(WATCH_TICK) {
@@ -551,6 +589,25 @@ impl Drop for Running {
     }
 }
 
+/// ALSA is what `cpal` falls back to when no Pulse server answers, and without a PipeWire that
+/// answers either, its devices fail with plumbing's words ("Host is down"). Say what is wrong.
+#[cfg(target_os = "linux")]
+fn no_sound_server(host: &cpal::Host, e: MediaError) -> MediaError {
+    match e {
+        MediaError::Device(_)
+            if host.id() == cpal::HostId::Alsa && pulseaudio::socket_path_from_env().is_none() =>
+        {
+            MediaError::NoSoundServer
+        }
+        e => e,
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn no_sound_server(_: &cpal::Host, e: MediaError) -> MediaError {
+    e
+}
+
 fn log_opened(kind: DeviceKind) {
     info!(?kind, "audio stream opened");
 }
@@ -578,11 +635,17 @@ fn error_callback(what: &'static str, fault: Arc<FaultFlag>) -> impl FnMut(cpal:
 /// `level` first, at the device's own rate and before any DSP.
 fn input_stream(
     device: &cpal::Device,
+    purpose: Purpose,
     level: MicLevel,
     fault: &Arc<FaultFlag>,
     on_sample: impl FnMut(f32) + Send + 'static,
-) -> Result<cpal::Stream, MediaError> {
+) -> Result<Open, MediaError> {
     let name = device_name(device, "input");
+    #[cfg(target_os = "linux")]
+    if let Some(source) = pulse::name_of(device) {
+        info!(device = %name, ?purpose, "microphone");
+        return pulse_input(source, purpose, level, fault, on_sample);
+    }
     let default = device.default_input_config().map_err(device_error)?;
     let format = default.sample_format();
     let mut config = default.config();
@@ -596,10 +659,11 @@ fn input_stream(
     {
         config = c.with_sample_rate(SAMPLE_RATE).config();
     }
+    config.buffer_size = cpal::BufferSize::Default;
     let channels = usize::from(config.channels.max(1));
     let resampler = Resampler::new(config.sample_rate, SAMPLE_RATE);
     let meter = MicMeter::new(config.sample_rate, level);
-    info!(device = %name, rate = config.sample_rate, channels, ?format, "microphone");
+    info!(device = %name, ?purpose, rate = config.sample_rate, channels, ?format, "microphone");
     let on_error = error_callback("microphone", fault.clone());
     let stream = match format {
         SampleFormat::F32 => device.build_input_stream(
@@ -622,7 +686,33 @@ fn input_stream(
     }
     .map_err(device_error)?;
     stream.play().map_err(device_error)?;
-    Ok(stream)
+    Ok(Box::new(stream))
+}
+
+/// The microphone on a Pulse server: mono at 48 kHz as the server converts it, measured into
+/// `level` and handed to `on_sample` one sample at a time.
+#[cfg(target_os = "linux")]
+fn pulse_input(
+    source: String,
+    purpose: Purpose,
+    level: MicLevel,
+    fault: &Arc<FaultFlag>,
+    mut on_sample: impl FnMut(f32) + Send + 'static,
+) -> Result<Open, MediaError> {
+    let mut meter = MicMeter::new(SAMPLE_RATE, level);
+    let fault = fault.clone();
+    let stream = pulse::input(
+        source,
+        purpose,
+        move |samples| {
+            for &sample in samples {
+                meter.push(sample);
+                on_sample(sample);
+            }
+        },
+        move || fault.set(Fault::Moved),
+    )?;
+    Ok(Box::new(stream))
 }
 
 /// The input callback: each frame of `T` samples downmixed to one f32, measured, then resampled.
@@ -654,16 +744,18 @@ fn device_name(device: &cpal::Device, fallback: &str) -> String {
 
 fn output_stream(
     device: &cpal::Device,
+    purpose: Purpose,
     playout: Arc<Mutex<Playout>>,
     fault: &Arc<FaultFlag>,
-) -> Result<cpal::Stream, MediaError> {
+) -> Result<Open, MediaError> {
     let name = device_name(device, "output");
     let config = output_config(device)?;
     let channels = usize::from(config.channels.max(1));
-    info!(device = %name, channels, "speakers");
+    info!(device = %name, ?purpose, channels, "speakers");
     mono_output(
         device,
         config,
+        purpose,
         error_callback("speaker", fault.clone()),
         move |mono| match playout.try_lock() {
             Ok(mut playout) => playout.render(mono),
@@ -682,13 +774,30 @@ pub(super) fn output_config(device: &cpal::Device) -> Result<StreamConfig, Media
     })
 }
 
-/// A playing stream: `render` fills mono samples, copied to every channel.
+/// A playing stream: `render` fills mono samples, copied to every channel. On a Pulse server the
+/// stream is Lobby's own (`pulse`), whatever `config` says.
+#[cfg_attr(
+    not(target_os = "linux"),
+    expect(
+        unused_variables,
+        reason = "only Linux's sound server is told what a stream is for"
+    )
+)]
 pub(super) fn mono_output(
     device: &cpal::Device,
     config: StreamConfig,
+    purpose: Purpose,
     on_error: impl FnMut(cpal::Error) + Send + 'static,
     mut render: impl FnMut(&mut [f32]) + Send + 'static,
-) -> Result<cpal::Stream, MediaError> {
+) -> Result<Open, MediaError> {
+    #[cfg(target_os = "linux")]
+    if let Some(sink) = pulse::name_of(device) {
+        let mut on_error = on_error;
+        let stream = pulse::output(sink, purpose, render, move || {
+            on_error(cpal::Error::new(cpal::ErrorKind::StreamInvalidated));
+        })?;
+        return Ok(Box::new(stream));
+    }
     let channels = usize::from(config.channels.max(1));
     let mut scratch = vec![0f32; OUTPUT_SCRATCH];
     let stream = device
@@ -709,7 +818,7 @@ pub(super) fn mono_output(
         )
         .map_err(device_error)?;
     stream.play().map_err(device_error)?;
-    Ok(stream)
+    Ok(Box::new(stream))
 }
 
 fn synthesize(

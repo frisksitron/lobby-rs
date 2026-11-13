@@ -5,7 +5,8 @@
 //!
 //! A feed is laid out like a GitHub repository's Releases: the newest manifest at
 //! `<base>/latest/download/latest.json`, each version's app at
-//! `<base>/download/v<version>/LobbySetup.exe`.
+//! `<base>/download/v<version>/LobbySetup.exe`. On Linux the files are `latest-linux.json` and
+//! `lobby-linux-x86_64`.
 
 use std::{
     fmt, fs, io,
@@ -26,11 +27,40 @@ use tokio_util::task::AbortOnDropHandle;
 use tracing::{info, warn};
 use url::Url;
 
-/// The release asset: the app itself, which installs itself when started from anywhere else.
-pub const ASSET: &str = "LobbySetup.exe";
+pub use names::{ASSET, EXE, MANIFEST, OLD, SETUP_COPY};
+use names::{PARTIAL, STAGED};
+
 /// Every file an install or an update makes in the app's folder, for uninstall.
-pub const APP_FILES: [&str; 5] = ["Lobby.exe", OLD, STAGED, PARTIAL, SETUP_COPY];
-pub const MANIFEST: &str = "latest.json";
+pub const APP_FILES: [&str; 5] = [EXE, OLD, STAGED, PARTIAL, SETUP_COPY];
+
+/// What each system calls the app's files. Windows keeps the names its installed apps and
+/// released feeds already use.
+#[cfg(not(target_os = "linux"))]
+mod names {
+    /// The release asset: the app itself, which installs itself when started from anywhere else.
+    pub const ASSET: &str = "LobbySetup.exe";
+    pub const MANIFEST: &str = "latest.json";
+    /// The installed app.
+    pub const EXE: &str = "Lobby.exe";
+    /// The download in progress, next to the app, and the finished one waiting for a restart.
+    pub const PARTIAL: &str = "Lobby.download";
+    pub const STAGED: &str = "Lobby.update.exe";
+    /// The app that was running when an update was swapped in; the next start deletes it.
+    pub const OLD: &str = "Lobby.old.exe";
+    /// Setup's copy of itself, before it is swapped in.
+    pub const SETUP_COPY: &str = "Lobby.setup.exe";
+}
+
+#[cfg(target_os = "linux")]
+mod names {
+    pub const ASSET: &str = "lobby-linux-x86_64";
+    pub const MANIFEST: &str = "latest-linux.json";
+    pub const EXE: &str = "lobby";
+    pub const PARTIAL: &str = "lobby.download";
+    pub const STAGED: &str = "lobby.update";
+    pub const OLD: &str = "lobby.old";
+    pub const SETUP_COPY: &str = "lobby.setup";
+}
 
 const MANIFEST_TIMEOUT: Duration = Duration::from_secs(20);
 /// A download that receives nothing for this long is abandoned until the next check.
@@ -38,14 +68,6 @@ const STALL_AFTER: Duration = Duration::from_secs(30);
 /// Progress is reported in steps of this fraction of the download, so a fast link does not wake
 /// the UI for every packet.
 const PROGRESS_STEPS: u64 = 200;
-
-/// The download in progress, next to the app, and the finished one waiting for a restart.
-const PARTIAL: &str = "Lobby.download";
-const STAGED: &str = "Lobby.update.exe";
-/// The app that was running when an update was swapped in; the next start deletes it.
-const OLD: &str = "Lobby.old.exe";
-/// Setup's copy of itself, before it is swapped in.
-const SETUP_COPY: &str = "Lobby.setup.exe";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Version {
@@ -444,8 +466,25 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 
 /// Puts `new` where `exe` is. A running exe cannot be overwritten or deleted on Windows, but it
 /// can be renamed: it moves aside to `Lobby.old.exe`, which [`clean_up`] deletes once it no
-/// longer runs. If the second rename fails the first is undone.
+/// longer runs. If the second rename fails the first is undone. Linux renames `new` over `exe`
+/// in one step: the running process keeps its inode, and the name stays the installed app's, so
+/// the process is never found under a moved-aside name. The new file is made executable first.
 pub fn swap_in(exe: &Path, new: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        fs::set_permissions(new, fs::Permissions::from_mode(0o755))?;
+    }
+    swap_names(exe, new)
+}
+
+#[cfg(target_os = "linux")]
+fn swap_names(exe: &Path, new: &Path) -> io::Result<()> {
+    fs::rename(new, exe)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn swap_names(exe: &Path, new: &Path) -> io::Result<()> {
     let old = exe.with_file_name(OLD);
     match fs::remove_file(&old) {
         Ok(()) => {}
@@ -479,10 +518,38 @@ pub fn clean_up(exe: &Path) {
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_swap_replaces_the_app_in_place_and_leaves_nothing_aside() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join(EXE);
+        let new = dir.path().join(STAGED);
+        fs::write(&exe, b"old").unwrap();
+        fs::write(&new, b"new").unwrap();
+        // A process running `old` holds this open: it keeps the replaced inode.
+        let running = fs::File::open(&exe).unwrap();
+        swap_in(&exe, &new).unwrap();
+        assert_eq!(fs::read(&exe).unwrap(), b"new");
+        assert_eq!(
+            fs::metadata(&exe).unwrap().permissions().mode() & 0o777,
+            0o755
+        );
+        assert!(!dir.path().join(OLD).exists());
+        assert!(!new.exists());
+        assert_eq!(io::read_to_string(running).unwrap(), "old");
+        // A second update while the first one still runs lands on the same name.
+        fs::write(&new, b"newer").unwrap();
+        swap_in(&exe, &new).unwrap();
+        assert_eq!(fs::read(&exe).unwrap(), b"newer");
+        assert!(!dir.path().join(OLD).exists());
+    }
+
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn a_swap_moves_the_running_app_aside_and_the_next_start_clears_it() {
         let dir = tempfile::tempdir().unwrap();
-        let exe = dir.path().join("Lobby.exe");
+        let exe = dir.path().join(EXE);
         let new = dir.path().join(STAGED);
         fs::write(&exe, b"old").unwrap();
         fs::write(&new, b"new").unwrap();

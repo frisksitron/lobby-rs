@@ -3,13 +3,16 @@
 //! plain threads takes the pictures (never the UI's thread), a few at a time, and the handle
 //! cancels the rest when it is dropped.
 
+#[cfg(windows)]
+use std::sync::mpsc as std_mpsc;
 use std::{
     collections::VecDeque,
     hash::{DefaultHasher, Hash as _, Hasher as _},
-    sync::{Arc, Mutex, mpsc as std_mpsc},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
+#[cfg(windows)]
 use fast_image_resize::{
     FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer,
     images::{Image, ImageRef},
@@ -18,10 +21,9 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, warn};
 
-use super::{
-    MediaError,
-    screen::{ScreenSource, SourceId},
-};
+#[cfg(windows)]
+use super::MediaError;
+use super::screen::{ScreenSource, SourceId};
 
 /// A thumbnail fits in this box, aspect kept, never enlarged.
 const THUMB_MAX: (u32, u32) = (320, 200);
@@ -31,6 +33,7 @@ const THUMB_WORKERS: usize = 3;
 /// a tenth of this.
 const THUMB_TIMEOUT: Duration = Duration::from_millis(1500);
 /// How often a waiting worker looks at the cancellation.
+#[cfg(windows)]
 const POLL: Duration = Duration::from_millis(20);
 
 /// A small picture of a screen or window: `width * height * 4` bytes, B G R A, rows without
@@ -59,11 +62,16 @@ pub struct ThumbUpdate {
     pub thumbnail: Option<Thumbnail>,
 }
 
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only Windows waits on its budget")
+)]
 pub(crate) struct Budget {
     deadline: Instant,
     cancel: CancellationToken,
 }
 
+#[cfg(windows)]
 impl Budget {
     /// The next value on `rx`, or `None` at the deadline, when the sender is gone or when the
     /// request was cancelled.
@@ -178,6 +186,7 @@ fn work(
 }
 
 /// The size a `width` × `height` picture shrinks to: inside [`THUMB_MAX`], aspect kept.
+#[cfg(windows)]
 fn thumb_size(width: u32, height: u32) -> (u32, u32) {
     let scale = (f64::from(THUMB_MAX.0) / f64::from(width.max(1)))
         .min(f64::from(THUMB_MAX.1) / f64::from(height.max(1)))
@@ -187,6 +196,7 @@ fn thumb_size(width: u32, height: u32) -> (u32, u32) {
 }
 
 /// Scales a captured BGRA picture whose rows are `stride` bytes apart down to a thumbnail.
+#[cfg(windows)]
 pub(crate) fn shrink(
     resizer: &mut Resizer,
     bgra: &[u8],
@@ -384,6 +394,17 @@ mod system {
             debug!(error = %e, "thumbnail capture did not stop cleanly");
         }
         got
+    }
+}
+
+#[cfg(not(windows))]
+mod system {
+    use super::{Budget, Thumbnail};
+    use crate::media::screen::SourceId;
+
+    /// The desktop's own dialog picks what is shared, and there is nothing to list.
+    pub fn grab(_: &SourceId, _: &Budget) -> Option<Thumbnail> {
+        None
     }
 }
 

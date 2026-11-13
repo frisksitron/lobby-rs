@@ -15,6 +15,12 @@ pub mod floating_sheet;
 pub mod icon_disc;
 pub mod ink;
 pub mod ink_overlay;
+#[cfg(target_os = "linux")]
+mod linux_bar;
+#[cfg(target_os = "linux")]
+mod linux_scrim;
+#[cfg(target_os = "linux")]
+pub use linux_scrim::{DialogScrim, dim_for_dialogs};
 pub mod lobby_switcher;
 pub mod media_images;
 pub mod member_avatar;
@@ -95,7 +101,9 @@ pub use share_view::{
     fullscreen_frame, panel_fit, panel_frame, strain_notice,
 };
 pub use source_picker::{PICKER_W, PickerModel, PickerView};
-pub use title_bar::{AppTitleBar, TITLE_BAR_HEIGHT, mark_color, mark_slots, slot_color};
+pub use title_bar::{
+    AppTitleBar, CloseRequested, TITLE_BAR_HEIGHT, mark_color, mark_slots, slot_color,
+};
 pub use tokens::{
     AvatarSize, BAR_CONTROL_H, BORDER, FIELD_H, ICON_MD, ICON_SM, ICON_XS, INLINE_H, LINE_H,
     MEMBER_ROW_GAP, PAGE_CONTROL_H, PAGE_CONTROL_RADIUS, PERCENT_W, PULSE_FPS, READOUT_GAP,

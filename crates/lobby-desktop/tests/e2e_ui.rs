@@ -644,6 +644,8 @@ fn scenarios() {
     play_scenarios(false);
 }
 
+/// Screen Share is on Windows only so far, as `lobby-client`'s share and watch tests are.
+#[cfg(windows)]
 #[test]
 fn share_scenarios() {
     play_scenarios(true);

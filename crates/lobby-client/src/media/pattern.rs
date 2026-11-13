@@ -3,6 +3,14 @@
 //! stamp along its top edge, the frame number and the wall-clock time it was captured, which a
 //! Viewer reads back to count pictures and time them.
 
+#![cfg_attr(
+    all(not(windows), not(test), not(feature = "test-support")),
+    expect(
+        dead_code,
+        reason = "only Windows capture and the test-support sources paint them"
+    )
+)]
+
 use std::{
     ops::Range,
     time::{SystemTime, UNIX_EPOCH},

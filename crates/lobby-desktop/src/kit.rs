@@ -6,8 +6,11 @@
 
 pub use gpui_kit::component::{
     ActiveTheme, Colorize, Theme, ThemeColor, ThemeConfig, ThemeMode, ThemeRegistry, TitleBar,
-    WindowExt, oklch,
+    WindowExt, oklch, window_paddings,
 };
+
+#[cfg(target_os = "linux")]
+pub use gpui_kit::component::window_corner_radii;
 
 pub mod dialog {
     use gpui_kit::{

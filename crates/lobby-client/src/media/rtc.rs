@@ -74,10 +74,18 @@ pub(crate) enum RtcCmd {
         sdp: Sdp,
         tracks: Vec<RtcTrack>,
     },
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "only Windows starts a share")
+    )]
     Share {
         frames: mpsc::Receiver<EncodedVideo>,
         keyframes: Arc<KeyframeRequests>,
     },
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "only Windows starts a share")
+    )]
     StopShare,
     Watch(WatchInput),
     Unwatch,

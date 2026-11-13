@@ -1,8 +1,12 @@
 //! The automation channel: with the `automation` feature and `LOBBY_AUTOMATION=1`, the app listens
-//! on `\\.\pipe\lobby-automation-<LOBBY_INSTANCE_ID>` for scenario steps, one JSON object per line,
-//! and answers each with one line. `cargo xtask drive` speaks it to the real binaries, so a
-//! scenario runs against DirectX and DirectWrite without SendInput, focus changes or the mouse.
-//! Input is synthetic GPUI input and pictures come from `Window::render_to_image`.
+//! for scenario steps, one JSON object per line, and answers each with one line. On Windows it
+//! listens on `\\.\pipe\lobby-automation-<LOBBY_INSTANCE_ID>`, and `cargo xtask drive` speaks to
+//! it, so a scenario runs against DirectX and DirectWrite without SendInput, focus changes or the
+//! mouse. Elsewhere it listens on the Unix socket `lobby-automation-<LOBBY_INSTANCE_ID>.sock` in
+//! `$XDG_RUNTIME_DIR` (the temp dir when that is unset), and `cargo xtask drive` speaks to it
+//! there too. Input is synthetic GPUI input and pictures come from `Window::render_to_image`,
+//! which GPUI's Wayland windows lack: there a `shot` fails, and the Linux driver takes the
+//! picture from its compositor instead, after `{"rest_pointer": true}`.
 //!
 //! Every observation draws a fresh frame first. `render_to_image` rasterizes the last frame drawn,
 //! so an off-screen window that has not redrawn would show a picture or bounds older than the model
@@ -14,8 +18,8 @@
 //! `dump` take a `"path"` to write to. Answers are `{"ok": true, "ms": ...}` with `dump` or `said`
 //! where there is something to say, or `{"ok": false, "error": "..."}`.
 //!
-//! The pipe is served on the app's Tokio runtime. Each request crosses to the UI over a channel and
-//! is done there, so nothing reactor-bound runs on the GPUI side. [`Channel`] owns both tasks.
+//! The channel is served on the app's Tokio runtime. Each request crosses to the UI over a channel
+//! and is done there, so nothing reactor-bound runs on the GPUI side. [`Channel`] owns both tasks.
 
 use std::time::{Duration, Instant};
 
@@ -24,9 +28,12 @@ use gpui_kit::{
 };
 use image::RgbaImage;
 use serde_json::{Map, Value, json};
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::ServerOptions;
+#[cfg(unix)]
+use tokio::net::{UnixListener, UnixStream};
 use tokio::{
-    io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader},
-    net::windows::named_pipe::{NamedPipeServer, ServerOptions},
+    io::{AsyncBufReadExt as _, AsyncRead, AsyncWrite, AsyncWriteExt as _, BufReader},
     sync::{mpsc, oneshot},
 };
 use tokio_util::task::AbortOnDropHandle;
@@ -46,11 +53,21 @@ const SETTLE_WITHIN: Duration = Duration::from_secs(1);
 /// Longer than a dialog's exit transition (180 ms, set in `appearance::apply`).
 const COVERED_WITHIN: Duration = Duration::from_secs(2);
 
+#[cfg(windows)]
 pub fn pipe_name(instance: Option<&str>) -> String {
     format!(
         r"\\.\pipe\lobby-automation-{}",
         instance.unwrap_or("default")
     )
+}
+
+#[cfg(unix)]
+pub fn pipe_name(instance: Option<&str>) -> String {
+    let dir = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let file = format!("lobby-automation-{}.sock", instance.unwrap_or("default"));
+    dir.join(file).to_string_lossy().into_owned()
 }
 
 type Request = (String, oneshot::Sender<String>);
@@ -89,6 +106,8 @@ pub fn start(
         let mut marks = Map::new();
         while let Some((line, reply)) = rx.recv().await {
             let started = Instant::now();
+            // A Linux Shell that was hidden and shown again is in another window.
+            let window = shell.read_with(cx, |shell, _| shell.window());
             let mut answer = match handle(&line, &instance, &shell, window, &mut marks, cx).await {
                 Ok(mut ok) => {
                     ok["ok"] = Value::Bool(true);
@@ -108,6 +127,7 @@ pub fn start(
 
 /// The next instance is created before a connection is served, so the name never lapses for another
 /// process to take. Only the first may create it, so a clash fails loudly.
+#[cfg(windows)]
 async fn serve(name: String, tx: mpsc::Sender<Request>) {
     let create = |first: bool| {
         ServerOptions::new()
@@ -143,7 +163,57 @@ async fn serve(name: String, tx: mpsc::Sender<Request>) {
     }
 }
 
-async fn connection(pipe: NamedPipeServer, tx: &mpsc::Sender<Request>) -> bool {
+/// A socket file outlives the run that made it, so a path nothing answers on is stale and goes; one
+/// that answers belongs to a live app, which a clash leaves alone. Only the owner may connect:
+/// the channel drives the whole app.
+#[cfg(unix)]
+async fn serve(name: String, tx: mpsc::Sender<Request>) {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    if UnixStream::connect(&name).await.is_ok() {
+        warn!(pipe = %name, "another app already serves this automation socket");
+        return;
+    }
+    let _ = std::fs::remove_file(&name);
+    let listener = match UnixListener::bind(&name) {
+        Ok(listener) => listener,
+        Err(e) => {
+            warn!(pipe = %name, error = %e, "the automation socket cannot be created");
+            return;
+        }
+    };
+    let _file = SocketFile(name.clone());
+    if let Err(e) = std::fs::set_permissions(&name, std::fs::Permissions::from_mode(0o600)) {
+        warn!(pipe = %name, error = %e, "the automation socket is open to other users");
+    }
+    loop {
+        let stream = match listener.accept().await {
+            Ok((stream, _)) => stream,
+            Err(e) => {
+                warn!(pipe = %name, error = %e, "the automation socket stopped accepting");
+                return;
+            }
+        };
+        info!("an automation driver connected");
+        if !connection(stream, &tx).await {
+            return;
+        }
+    }
+}
+
+/// Unlinks the socket file it was made for when the serving task ends or is dropped with the
+/// channel.
+#[cfg(unix)]
+struct SocketFile(String);
+
+#[cfg(unix)]
+impl Drop for SocketFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+async fn connection(pipe: impl AsyncRead + AsyncWrite + Unpin, tx: &mpsc::Sender<Request>) -> bool {
     let (read, mut write) = tokio::io::split(pipe);
     let mut lines = BufReader::new(read).lines();
     while let Ok(Some(line)) = lines.next_line().await {
@@ -182,6 +252,18 @@ async fn handle(
     let obj = value.as_object_mut().ok_or("a request is a JSON object")?;
     if obj.contains_key("hello") {
         return Ok(json!({"instance": instance, "pid": std::process::id()}));
+    }
+    // Only the Linux driver asks: Windows has no such request and refuses it as an unknown step.
+    #[cfg(target_os = "linux")]
+    if obj.contains_key("rest_pointer") {
+        // For a driver that takes the picture itself: the pointer leaves the window first.
+        return cx
+            .update_window(window, |_, window, cx| {
+                rest_pointer(window, cx);
+                window.refresh();
+                json!({})
+            })
+            .map_err(|e| e.to_string());
     }
     let path = match obj.remove("path") {
         Some(Value::String(p)) => Some(p),

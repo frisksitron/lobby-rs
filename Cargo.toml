@@ -63,6 +63,8 @@ rustls-pki-types = "=1.15.1"
 # str0m uses its pure-Rust crypto on both ends; libopus is the one C codec.
 str0m = { version = "=0.24.1", default-features = false, features = ["rust-crypto"] }
 cpal = "=0.18.2"
+# The PulseAudio protocol client cpal's `pulseaudio` host is built on, used by Lobby's own streams.
+pulseaudio = "=0.3.2"
 opus = "=0.4.0"
 rtrb = "=0.4.0"
 # Capture DSP, both BSD-3 and pure Rust: RNNoise's port (default features pull in a CLI), and the
@@ -96,6 +98,21 @@ markdown = "=1.0.0"
 # Round joins and caps on ink paths: gpui re-exports lyon's StrokeOptions but not LineJoin or
 # LineCap. The version gpui's paths build.
 lyon = "=1.0.19"
+# Linux only. The version the keyring and GPUI already build: its defaults are async-io (never
+# Tokio) and the blocking API.
+zbus = "=5.19.0"
+# Linux only. The netlink socket behind the network watch: the version already in the lock.
+libc = "=0.2.191"
+# Linux only. The idle time by `ext-idle-notify-v1` on a Wayland connection of its own: the
+# versions GPUI's backend already builds (its `client`, `staging` and `unstable` features), and
+# rustix to poll that connection for events without a blocking read.
+wayland-client = "=0.31.15"
+wayland-protocols = { version = "=0.32.13", features = ["client", "staging"] }
+rustix = { version = "=1.1.6", features = ["event"] }
+# The Linux tray icon (StatusNotifierItem, Unlicense). Its default `tokio` feature would switch
+# zbus to Tokio for the whole graph and build a runtime of its own; `async-io` is what zbus already
+# runs on here, and `blocking` makes the service a thread of its own.
+ksni = { version = "=0.3.7", default-features = false, features = ["async-io", "blocking"] }
 
 # str0m's RustCrypto backend without aws-lc: see vendor/str0m-rust-crypto/Cargo.toml.
 # GPUI's test scheduler without its lock-order deadlock: see vendor/gpui-pre-scheduler/Cargo.toml.

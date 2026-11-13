@@ -171,6 +171,8 @@ pub struct LobbyView {
     overlay: Option<overlay::Overlay>,
     /// The OS window this view is in, which may be on the shared monitor.
     host_window: Option<crate::host::NativeWindow>,
+    /// The ones that belong to the window the view is in ([`Self::bind_window`]).
+    window_subscriptions: Vec<Subscription>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -246,9 +248,6 @@ impl LobbyView {
             cx.observe_in(&scroller, window, |this, _, window, cx| {
                 this.remember_seen(window, cx);
             }),
-            cx.observe_window_activation(window, |this, window, cx| {
-                this.remember_seen(window, cx);
-            }),
             // An image arrived: its card already has its size, so a frame is all it needs.
             cx.observe(&images, |_, _, cx| cx.notify()),
             cx.observe(&icons, |_, _, cx| cx.notify()),
@@ -288,6 +287,7 @@ impl LobbyView {
                     SidebarEvent::StopWatching => this.close_viewer(window, cx),
                     SidebarEvent::VoiceStats => this.open_voice_stats(window, cx),
                     SidebarEvent::SignOut => this.sign_out(cx),
+                    SidebarEvent::Notify(issue) => this.notify(issue.clone(), window, cx),
                     SidebarEvent::Folded | SidebarEvent::CardClosed => {
                         this.focus_composer(window, cx)
                     }
@@ -295,13 +295,7 @@ impl LobbyView {
             ),
         ];
         subscriptions.push(cx.on_release(|this, cx| this.close_overlay(cx)));
-        // A move onto or off the shared monitor changes where ink is painted.
-        subscriptions.push(cx.observe_window_bounds(window, |this, _, cx| {
-            if this.overlay.is_some() {
-                cx.notify();
-            }
-        }));
-        Self {
+        let mut view = Self {
             session,
             issues,
             lobbies,
@@ -334,8 +328,32 @@ impl LobbyView {
             copied_timer: None,
             overlay: None,
             host_window: crate::host::NativeWindow::of(window),
+            window_subscriptions: Vec::new(),
             _subscriptions: subscriptions,
-        }
+        };
+        view.bind_window(window, cx);
+        view
+    }
+
+    /// What this view watches on its window, which GPUI keeps on that one window: bound again
+    /// when the Shell replaces the window.
+    pub fn bind_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.window_subscriptions = vec![
+            cx.observe_window_activation(window, |this, window, cx| {
+                this.remember_seen(window, cx);
+            }),
+            // A move onto or off the shared monitor changes where ink is painted.
+            cx.observe_window_bounds(window, |this, _, cx| {
+                if this.overlay.is_some() {
+                    cx.notify();
+                }
+            }),
+        ];
+    }
+
+    /// The window is active now: what the Member has in front of them is seen.
+    pub fn window_activated(&mut self, window: &Window, cx: &mut Context<Self>) {
+        self.remember_seen(window, cx);
     }
 
     pub fn lobby_name(&self, cx: &gpui_kit::App) -> String {
@@ -384,6 +402,8 @@ impl LobbyView {
         ) else {
             return;
         };
+        #[cfg(target_os = "linux")]
+        crate::os_toasts::seen_messages(&origin, cx);
         self.lobbies
             .update(cx, |lobbies, cx| lobbies.set_seen(&origin, newest, cx));
     }
@@ -624,6 +644,14 @@ impl LobbyView {
         }
     }
 
+    /// Closes every dialog this view has open, so none outlives the window it was in.
+    #[cfg(target_os = "linux")]
+    pub fn dismiss_dialogs(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.close_attachment(window, cx);
+        self.close_voice_stats(window, cx);
+        self.close_picker(window, cx);
+    }
+
     pub fn close_attachment(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.attachment_dialog.take().is_some() {
             window.close_dialog(cx);
@@ -643,21 +671,21 @@ impl LobbyView {
     }
 
     /// The window keeps its chrome while the Session closes, the Lobby's mark included.
-    fn closing(&self, signing_out: bool, cx: &Context<Self>) -> AnyElement {
+    fn closing(&self, signing_out: bool, window: &Window, cx: &Context<Self>) -> AnyElement {
         let (id, label) = if signing_out {
             ("signing-out", "Signing out…")
         } else {
             ("leaving", "Leaving…")
         };
-        div()
+        let screen = div()
             .id("lobby")
             .size_full()
             .flex()
             .flex_col()
             .bg(cx.theme().background)
             .child(AppTitleBar::new().left(LobbySwitcher::still(self.bar_lobby.clone())))
-            .child(busy_screen(id, label, cx))
-            .into_any_element()
+            .child(busy_screen(id, label, cx));
+        crate::scale::round_to_window(screen, window, cx).into_any_element()
     }
 
     fn placeholder(&self, state: &LobbyState, tall: bool, cx: &Context<Self>) -> AnyElement {
@@ -771,7 +799,7 @@ impl Render for LobbyView {
         }
         let session = self.session.read(cx);
         let Some(state) = session.state() else {
-            return self.closing(session.signing_out, cx);
+            return self.closing(session.signing_out, window, cx);
         };
         let title_bar = self.title_bar(state, layout, window, cx);
         let strip = folded.then(|| self.voice_strip(state, cx));
@@ -838,7 +866,7 @@ impl Render for LobbyView {
             && !self.viewing.is_fullscreen()
             && self.sidebar.read(cx).is_open();
         let card_open = self.page.is_none() && self.sidebar.read(cx).member_panel.is_some();
-        div()
+        let lobby = div()
             .id("lobby")
             .size_full()
             .flex()
@@ -865,7 +893,7 @@ impl Render for LobbyView {
             .child(match &self.page {
                 Some(page) => page.clone().into_any_element(),
                 None => body.into_any_element(),
-            })
-            .into_any_element()
+            });
+        crate::scale::round_to_window(lobby, window, cx).into_any_element()
     }
 }

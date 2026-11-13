@@ -5,6 +5,9 @@
 
 use std::{cell::RefCell, rc::Rc};
 
+#[cfg(target_os = "linux")]
+mod linux;
+
 use gpui_kit::{App, Context, Global, Window};
 use lobby_client::{
     LobbyOrigin, copy,
@@ -14,10 +17,19 @@ use lobby_client::{
 use lobby_protocol::{AccessRequest, AccessRequestId, Message};
 
 use crate::Shell;
+#[cfg(not(target_os = "linux"))]
 use crate::kit::{WindowExt as _, notification::Notification};
 
 /// Marks the toasts this module posts, so their tags never meet another kind's.
+#[cfg(not(target_os = "linux"))]
 struct OsToastTag;
+
+/// What a toast is about: a desktop that files notifications by kind needs to know.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OsToastKind {
+    Message,
+    AskToJoin,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OsToast {
@@ -25,6 +37,7 @@ pub struct OsToast {
     pub tag: String,
     pub title: String,
     pub body: String,
+    pub kind: OsToastKind,
 }
 
 #[derive(Clone, Default)]
@@ -86,6 +99,7 @@ pub(crate) fn message_arrived(
         tag,
         title,
         body: message_body(message),
+        kind: OsToastKind::Message,
     };
     let (shell, view, origin) = (cx.weak_entity(), view.downgrade(), origin.clone());
     post(
@@ -132,6 +146,7 @@ pub(crate) fn access_requested(
         tag: decision_tag(origin, &request.id),
         title: copy::asks_to_join(request.username.as_str()),
         body: request.requester_label.clone(),
+        kind: OsToastKind::AskToJoin,
     };
     let (shell, view) = (cx.weak_entity(), view.downgrade());
     post(
@@ -161,19 +176,36 @@ fn decision_tag(origin: &LobbyOrigin, id: &AccessRequestId) -> String {
     format!("decision/{origin}/{}", id.as_str())
 }
 
+/// The recorder that stands in for the desktop, unless a driven build was asked to use it
+/// (`LOBBY_OS_TOASTS=real`): a proof on a private desktop needs the real notifications.
+fn recorder(cx: &App) -> Option<&OsToastRecorder> {
+    #[cfg(feature = "automation")]
+    if std::env::var("LOBBY_OS_TOASTS").as_deref() == Ok("real") {
+        return None;
+    }
+    cx.try_global::<OsToastRecorder>()
+}
+
 /// Posts the toast; `on_click` runs when the person clicks it.
 pub fn post(
     toast: OsToast,
     on_click: impl Fn(&mut Window, &mut App) + 'static,
     window: &mut Window,
-    cx: &mut App,
+    cx: &mut Context<Shell>,
 ) {
-    if let Some(recorder) = cx.try_global::<OsToastRecorder>() {
+    if let Some(recorder) = recorder(cx) {
         let mut shown = recorder.0.borrow_mut();
         shown.retain(|t| t.tag != toast.tag);
         shown.push(toast);
         return;
     }
+    #[cfg(target_os = "linux")]
+    {
+        // The desktop's own notifications, spoken to its daemon: see `host::notify`.
+        let _ = window;
+        linux::post(toast, Rc::new(on_click), cx);
+    }
+    #[cfg(not(target_os = "linux"))]
     window.push_notification(
         Notification::new()
             .id1::<OsToastTag>(toast.tag)
@@ -187,11 +219,28 @@ pub fn post(
 
 /// Takes the toast away: what it announced is gone.
 pub fn retract(tag: &str, window: &mut Window, cx: &mut App) {
-    if let Some(recorder) = cx.try_global::<OsToastRecorder>() {
+    if let Some(recorder) = recorder(cx) {
         recorder.0.borrow_mut().retain(|t| t.tag != tag);
         return;
     }
+    #[cfg(target_os = "linux")]
+    {
+        let _ = window;
+        linux::retract(tag, cx);
+    }
+    #[cfg(not(target_os = "linux"))]
     window.remove_notification1::<OsToastTag>(tag.to_owned(), cx);
+}
+
+/// The Member has seen this Lobby's Messages in the app: the notifications about them go. Windows
+/// leaves them in the Action Center until they are dismissed; a Linux desktop's list is short and
+/// stays until someone clears it, so an answered one is taken back.
+#[cfg(target_os = "linux")]
+pub fn seen_messages(origin: &LobbyOrigin, cx: &mut App) {
+    linux::retract_prefixes(
+        &[format!("message/{origin}/"), format!("mention/{origin}/")],
+        cx,
+    );
 }
 
 pub fn recorded(cx: &App) -> Vec<OsToast> {

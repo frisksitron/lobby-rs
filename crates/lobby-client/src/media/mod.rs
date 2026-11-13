@@ -31,6 +31,8 @@ mod opus_codec;
 mod own_share;
 pub(crate) mod pattern;
 mod playout;
+#[cfg(target_os = "linux")]
+mod pulse;
 mod rtc;
 mod screen;
 #[cfg(windows)]
@@ -96,10 +98,18 @@ pub fn share_blocked() -> Option<MediaError> {
         .clone()
 }
 
+/// Why this computer cannot watch a Screen Share: only Windows has an H.264 decoder to use.
+pub fn watch_blocked() -> Option<MediaError> {
+    cfg!(not(windows)).then_some(MediaError::WatchUnsupported)
+}
+
 pub(crate) fn probe_share() -> Option<MediaError> {
+    #[cfg(windows)]
     let blocked = hardware_encoder()
         .is_none()
         .then_some(MediaError::NoHardwareEncoder);
+    #[cfg(not(windows))]
+    let blocked = Some(MediaError::ShareUnsupported);
     tracing::info!(blocked = ?blocked, "screen share probed");
     *SHARE_BLOCKED.lock().unwrap_or_else(|e| e.into_inner()) = blocked.clone();
     blocked
@@ -487,10 +497,24 @@ pub enum MediaError {
     DeviceBusy,
     #[error("The audio device didn't respond. Check it and try again.")]
     DeviceTimeout,
-    #[error("Microphone access was denied. Allow it in Windows privacy settings.")]
+    #[cfg_attr(
+        windows,
+        error("Microphone access was denied. Allow it in Windows privacy settings.")
+    )]
+    #[cfg_attr(
+        not(windows),
+        error("Microphone access was denied. Allow it in your system's privacy settings.")
+    )]
     PermissionDenied,
     #[error("Audio device error: {0}")]
     Device(String),
+    /// Neither PulseAudio nor PipeWire answers, and ALSA could not be opened without them.
+    #[cfg(target_os = "linux")]
+    #[error(
+        "Lobby cannot reach a sound server (PulseAudio or PipeWire), so it has no sound. Start \
+         one and join Voice again."
+    )]
+    NoSoundServer,
     #[error("No network route to the voice server: {0}")]
     NoRoute(String),
     #[error("Audio codec error: {0}")]
@@ -509,6 +533,10 @@ pub enum MediaError {
     /// The window is minimized; it holds the window's name.
     #[error("{}", crate::copy::window_minimized(.0))]
     SourceMinimized(String),
+    #[error("{}", crate::copy::SHARE_UNAVAILABLE)]
+    ShareUnsupported,
+    #[error("{}", crate::copy::WATCH_UNAVAILABLE)]
+    WatchUnsupported,
     #[error("This computer's GPU has no hardware H.264 encoder, which Screen Share needs.")]
     NoHardwareEncoder,
     #[error("This computer has no H.264 decoder. On Windows N, install the Media Feature Pack.")]

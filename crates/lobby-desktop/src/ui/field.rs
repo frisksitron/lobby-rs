@@ -135,6 +135,51 @@ struct Editing {
     focus: FocusHandle,
     focused: bool,
     editable: bool,
+    #[cfg(target_os = "linux")]
+    primary: Primary,
+}
+
+/// What the primary selection of a Linux desktop asks of a field: the selected text, and text
+/// put in at the caret. GPUI and the base field leave the selection alone: what a Member selects
+/// is never offered, and a middle click pastes nothing.
+#[cfg(target_os = "linux")]
+#[derive(Clone)]
+struct Primary {
+    selected: Rc<dyn Fn(&App) -> String>,
+    insert: Insert,
+}
+
+#[cfg(target_os = "linux")]
+type Insert = Rc<dyn Fn(&str, &mut Window, &mut App)>;
+
+#[cfg(target_os = "linux")]
+impl Primary {
+    fn of<M: InputModeKind>(state: &Entity<InputBaseState<M>>) -> Self {
+        let (read, write) = (state.clone(), state.clone());
+        Self {
+            selected: Rc::new(move |cx| read.read(cx).selected_value().to_string()),
+            insert: Rc::new(move |text, window, cx| {
+                write.update(cx, |state, cx| state.insert(text.to_owned(), window, cx));
+            }),
+        }
+    }
+
+    /// A mouse button went up in the field: what it left selected is now the primary selection.
+    fn offer(&self, cx: &mut App) {
+        let text = (self.selected)(cx);
+        if !text.is_empty() {
+            cx.write_to_primary(ClipboardItem::new_string(text));
+        }
+    }
+
+    /// A middle click: the primary selection goes in at the caret. `false`: there was none.
+    fn paste(&self, window: &mut Window, cx: &mut App) -> bool {
+        let Some(text) = cx.read_from_primary().and_then(|item| item.text()) else {
+            return false;
+        };
+        (self.insert)(&text, window, cx);
+        true
+    }
 }
 
 /// Base lays a multi-line editor's text out against its own inset, so the frame hands its padding
@@ -173,12 +218,16 @@ fn sync<M: InputModeKind>(
         );
     });
     let entity = state.entity_id();
+    #[cfg(target_os = "linux")]
+    let primary = Primary::of(state);
     let state = state.read(cx);
     Editing {
         entity,
         focus: state.presentation().focus_handle().clone(),
         focused: !disabled && state.has_selection_focus(window, cx),
         editable: state.is_editable(),
+        #[cfg(target_os = "linux")]
+        primary,
     }
 }
 
@@ -198,6 +247,28 @@ fn edit_menu(
         .separator()
         .menu("Select All", Box::new(input::SelectAll))
         .show(position, window, cx);
+}
+
+/// A selection made with the mouse is offered as the primary selection, and a middle click in a
+/// field that can be edited pastes it.
+#[cfg(target_os = "linux")]
+fn primary_selection<E: gpui_kit::InteractiveElement + gpui_kit::prelude::FluentBuilder>(
+    frame: E,
+    primary: Primary,
+    focus: FocusHandle,
+    editable: bool,
+) -> E {
+    let offered = primary.clone();
+    frame
+        .on_mouse_up(MouseButton::Left, move |_, _, cx| offered.offer(cx))
+        .when(editable, |frame| {
+            frame.on_mouse_down(MouseButton::Middle, move |_, window, cx| {
+                window.focus(&focus, cx);
+                if primary.paste(window, cx) {
+                    cx.stop_propagation();
+                }
+            })
+        })
 }
 
 impl RenderOnce for Field {
@@ -231,6 +302,8 @@ impl RenderOnce for Field {
             focus,
             focused,
             editable,
+            #[cfg(target_os = "linux")]
+            primary,
         } = editing;
         let theme = cx.theme();
         let ring_color = theme.ring;
@@ -270,7 +343,14 @@ impl RenderOnce for Field {
             });
         frame.style().refine(&self.style);
         let ring = (focused && ringed).then(|| focus::ring(frame.style(), window, cx));
+        #[cfg(target_os = "linux")]
+        let primary_focus = focus.clone();
         frame
+            .map(|frame| {
+                #[cfg(target_os = "linux")]
+                let frame = primary_selection(frame, primary, primary_focus, editable && !disabled);
+                frame
+            })
             .on_mouse_down(MouseButton::Left, move |_, window, cx| {
                 if !window.default_prevented() {
                     window.focus(&focus, cx);

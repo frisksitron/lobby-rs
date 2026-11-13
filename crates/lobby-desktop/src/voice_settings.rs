@@ -26,8 +26,9 @@ use gpui_kit::{
 };
 use lobby_client::{
     Compressor, CompressorAmount, DEVICE_POLL, DeviceChoice, DeviceKind, DeviceList, DeviceSetup,
-    DeviceWatch, Endpoints, Intent, MediaError, MicGain, MicLevel, MicMeter, MicReading, MicTest,
-    MicVolume, MonitorControl, NoiseEngine, NoiseSuppression, Settings, VoicePhase, copy,
+    DeviceWatch, Endpoints, GainUnavailable, Intent, MediaError, MicGain, MicLevel, MicMeter,
+    MicReading, MicTest, MicVolume, MonitorControl, NoiseEngine, NoiseSuppression, Settings,
+    VoicePhase, copy,
 };
 
 use crate::{
@@ -369,13 +370,12 @@ impl VoiceSettingsView {
         if let Some(session) = &session {
             subscriptions.push(cx.observe(session, |this, _, cx| this.sync_test(cx)));
         }
-        let metering = cx.spawn_in(window, async move |this, cx| {
+        let metering = cx.spawn(async move |this, cx| {
             loop {
                 cx.background_executor().timer(METER_FRAME).await;
-                if this
-                    .update_in(cx, |v, window, cx| v.meter_frame(window, cx))
-                    .is_err()
-                {
+                let framed =
+                    crate::in_window::update(&this, cx, |v, window, cx| v.meter_frame(window, cx));
+                if framed.is_none() {
                     return;
                 }
             }
@@ -385,6 +385,12 @@ impl VoiceSettingsView {
             VoiceDevices::System => MicVolume::start(),
             // Fake media's microphone is no device, so it gets a volume that touches none.
             VoiceDevices::Fake => MicVolume::fake(FAKE_GAIN),
+        };
+        // Where the volume is never read, the first frame says so: no slider that waits.
+        let gain_shown = if cfg!(windows) {
+            MicGain::Reading
+        } else {
+            volume.read()
         };
         let mut view = Self {
             lobbies,
@@ -401,7 +407,7 @@ impl VoiceSettingsView {
             volume,
             monitor,
             shown: MicReading::SILENT,
-            gain_shown: MicGain::Reading,
+            gain_shown,
             failure: None,
             in_call: false,
             _metering: metering,
@@ -884,15 +890,15 @@ impl RenderOnce for VoiceSection {
             window,
             cx,
         );
-        let microphone = group(
-            copy::DEVICE_INPUT,
-            [
-                picker(&self.input, "input-device", copy::DEVICE_INPUT).into_any_element(),
-                self.listening(cx),
-                row(copy::MIC_GAIN, self.input_level(cx), cx).into_any_element(),
-            ],
-            cx,
-        );
+        let mut microphone_rows = vec![
+            picker(&self.input, "input-device", copy::DEVICE_INPUT).into_any_element(),
+            self.listening(cx),
+        ];
+        // Where the system's volume is not the app's to change there is no row, not a dead one.
+        if self.gain != MicGain::Unavailable(GainUnavailable::Unsupported) {
+            microphone_rows.push(row(copy::MIC_GAIN, self.input_level(cx), cx).into_any_element());
+        }
+        let microphone = group(copy::DEVICE_INPUT, microphone_rows, cx);
         let speakers = group(
             copy::DEVICE_OUTPUT,
             [picker(&self.output, "output-device", copy::DEVICE_OUTPUT).into_any_element()],

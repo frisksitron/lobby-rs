@@ -5,7 +5,7 @@
 //! usually drops the WebSocket too, which ends Voice; the move helps when the WebSocket survives
 //! it (a second interface, a VPN).
 //!
-//! Windows reports network changes as they happen (`netwatch::NetworkWatch`).
+//! Windows and Linux report network changes as they happen (`netwatch::NetworkWatch`).
 
 use std::{
     fmt, io,

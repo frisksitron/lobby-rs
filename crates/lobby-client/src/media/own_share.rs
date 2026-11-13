@@ -79,6 +79,7 @@ impl OwnShareFeed {
     }
 
     /// The feed, when someone reads it and it has room. The encoder only tries the lock.
+    #[cfg(windows)]
     fn ready(&self) -> Option<mpsc::Sender<VideoFrame>> {
         let slot = self.0.try_lock().ok()?;
         slot.as_ref()

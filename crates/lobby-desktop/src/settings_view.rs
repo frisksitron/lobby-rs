@@ -363,7 +363,7 @@ impl Render for SettingsView {
         let window_section = self.window_section(cx);
         let updates_section = self.updates_section(cx);
         let focus = self.focus.clone();
-        div()
+        let page = div()
             .id("settings")
             .debug_selector(|| "settings".into())
             .track_focus(&self.focus)
@@ -421,7 +421,7 @@ impl Render for SettingsView {
                             .inset_0()
                             .child(Scrollbar::new(&self.scroll).axis(ScrollbarAxis::Vertical)),
                     ),
-            )
-            .test_support()
+            );
+        crate::scale::round_bottom_to_window(page, window, cx).test_support()
     }
 }

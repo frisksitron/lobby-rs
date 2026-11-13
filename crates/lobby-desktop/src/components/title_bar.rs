@@ -4,17 +4,31 @@
 use std::time::Duration;
 
 use gpui_kit::{
-    Animation, AnimationExt as _, AnyElement, App, Hsla, InteractiveElement as _, IntoElement,
-    ParentElement as _, RenderOnce, SharedString, Styled as _, Window, div, ease_out_quint, hsla,
+    Action as _, Animation, AnimationExt as _, AnyElement, App, Hsla, InteractiveElement as _,
+    IntoElement, ParentElement as _, RenderOnce, SharedString, Styled as _, Window, actions, div,
+    ease_out_quint, hsla,
 };
 
+#[cfg(target_os = "linux")]
+use super::linux_bar::LinuxBar as TitleBar;
 use super::{avatar::stable_hash, tokens::MARK_COLORS};
-use crate::kit::{ActiveTheme as _, TitleBar};
+use crate::kit::ActiveTheme as _;
+#[cfg(not(target_os = "linux"))]
+use crate::kit::TitleBar;
 use crate::scale::u;
 
 /// Taller than the kit's 34 px, so the Lobby's name and the label breathe;
 /// toasts start below it.
 pub const TITLE_BAR_HEIGHT: f32 = 40.;
+
+actions!(
+    lobby,
+    [
+        /// The title bar's own close button was pressed (drawn on Linux only). The Shell answers
+        /// it as it answers the OS asking the window to close.
+        CloseRequested
+    ]
+);
 
 #[derive(IntoElement, Default)]
 pub struct AppTitleBar {
@@ -112,6 +126,10 @@ impl RenderOnce for AppTitleBar {
                     .children(self.right),
             );
         let bar = TitleBar::new()
+            // Without this the kit closes the window outright on Linux, past the Shell's hook.
+            .on_close_window(|_, window, cx| {
+                window.dispatch_action(CloseRequested.boxed_clone(), cx);
+            })
             .h(u(TITLE_BAR_HEIGHT))
             .child(div().relative().flex_1().h_full().child(row));
         match self.tint {

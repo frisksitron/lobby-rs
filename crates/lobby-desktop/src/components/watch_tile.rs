@@ -30,6 +30,9 @@ pub const SLOT_W: f32 = TILE_W;
 pub enum Tile {
     /// Watching needs Voice: an outline that does nothing.
     Faint,
+    /// This computer cannot watch a share at all, and no Voice would change that: the same
+    /// outline, whose tooltip says so.
+    Unavailable,
     /// Pressing it puts this share on screen.
     Rest,
     /// Asked for, until its first picture comes; the share on screen stays meanwhile. Pressing
@@ -60,7 +63,7 @@ impl Tile {
     /// coming is the Session's take-back of that switch.
     pub fn press(self, sharer: Sharer) -> Option<TilePress> {
         match self {
-            Tile::Faint => None,
+            Tile::Faint | Tile::Unavailable => None,
             Tile::Rest | Tile::Coming | Tile::OnScreen { switching: true } => {
                 Some(TilePress::Show(sharer))
             }
@@ -68,10 +71,16 @@ impl Tile {
         }
     }
 
+    /// An outline that does nothing, for whatever reason.
+    pub fn faint(self) -> bool {
+        matches!(self, Tile::Faint | Tile::Unavailable)
+    }
+
     /// The short words of its tooltip; the row already names the Member.
     pub fn tip(self, own: bool) -> &'static str {
         match (self, own) {
             (Tile::Faint, _) => copy::WATCH_NEEDS_VOICE,
+            (Tile::Unavailable, _) => copy::WATCH_UNAVAILABLE,
             (Tile::Rest | Tile::Coming, true) => "Show your share",
             (Tile::Rest | Tile::Coming, false) => "Watch",
             (Tile::OnScreen { switching: true }, _) => "Keep watching",
@@ -86,7 +95,7 @@ impl Tile {
         let lifted = primary.mix(rest, 0.3);
         let clear = gpui_kit::transparent_black();
         let (bg, ring, fg, hover) = match self {
-            Tile::Faint => (clear, theme.border, theme.muted_foreground, None),
+            Tile::Faint | Tile::Unavailable => (clear, theme.border, theme.muted_foreground, None),
             Tile::Rest => (
                 rest,
                 clear,

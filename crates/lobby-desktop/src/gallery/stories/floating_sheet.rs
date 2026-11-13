@@ -205,9 +205,13 @@ pub(super) fn small_view(cx: &App) -> Div {
 
 /// The small window's view, dimmed, with the sheet unfolded at the right.
 fn folded(cx: &App) -> AnyElement {
-    let theme = cx.theme();
     small_view(cx)
-        .child(div().absolute().inset_0().bg(theme.overlay))
+        .child(
+            div()
+                .absolute()
+                .inset_0()
+                .bg(crate::appearance::overlay(cx)),
+        )
         .child(
             div()
                 .absolute()

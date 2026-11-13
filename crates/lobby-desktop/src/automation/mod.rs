@@ -11,7 +11,6 @@ compile_error!(
 
 mod input;
 mod model;
-#[cfg(windows)]
 pub mod pipe;
 pub mod scenario;
 

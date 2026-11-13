@@ -109,6 +109,11 @@ pub fn mark_downloaded(path: &Path) -> io::Result<()> {
     std::fs::write(stream, b"[ZoneTransfer]\r\nZoneId=3\r\n")
 }
 
+#[cfg(not(windows))]
+pub fn mark_downloaded(_path: &Path) -> io::Result<()> {
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

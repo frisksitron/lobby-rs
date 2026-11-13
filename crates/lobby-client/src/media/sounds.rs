@@ -256,7 +256,7 @@ fn run(rx: &std_mpsc::Receiver<Sound>, bank: &Arc<SoundBank>, setup: &Mutex<Devi
 
 struct Output {
     target: Target,
-    _stream: cpal::Stream,
+    _stream: audio::Open,
     starts: rtrb::Producer<Sound>,
     broken: Arc<AtomicBool>,
 }
@@ -271,7 +271,7 @@ impl Output {
     }
 
     fn open_on(bank: &Arc<SoundBank>, target: Target) -> Result<Output, MediaError> {
-        let host = cpal::default_host();
+        let host = audio::default_host();
         let device = audio::device(&host, DeviceKind::Output, &target)?;
         let config = audio::output_config(&device)?;
         let (starts, mut queued) = rtrb::RingBuffer::new(START_QUEUE);
@@ -280,6 +280,7 @@ impl Output {
         let stream = audio::mono_output(
             &device,
             config,
+            audio::Purpose::Interface,
             {
                 let broken = broken.clone();
                 move |e| {

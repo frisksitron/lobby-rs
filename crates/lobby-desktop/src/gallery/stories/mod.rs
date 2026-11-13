@@ -54,7 +54,7 @@ pub const STORIES: &[Story] = &[
     },
     Story {
         name: "Watch tile",
-        description: "The screen-shaped tile at a sharer's row's end, the same size in every state: quiet plum at rest, a lavender ring on hover and while a switch to it waits, lavender for the share on screen, an outline when you are not In Voice.",
+        description: "The screen-shaped tile at a sharer's row's end, the same size in every state: quiet plum at rest, a lavender ring on hover and while a switch to it waits, lavender for the share on screen, an outline when you are not In Voice or this computer cannot watch.",
         usage: "WatchTile::new(format!(\"watch-{name}\"), tile, Sharer::of(&row)).on_press(on_press)",
         render: members::watch_tile,
     },

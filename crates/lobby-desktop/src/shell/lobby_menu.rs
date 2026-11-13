@@ -19,6 +19,7 @@ use tracing::info;
 use super::{LobbyRoute, QuitState, Route, Shell};
 use crate::components::{LobbyAction, confirm_alert};
 use crate::hand_over::HandOverView;
+use crate::in_window;
 use crate::kit::{WindowExt as _, dialog};
 use crate::scale::device;
 use crate::session_entity::{SessionEntity, SessionUiEvent};
@@ -81,7 +82,7 @@ impl Shell {
         }
         info!(lobby = %origin, ?action, "Lobby menu");
         match action {
-            LobbyAction::ChangeIcon => self.pick_icon(origin, window, cx),
+            LobbyAction::ChangeIcon => self.pick_icon(origin, cx),
             LobbyAction::RemoveIcon => {
                 self.act_on(origin, Intent::RemoveIcon, AccountOp::Icon, window, cx)
             }
@@ -90,17 +91,25 @@ impl Shell {
     }
 
     /// The OS file picker, then the Lobby makes a square of the picture.
-    fn pick_icon(&mut self, origin: LobbyOrigin, window: &mut Window, cx: &mut Context<Self>) {
+    fn pick_icon(&mut self, origin: LobbyOrigin, cx: &mut Context<Self>) {
         if self.icon_pick.is_some() {
             return;
         }
         let picked = crate::files::pick_one(cx);
-        self.icon_pick = Some(cx.spawn_in(window, async move |this, cx| {
-            let path = picked.await;
-            let _ = this.update_in(cx, |shell, window, cx| {
+        self.icon_pick = Some(cx.spawn(async move |this, cx| {
+            let picked = picked.await;
+            in_window::update(&this, cx, |shell, window, cx| {
                 shell.icon_pick = None;
-                if let Some(path) = path {
-                    shell.act_on(origin, Intent::SetIcon(path), AccountOp::Icon, window, cx);
+                match picked {
+                    Ok(Some(path)) => {
+                        shell.act_on(origin, Intent::SetIcon(path), AccountOp::Icon, window, cx)
+                    }
+                    Ok(None) => {}
+                    Err(_) => {
+                        let issue =
+                            Issue::new(IssueKind::PictureFailed, copy::PICTURE_CHOOSER_FAILED);
+                        shell.raise_issue(issue, window, cx);
+                    }
                 }
             });
         }));

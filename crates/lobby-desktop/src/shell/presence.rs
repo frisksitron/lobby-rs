@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use gpui_kit::{AnyWindowHandle, Context, Window};
+use gpui_kit::{Context, Window};
 use lobby_client::{Intent, SoundPlayer};
 use tokio::sync::mpsc::UnboundedReceiver;
 use tracing::info;
@@ -40,6 +40,11 @@ impl Shell {
         self.tray = tray;
     }
 
+    #[cfg(target_os = "linux")]
+    pub fn keep_idle_watch(&mut self, watch: Option<host::IdleWatch>) {
+        self.idle_watch = watch;
+    }
+
     /// Where the UI sounds go. A test hands in `SoundPlayer::channel()`'s, the app's own opens the
     /// system default output.
     pub fn set_sound_player(&mut self, player: SoundPlayer) {
@@ -51,15 +56,13 @@ impl Shell {
     }
 
     /// Takes what the OS asks of the app from outside its window: the tray's menu and click, a
-    /// second launch and a `lobby://` link. `window` is the one a link's form opens in.
-    pub fn listen(
-        &mut self,
-        mut events: UnboundedReceiver<HostEvent>,
-        window: AnyWindowHandle,
-        cx: &mut Context<Self>,
-    ) {
+    /// second launch and a `lobby://` link, which opens in the Shell's window at that time.
+    pub fn listen(&mut self, mut events: UnboundedReceiver<HostEvent>, cx: &mut Context<Self>) {
         self.host_events = Some(cx.spawn(async move |this, cx| {
             while let Some(event) = events.recv().await {
+                let Ok(window) = this.read_with(cx, |shell, _| shell.window()) else {
+                    break;
+                };
                 let handled = window.update(cx, |_, window, cx| {
                     this.update(cx, |shell, cx| shell.on_host_event(event, window, cx))
                 });
@@ -82,7 +85,14 @@ impl Shell {
                 info!("shown by a second launch");
                 self.show_window(cx);
             }
+            #[cfg(not(target_os = "linux"))]
             HostEvent::OpenLink(link) => self.open_link(&link, window, cx),
+            // The window may be replaced on the way: the link opens in the one that results.
+            #[cfg(target_os = "linux")]
+            HostEvent::OpenLink(link) => {
+                let _ = window;
+                self.open_link_after_show(link, cx);
+            }
         }
     }
 
@@ -93,11 +103,20 @@ impl Shell {
         if self.quit != QuitState::Running {
             return;
         }
-        if self.has_tray && self.lobbies.read(cx).settings().close_to_tray {
+        if self.tray_hides() && self.lobbies.read(cx).settings().close_to_tray {
             self.hide_to_tray(cx);
         } else {
             self.quit(cx);
         }
+    }
+
+    /// Whether the tray icon can bring back what the close button hides: it is there and, on
+    /// Linux, the desktop can minimize the window.
+    pub(super) fn tray_hides(&self) -> bool {
+        #[cfg(target_os = "linux")]
+        return self.has_tray && self.desktop_hides();
+        #[cfg(not(target_os = "linux"))]
+        self.has_tray
     }
 
     pub fn hide_to_tray(&mut self, cx: &mut Context<Self>) {
@@ -107,6 +126,8 @@ impl Shell {
         info!("window hidden to the tray");
         self.hidden_to_tray = true;
         (self.window_host)(self.native, host::WindowCommand::Hide, cx);
+        #[cfg(target_os = "linux")]
+        self.hide_window(cx);
         cx.notify();
     }
 
@@ -124,6 +145,8 @@ impl Shell {
             host::WindowCommand::ShowQuietly
         };
         (self.window_host)(self.native, command, cx);
+        #[cfg(target_os = "linux")]
+        self.bring_window_back(cx);
         cx.notify();
     }
 

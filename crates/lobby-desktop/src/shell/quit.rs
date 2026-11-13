@@ -60,6 +60,8 @@ impl Shell {
     fn begin_quit(&mut self, cx: &mut Context<Self>) -> impl Future<Output = ()> + use<> {
         self.quit = QuitState::Quitting;
         self.instance = None;
+        #[cfg(target_os = "linux")]
+        self.cancel_reopen();
         if let Err(e) = self.lobbies.update(cx, |lobbies, _| lobbies.flush_now()) {
             warn!(error = %e, "cannot save the Lobbies on quit");
         }

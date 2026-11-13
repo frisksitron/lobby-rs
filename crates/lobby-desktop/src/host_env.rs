@@ -6,6 +6,8 @@ use std::{ffi::OsString, path::PathBuf};
 /// AppUserModelID's prefix (GPUI registers it for toasts).
 pub const APP_NAME: &str = "Lobby";
 pub const AUMID_PREFIX: &str = "LobbyRs.Lobby";
+#[cfg(target_os = "linux")]
+pub use lobby_client::APP_ID;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct HostEnv {

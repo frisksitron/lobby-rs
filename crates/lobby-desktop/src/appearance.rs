@@ -2,14 +2,16 @@
 //! [`apply`] is the one place that changes the global `Theme`. It does the same thing every time
 //! it is called with the same settings, so the Shell calls it at startup and on every change.
 
-use crate::kit::{Theme, ThemeConfig, ThemeMode, ThemeRegistry};
+use crate::kit::{ActiveTheme as _, Theme, ThemeConfig, ThemeMode, ThemeRegistry};
 use crate::scale::{BASE_MONO, BASE_RADIUS, BASE_RADIUS_LG, BASE_REM, u};
 use crate::ui;
-use gpui_kit::{App, base::Easing, px};
+use gpui_kit::{App, Hsla, base::Easing, px};
 use lobby_client::Settings;
 use std::{rc::Rc, time::Duration};
 
 const NAME: &str = "Living Room";
+#[cfg(target_os = "linux")]
+const WINDOW_RADIUS: usize = 12;
 const DIALOG_FOR: Duration = Duration::from_millis(180);
 const FILE: &str = include_str!("../themes/living-room.json");
 
@@ -30,6 +32,8 @@ pub fn apply(settings: &Settings, cx: &mut App) {
     Theme::global_mut(cx).dark_theme = shown;
     Theme::change(ThemeMode::Dark, None, cx);
     let scale = f32::from(settings.ui_scale) / 100.;
+    #[cfg(target_os = "linux")]
+    let mut scrim = None;
     Theme::update(cx, |theme| {
         theme.font_family = crate::fonts::FAMILY.into();
         // The window's rem size follows the font size, so this one number scales every `u(..)`.
@@ -40,6 +44,17 @@ pub fn apply(settings: &Settings, cx: &mut App) {
         };
         theme.radius = radius(radii.0, BASE_RADIUS);
         theme.radius_lg = radius(radii.1, BASE_RADIUS_LG);
+        // The window Lobby draws itself on Linux rounds as GNOME's do; libadwaita's radius.
+        #[cfg(target_os = "linux")]
+        {
+            theme.window_radius = radius(Some(WINDOW_RADIUS), 0.);
+            // The kit's dialog dims the shadow's margin too: the Shell dims inside the frame
+            // instead, and Lobby's own dims read the colour through `overlay`.
+            scrim = Some(std::mem::replace(
+                &mut theme.colors.overlay,
+                gpui_kit::hsla(0., 0., 0., 0.),
+            ));
+        }
         // Toasts start under the title bar in the main column; the Lobby view keeps them beside
         // the member panel.
         let toasts = &mut theme.notification;
@@ -56,6 +71,20 @@ pub fn apply(settings: &Settings, cx: &mut App) {
         motion.easing_enter = Easing::Custom(Rc::new(ui::motion::ease_out));
         motion.distance_short = u(4.);
     });
+    #[cfg(target_os = "linux")]
+    if let Some(color) = scrim {
+        cx.set_global(crate::components::DialogScrim(color));
+    }
+}
+
+/// The theme's dim, for what Lobby itself dims (the Members sheet's backdrop). Read it here, not
+/// from the theme: on Linux the theme's is clear, so that only the kit's dialog backdrop loses it.
+pub fn overlay(cx: &App) -> Hsla {
+    #[cfg(target_os = "linux")]
+    if let Some(scrim) = cx.try_global::<crate::components::DialogScrim>() {
+        return scrim.0;
+    }
+    cx.theme().overlay
 }
 
 #[cfg(test)]

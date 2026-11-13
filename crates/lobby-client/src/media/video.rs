@@ -1,9 +1,10 @@
 //! Screen Share pictures and their conversions: the Viewer converts the decoded NV12 to BGRA,
 //! the format GPUI's `RenderImage` holds.
 
+#[cfg(windows)]
+use std::num::NonZeroUsize;
 use std::{
     fmt,
-    num::NonZeroUsize,
     sync::{
         Arc,
         atomic::{AtomicU64, Ordering},
@@ -21,16 +22,20 @@ use lobby_protocol::encoder::fit;
 use tokio::sync::mpsc;
 #[cfg(any(test, feature = "test-support"))]
 use yuvutils_rs::{BufferStoreMut, YuvPlanarImageMut};
-use yuvutils_rs::{
-    YuvBiPlanarImage, YuvConversionMode, YuvPlanarImage, YuvRange, YuvStandardMatrix,
-};
+#[cfg(windows)]
+use yuvutils_rs::{YuvBiPlanarImage, YuvPlanarImage};
+#[cfg(any(windows, test, feature = "test-support"))]
+use yuvutils_rs::{YuvConversionMode, YuvRange, YuvStandardMatrix};
 
+#[cfg(any(windows, test, feature = "test-support"))]
 use super::MediaError;
 
 /// The UI keeps only the newest decoded frame it finds, so two are enough.
 pub const RENDER_QUEUE: usize = 2;
 
+#[cfg(any(windows, test, feature = "test-support"))]
 const RANGE: YuvRange = YuvRange::Limited;
+#[cfg(any(windows, test, feature = "test-support"))]
 const MATRIX: YuvStandardMatrix = YuvStandardMatrix::Bt709;
 
 /// One decoded Screen Share picture for the UI. A lobby-client type, so the GPUI-free crate
@@ -102,17 +107,20 @@ impl PaintSize {
 
 /// A tile this small lasts a layout pass at most; its pictures come whole rather than at a size
 /// a video processor might refuse.
+#[cfg(windows)]
 const SCALED_MIN: u32 = 16;
 
 /// The size a picture of `source` is drawn at for a view that paints it at `paint`: exactly that,
 /// to the pixel, so the view draws it unscaled, but never bigger than the picture. `None` when it
 /// is drawn at its own size.
+#[cfg(windows)]
 pub(crate) fn scaled_for(source: (u32, u32), paint: Option<(u32, u32)>) -> Option<(u32, u32)> {
     let (pw, ph) = paint?;
     let smaller = pw < source.0 || ph < source.1;
     (smaller && pw.min(ph) >= SCALED_MIN).then(|| (pw.min(source.0), ph.min(source.1)))
 }
 
+#[cfg(any(windows, test, feature = "test-support"))]
 pub(crate) struct I420 {
     pub width: u32,
     pub height: u32,
@@ -121,6 +129,7 @@ pub(crate) struct I420 {
     pub v: Vec<u8>,
 }
 
+#[cfg(any(windows, test, feature = "test-support"))]
 impl I420 {
     pub fn empty() -> I420 {
         I420 {
@@ -220,6 +229,7 @@ impl Converter {
     }
 }
 
+#[cfg(windows)]
 pub(crate) struct Planes<'a> {
     pub width: u32,
     pub height: u32,
@@ -228,6 +238,7 @@ pub(crate) struct Planes<'a> {
     pub v: (&'a [u8], u32),
 }
 
+#[cfg(windows)]
 impl I420 {
     pub fn planes(&self) -> Planes<'_> {
         let chroma = self.chroma_width();
@@ -242,6 +253,7 @@ impl I420 {
 }
 
 /// An NV12 picture: luma with its row stride, then interleaved chroma in `width`-byte rows.
+#[cfg(windows)]
 pub(crate) struct Nv12Planes<'a> {
     pub width: u32,
     pub height: u32,
@@ -249,10 +261,12 @@ pub(crate) struct Nv12Planes<'a> {
     pub uv: &'a [u8],
 }
 
+#[cfg(windows)]
 fn colour(e: yuvutils_rs::YuvError) -> MediaError {
     MediaError::Video(format!("colour conversion: {e}"))
 }
 
+#[cfg(windows)]
 pub(crate) fn i420_to_bgra(p: &Planes<'_>, bands: NonZeroUsize) -> Result<Vec<u8>, MediaError> {
     in_bands((p.width, p.height), bands, |first_row, rows, out| {
         let chroma_row = first_row / 2;
@@ -270,6 +284,7 @@ pub(crate) fn i420_to_bgra(p: &Planes<'_>, bands: NonZeroUsize) -> Result<Vec<u8
     })
 }
 
+#[cfg(windows)]
 pub(crate) fn nv12_to_bgra(p: &Nv12Planes<'_>, bands: NonZeroUsize) -> Result<Vec<u8>, MediaError> {
     let row = p.width as usize;
     in_bands((p.width, p.height), bands, |first_row, rows, out| {
@@ -290,6 +305,7 @@ pub(crate) fn nv12_to_bgra(p: &Nv12Planes<'_>, bands: NonZeroUsize) -> Result<Ve
 /// A BGRA picture of `width` x `height`, filled by `convert` in `bands` row bands at once: the
 /// first on this thread, the others on scoped threads beside it. `convert` gets a band's first
 /// row, its row count and its bytes.
+#[cfg(windows)]
 fn in_bands(
     (width, height): (u32, u32),
     bands: NonZeroUsize,

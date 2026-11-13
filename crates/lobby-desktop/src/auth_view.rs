@@ -65,6 +65,8 @@ pub struct AuthView {
     last_step: EntryStep,
     /// The last rail Entry showed: Signed in has none, and the check mark keeps Waiting's.
     last_rail: Vec<Chip>,
+    /// The ones that belong to the window the view is in ([`Self::bind_window`]).
+    window_subscriptions: Vec<Subscription>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -119,11 +121,6 @@ impl AuthView {
                     CodeTyped::Change => this.code_changed(cx),
                 },
             ),
-            cx.observe_window_activation(window, |this, window, cx| {
-                if window.is_window_active() {
-                    this.act(EntryIntent::WindowActive, cx);
-                }
-            }),
             cx.subscribe_in(&entry, window, |this, _, _: &EntryChanged, window, cx| {
                 this.follow(window, cx);
             }),
@@ -147,11 +144,29 @@ impl AuthView {
             mark,
             last_step,
             last_rail: Vec::new(),
+            window_subscriptions: Vec::new(),
             _subscriptions: subscriptions,
         };
+        view.bind_window(window, cx);
         view.follow(window, cx);
         view.notice = notice;
         view
+    }
+
+    /// What this view watches on its window, which GPUI keeps on that one window: bound again
+    /// when the Shell replaces the window.
+    pub fn bind_window(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.window_subscriptions =
+            vec![cx.observe_window_activation(window, |this, window, cx| {
+                this.window_activated(window, cx);
+            })];
+    }
+
+    /// Coming back to the window is a reason to ask now whether the Member was let in.
+    pub fn window_activated(&mut self, window: &Window, cx: &mut Context<Self>) {
+        if window.is_window_active() {
+            self.act(EntryIntent::WindowActive, cx);
+        }
     }
 
     pub fn view<'a>(&self, cx: &'a gpui_kit::App) -> &'a EntryView {
@@ -227,7 +242,7 @@ impl AuthView {
         }
         if view.wrong > self.wrong_seen {
             self.wrong_seen = view.wrong;
-            self.wrong_code(window, cx);
+            self.wrong_code(cx);
         }
         if view.epoch != self.epoch {
             self.epoch = view.epoch;
@@ -281,13 +296,13 @@ impl AuthView {
         }));
     }
 
-    fn wrong_code(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn wrong_code(&mut self, cx: &mut Context<Self>) {
         let attempt = self.wrong_seen;
         self.code_wrong = Some(attempt);
         self.timers.retain(|t| !t.is_ready());
-        self.timers.push(cx.spawn_in(window, async move |this, cx| {
+        self.timers.push(cx.spawn(async move |this, cx| {
             cx.background_executor().timer(WRONG_CODE_SHOWN).await;
-            let _ = this.update_in(cx, |v, window, cx| {
+            crate::in_window::update(&this, cx, |v, window, cx| {
                 if v.code_wrong == Some(attempt) {
                     v.code_wrong = None;
                     v.code.update(cx, |c, cx| {

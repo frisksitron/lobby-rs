@@ -24,6 +24,12 @@ pub struct Renamed;
 
 impl EventEmitter<Renamed> for OwnCard {}
 
+/// The OS file chooser did not open, which the Session cannot know: the Lobby view tells the
+/// Member.
+pub struct ChooserFailed;
+
+impl EventEmitter<ChooserFailed> for OwnCard {}
+
 pub struct OwnCard {
     session: Entity<SessionEntity>,
     name: Entity<InputState>,
@@ -209,12 +215,16 @@ impl OwnCard {
         }
         let picked = crate::files::pick_one(cx);
         self.picking = Some(cx.spawn_in(window, async move |this, cx| {
-            let path = picked.await;
+            let picked = picked.await;
             let _ = this.update(cx, |v, cx| {
                 v.picking = None;
-                if let Some(path) = path {
-                    v.session
-                        .update(cx, |s, cx| s.dispatch(Intent::SetAvatar(path), cx));
+                match picked {
+                    Ok(Some(path)) => {
+                        v.session
+                            .update(cx, |s, cx| s.dispatch(Intent::SetAvatar(path), cx));
+                    }
+                    Ok(None) => {}
+                    Err(_) => cx.emit(ChooserFailed),
                 }
                 cx.notify();
             });

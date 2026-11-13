@@ -413,7 +413,7 @@ impl AuthScreen {
 }
 
 impl RenderOnce for AuthScreen {
-    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
         let theme = cx.theme();
         let (fg, muted, background) = (theme.foreground, theme.muted_foreground, theme.background);
         let question = div()
@@ -494,7 +494,7 @@ impl RenderOnce for AuthScreen {
             .child(self.rail)
             .child(below)
             .test_support();
-        div()
+        let screen = div()
             .id("auth")
             .debug_selector(|| "auth".into())
             .flex_1()
@@ -513,8 +513,8 @@ impl RenderOnce for AuthScreen {
                     .pb(u(SIDE_AIR))
                     .child(air(TOP_AIR_MIN, TOP_AIR))
                     .child(column),
-            )
-            .test_support()
+            );
+        crate::scale::round_bottom_to_window(screen, window, cx).test_support()
     }
 }
 

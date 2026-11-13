@@ -35,6 +35,13 @@ pub fn presence(state: &LobbyState, name: &str) -> Option<Presence> {
         .map(|m| m.presence)
 }
 
+#[cfg_attr(
+    not(windows),
+    allow(
+        dead_code,
+        reason = "the share tests are Windows-only; the share_bench example calls it"
+    )
+)]
 pub fn streaming(state: &LobbyState, name: &str) -> bool {
     state
         .members
@@ -372,6 +379,13 @@ impl Member {
         self.act(Intent::ToggleMute).await
     }
 
+    #[cfg_attr(
+        not(windows),
+        allow(
+            dead_code,
+            reason = "the share tests are Windows-only; the share_bench example calls it"
+        )
+    )]
     pub async fn start_share(
         &mut self,
         source: ScreenSource,
@@ -380,10 +394,21 @@ impl Member {
         self.act(Intent::StartShare { source, quality }).await
     }
 
+    #[cfg_attr(
+        not(windows),
+        allow(
+            dead_code,
+            reason = "the share tests are Windows-only; the share_bench example calls it"
+        )
+    )]
     pub async fn stop_share(&mut self) {
         let _ = self.act(Intent::StopShare).await;
     }
 
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "only the Windows-only share tests call it")
+    )]
     pub fn own_share_feed(&mut self) -> Option<VideoFeed> {
         self.snapshot.own_share_feed()
     }
@@ -397,6 +422,13 @@ impl Member {
             .expect("a Member of that name")
     }
 
+    #[cfg_attr(
+        not(windows),
+        allow(
+            dead_code,
+            reason = "the share tests are Windows-only; the share_bench example calls it"
+        )
+    )]
     pub async fn watch(&mut self, name: &str) -> Result<VideoFeed, Issue> {
         let sharer = self.id_of(name);
         self.watch_feed = None;
@@ -407,17 +439,32 @@ impl Member {
             .expect("a Watch not refused has its feed"))
     }
 
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "only the Windows-only share tests call it")
+    )]
     pub async fn ask_watch(&mut self, name: &str) -> Result<(), Issue> {
         let sharer = self.id_of(name);
         self.act(Intent::Watch(sharer)).await
     }
 
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "only the Windows-only share tests call it")
+    )]
     pub fn watching(&self) -> Option<(String, bool)> {
         let w = self.state().share.watch.as_ref()?;
         let name = self.state().members.get(&w.sharer)?.username.to_string();
         Some((name, w.live))
     }
 
+    #[cfg_attr(
+        not(windows),
+        allow(
+            dead_code,
+            reason = "the share tests are Windows-only; the share_bench example calls it"
+        )
+    )]
     pub async fn unwatch(&mut self) {
         let _ = self.act(Intent::Unwatch).await;
     }
@@ -447,6 +494,10 @@ impl Member {
         self.inspect(Session::udp_bytes_sent).await
     }
 
+    #[cfg_attr(
+        not(windows),
+        expect(dead_code, reason = "only the Windows-only share tests call it")
+    )]
     pub async fn watched_profile_level(&self) -> Option<u32> {
         self.inspect(Session::watched_profile_level).await
     }

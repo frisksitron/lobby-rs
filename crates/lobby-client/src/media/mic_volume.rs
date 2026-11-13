@@ -24,9 +24,16 @@ pub enum GainUnavailable {
     NoDevice,
     #[error("This microphone's volume cannot be changed.")]
     NoControl,
+    /// Not shown: Settings leaves the row out where this is the answer.
+    #[error("The microphone's volume is set in the system's sound settings.")]
+    Unsupported,
 }
 
 /// What the owner asks the thread.
+#[cfg_attr(
+    not(windows),
+    expect(dead_code, reason = "only Windows has a thread to read it")
+)]
 enum Ask {
     /// Hold this endpoint's control; None when no microphone is listed.
     Follow(Option<String>),
@@ -62,6 +69,11 @@ impl MicVolume {
             if started.is_err() {
                 *lock(&gain) = MicGain::Unavailable(GainUnavailable::NoControl);
             }
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = asked;
+            *lock(&gain) = MicGain::Unavailable(GainUnavailable::Unsupported);
         }
         MicVolume {
             gain,

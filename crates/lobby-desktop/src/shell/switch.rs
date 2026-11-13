@@ -260,6 +260,14 @@ impl Shell {
             return;
         }
         self.show_window(cx);
+        self.show_link(raw, window, cx);
+    }
+
+    /// What a link asks for, in `window`, which is already the one on show.
+    pub(super) fn show_link(&mut self, raw: &str, window: &mut Window, cx: &mut Context<Self>) {
+        if self.quit != QuitState::Running {
+            return;
+        }
         let Some(origin) = LobbyOrigin::from_deep_link(raw, self.client.policy()) else {
             info!(len = raw.len(), "a lobby:// link is not a Lobby address");
             return;
@@ -363,7 +371,7 @@ impl Shell {
         cx.notify();
     }
 
-    fn close_add_lobby(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(super) fn close_add_lobby(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.add_lobby.take().is_some() {
             self.add_events = None;
             window.close_dialog(cx);

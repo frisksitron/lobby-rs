@@ -4,7 +4,7 @@
 //! OS window's size, and values that go to the OS.
 
 use crate::kit::ActiveTheme as _;
-use gpui_kit::{App, Pixels, Rems, Window, px, rems};
+use gpui_kit::{App, Pixels, Rems, Size, Styled, Window, px, rems, size};
 
 /// The rem size at 100%.
 pub const BASE_REM: f32 = 16.;
@@ -31,12 +31,55 @@ pub fn app_scale(cx: &App) -> f32 {
     f32::from(cx.theme().font_size) / BASE_REM
 }
 
+/// The window as a person sees it: its surface without the invisible margin a client-decorated
+/// window keeps for its shadow (Linux; none on Windows). The compositor sizes the visible window,
+/// so this is the size it set.
+pub fn visible_size(window: &Window) -> Size<Pixels> {
+    let margin = crate::kit::window_paddings(window);
+    let surface = window.viewport_size();
+    size(
+        surface.width - margin.left - margin.right,
+        surface.height - margin.top - margin.bottom,
+    )
+}
+
+/// A surface that fills the window with a background must round the window's corners itself:
+/// GPUI clips children to a rectangle, so a square fill would show beyond the rounded border.
+/// Only the Linux window Lobby draws itself has rounded corners; elsewhere this changes nothing.
+#[cfg(target_os = "linux")]
+pub fn round_to_window<E: Styled>(el: E, window: &Window, cx: &App) -> E {
+    let radii = crate::kit::window_corner_radii(window, cx);
+    el.rounded_tl(radii.top_left)
+        .rounded_tr(radii.top_right)
+        .rounded_bl(radii.bottom_left)
+        .rounded_br(radii.bottom_right)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn round_to_window<E: Styled>(el: E, _window: &Window, _cx: &App) -> E {
+    el
+}
+
+/// [`round_to_window`] for a surface that ends at the window's bottom edge only, such as a page
+/// under the title bar.
+#[cfg(target_os = "linux")]
+pub fn round_bottom_to_window<E: Styled>(el: E, window: &Window, cx: &App) -> E {
+    let radii = crate::kit::window_corner_radii(window, cx);
+    el.rounded_bl(radii.bottom_left)
+        .rounded_br(radii.bottom_right)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn round_bottom_to_window<E: Styled>(el: E, _window: &Window, _cx: &App) -> E {
+    el
+}
+
 /// The window's content size in design pixels: what a layout rule written for 100% is compared
 /// with, so a bigger scale folds the sidebar sooner and never gives a layout less room than it
 /// was designed for.
 pub fn design_viewport(window: &Window) -> (f32, f32) {
     let scale = window_scale(window);
-    let size = window.viewport_size();
+    let size = visible_size(window);
     (
         f32::from(size.width) / scale,
         f32::from(size.height) / scale,

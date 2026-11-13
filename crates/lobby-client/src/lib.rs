@@ -5,9 +5,6 @@
 //! runtime handle given to [`Client::new`] and returns a [`ClientTask`] or a channel, which a
 //! GPUI executor may await without a Tokio reactor.
 
-#[cfg(not(windows))]
-compile_error!("lobby-client builds for Windows only");
-
 mod api;
 mod atomic;
 mod client;
@@ -60,7 +57,7 @@ pub use media::{
     DspControl, DspLevels, DspReading, Endpoints, FakeDevices, MediaConfig, MediaError, MediaPath,
     MicLevel, MicTest, MonitorControl, NamedDevice, PaintSize, RouteProbe, ScreenSource, SourceId,
     SourceKind, SystemDevices, TestMotion, Tone, VideoFeed, VideoFrame, VideoStats, VoiceStats,
-    list_sources, share_blocked,
+    list_sources, share_blocked, watch_blocked,
 };
 pub use media::{GainUnavailable, MicGain, MicMeter, MicQuality, MicReading, MicVolume, Zone};
 pub use media::{Thumbnail, Thumbnails, request_thumbnails, synthetic_thumbnail};
@@ -89,6 +86,12 @@ pub use time::{
 };
 pub use tokens::{KeyringTokenStore, MemoryTokenStore, TokenStore, TokenStoreError};
 pub use volume::Volume;
+
+/// The Linux app id: the Wayland app id of the window, the name of the launcher entry and icon an
+/// install writes, and what the sound server's mixer knows Lobby's streams by, so the desktop
+/// matches all of them to one app.
+#[cfg(target_os = "linux")]
+pub const APP_ID: &str = "io.github.frisksitron.Lobby";
 
 #[cfg(feature = "test-support")]
 pub use connection::ConnEvent;

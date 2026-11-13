@@ -305,6 +305,16 @@ pub(super) fn member_row(
             ..sharer("heidi", Tile::Faint)
         },
     ];
+    let cannot_watch = [
+        sharer("grace", Tile::Unavailable),
+        crate::components::MemberRowModel {
+            voice: Some(VoiceState {
+                muted: true,
+                ..sharing()
+            }),
+            ..sharer("heidi", Tile::Unavailable)
+        },
+    ];
     let reconnecting = [
         member("alice"),
         crate::components::MemberRowModel {
@@ -341,6 +351,16 @@ pub(super) fn member_row(
             "You are not In Voice: their tiles are faint outlines",
             list(voice_box, cx).children(
                 out_of_voice
+                    .into_iter()
+                    .map(|m| row(m, true, true, voice_box)),
+            ),
+        ),
+        Section::new(
+            "cannot-watch",
+            "This computer cannot watch a Screen Share (Linux, for now): the same outlines, and \
+             a tooltip that says so",
+            list(voice_box, cx).children(
+                cannot_watch
                     .into_iter()
                     .map(|m| row(m, true, true, voice_box)),
             ),
@@ -455,6 +475,13 @@ pub(super) fn member_panel(
             "Sharing, you are not In Voice",
             MemberPanelModel {
                 watch: WatchLine::NeedsVoice,
+                ..panel_model("Eve Online")
+            },
+        ),
+        (
+            "Sharing, this computer cannot watch",
+            MemberPanelModel {
+                watch: WatchLine::Unavailable,
                 ..panel_model("Eve Online")
             },
         ),
@@ -581,6 +608,7 @@ pub(super) fn watch_tile(
             false,
         ),
         ("faint", Tile::Faint, false),
+        ("unavailable", Tile::Unavailable, false),
     ];
     let rows = [
         sharer("alice", Tile::OnScreen { switching: true }),
@@ -603,7 +631,7 @@ pub(super) fn watch_tile(
             "The drawn tile is 44 × 32 in a 44 × 40 slot, the same in every state. Quiet plum at \
              rest; a lavender ring and lift under the pointer; the same lift with a full ring while \
              a switch to it waits for its picture; lavender when it is on screen; a bare outline \
-             when you are not In Voice",
+             when you are not In Voice, or when this computer cannot watch (the tooltip says which)",
             panel(472., voice_box, cx).child(div().flex().flex_wrap().gap_3().p_2().children(
                 tiles.into_iter().map(|(name, tile, hovered)| {
                     let watch =

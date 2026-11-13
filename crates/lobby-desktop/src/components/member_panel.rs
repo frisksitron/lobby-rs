@@ -55,6 +55,8 @@ pub enum WatchLine {
     StopWatching,
     /// They share, and this person is not In Voice.
     NeedsVoice,
+    /// They share, and this computer cannot watch.
+    Unavailable,
 }
 
 impl WatchLine {
@@ -62,6 +64,7 @@ impl WatchLine {
         match row.tile.filter(|_| !row.is_me) {
             None => Self::Hidden,
             Some(Tile::Faint) => Self::NeedsVoice,
+            Some(Tile::Unavailable) => Self::Unavailable,
             Some(Tile::Rest | Tile::Coming) => Self::Watch,
             Some(Tile::OnScreen { .. }) => Self::StopWatching,
         }
@@ -472,13 +475,15 @@ fn watch_block(
 ) -> Option<AnyElement> {
     let (id, label, icon) = match line {
         WatchLine::Hidden => return None,
-        WatchLine::Watch | WatchLine::NeedsVoice => ("member-watch", "Watch", IconName::Eye),
+        WatchLine::Watch | WatchLine::NeedsVoice | WatchLine::Unavailable => {
+            ("member-watch", "Watch", IconName::Eye)
+        }
         WatchLine::StopWatching => ("member-stop-watching", "Stop watching", IconName::EyeOff),
     };
     let press = match line {
         WatchLine::Watch => pressing(actions.map(|a| &a.watch), || ()),
         WatchLine::StopWatching => pressing(actions.map(|a| &a.stop_watching), || ()),
-        WatchLine::Hidden | WatchLine::NeedsVoice => None,
+        WatchLine::Hidden | WatchLine::NeedsVoice | WatchLine::Unavailable => None,
     };
     let button = ui::Button::new(id)
         .debug_selector(move || id.into())
@@ -497,6 +502,9 @@ fn watch_block(
         })
         .when(line == WatchLine::NeedsVoice, |b| {
             b.disabled(true).tooltip(copy::SHARE_NEEDS_VOICE_TIP)
+        })
+        .when(line == WatchLine::Unavailable, |b| {
+            b.disabled(true).tooltip(copy::WATCH_UNAVAILABLE)
         })
         .when_some(press, |b, press| {
             b.on_click(move |_, window, cx| press(window, cx))

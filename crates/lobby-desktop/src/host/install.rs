@@ -7,9 +7,7 @@
 #![allow(unsafe_code)]
 
 use std::{
-    env,
-    ffi::OsString,
-    fs, io,
+    env, fs, io,
     os::windows::process::CommandExt as _,
     path::{Path, PathBuf},
     process::Command,
@@ -44,11 +42,13 @@ use windows::{
     core::{GUID, HSTRING, Interface as _},
 };
 
-use super::{link_in, single_instance, win};
+use super::{
+    install_plan::{Plan, Startup, UNINSTALL_ARG, plan, uninstall_requested},
+    single_instance, win,
+};
 use crate::host_env::{APP_NAME, AUMID_PREFIX};
 
 pub const EXE: &str = "Lobby.exe";
-pub const UNINSTALL_ARG: &str = "--uninstall";
 const UNINSTALL_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\Lobby";
 const AUMID_KEY: &str = r"Software\Classes\AppUserModelId";
 const CLASSES_KEY: &str = r"Software\Classes";
@@ -62,31 +62,6 @@ const QUIT_POLL: Duration = Duration::from_millis(100);
 const CLEAN_UP_AGAIN: Duration = Duration::from_secs(10);
 /// CREATE_NO_WINDOW: the clean-up after uninstall runs without a console window.
 const NO_WINDOW: u32 = 0x0800_0000;
-
-/// What `main` does after [`on_start`].
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Startup {
-    Run,
-    Exit,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Plan {
-    Run,
-    Install,
-    /// This exe is no newer than the installed app: start that one instead.
-    LaunchInstalled,
-    Uninstall,
-}
-
-fn plan(uninstall: bool, in_install_dir: bool, installed: Option<Version>, me: Version) -> Plan {
-    match (uninstall, in_install_dir, installed) {
-        (true, _, _) => Plan::Uninstall,
-        (false, true, _) => Plan::Run,
-        (false, false, Some(installed)) if installed >= me => Plan::LaunchInstalled,
-        (false, false, _) => Plan::Install,
-    }
-}
 
 /// Where the app lives once installed.
 pub fn install_dir() -> Option<PathBuf> {
@@ -144,12 +119,6 @@ pub fn on_start(rt: &Handle, me: Version) -> Startup {
             Startup::Exit
         }
     }
-}
-
-/// `--uninstall` among the arguments, unless a `lobby://` link is there too: a link is untrusted
-/// text, and quotes in it can pass for more arguments.
-fn uninstall_requested(args: &[OsString]) -> bool {
-    link_in(args.iter().cloned()).is_none() && args.iter().any(|a| a == UNINSTALL_ARG)
 }
 
 fn install(rt: &Handle, exe: &Path, dir: &Path, me: Version) -> io::Result<()> {
@@ -398,34 +367,5 @@ fn shortcut(at: &Path, target: &Path) -> windows::core::Result<()> {
         store.Commit()?;
         link.cast::<IPersistFile>()?
             .Save(&HSTRING::from(at.as_os_str()), true)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn setup_installs_only_over_an_older_app_and_the_installed_app_just_runs() {
-        let v = |s: &str| s.parse::<Version>().unwrap();
-        let me = v("0.11.0");
-        assert_eq!(plan(false, false, None, me), Plan::Install);
-        assert_eq!(plan(false, false, Some(v("0.10.2")), me), Plan::Install);
-        assert_eq!(plan(false, false, Some(me), me), Plan::LaunchInstalled);
-        assert_eq!(
-            plan(false, false, Some(v("0.12.0")), me),
-            Plan::LaunchInstalled
-        );
-        assert_eq!(plan(false, true, Some(me), me), Plan::Run);
-        assert_eq!(plan(true, true, Some(me), me), Plan::Uninstall);
-    }
-
-    #[test]
-    fn a_link_never_passes_for_the_uninstall_flag() {
-        let args = |list: &[&str]| list.iter().map(OsString::from).collect::<Vec<_>>();
-        assert!(uninstall_requested(&args(&["--uninstall"])));
-        assert!(!uninstall_requested(&args(&[])));
-        assert!(!uninstall_requested(&args(&["lobby://x", "--uninstall"])));
-        assert!(!uninstall_requested(&args(&["--uninstall", "LOBBY:x"])));
     }
 }
