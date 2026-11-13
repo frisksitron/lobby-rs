@@ -49,16 +49,23 @@ jobs:
       - name: Gates
         run: cargo xtask gates
 
-  # The app is Windows only; the server ships as a Linux image, so it is checked there too.
-  server:
-    name: Server on Linux
-    runs-on: ubuntu-latest
+  # The desktop app ships for Windows and Linux, and the server as a Linux image: the whole
+  # workspace is checked on both. The gates include the server's own clippy run, as the image
+  # builds it, and its tests, so this job replaces the server-only one that stood here.
+  linux:
+    name: Linux
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Toolchain
         run: rustup show active-toolchain
 
+      # No "Unoptimised lobby-client" step, unlike Windows: the DPDFNet test in media::dsp runs
+      # 800 frames and takes over 30 s at opt-level 0 (the nextest timeout) and under a second at
+      # the workspace's 3. The optimised crate builds in about a minute.
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -67,13 +74,13 @@ jobs:
         with:
           tool: nextest
 
-      - name: Clippy
-        run: cargo clippy -p lobby-server -p lobby-protocol --all-targets -- -D warnings
+      # What the build links. The same list as release.yml's Linux job: change both together.
+      # The tests need no display, D-Bus, Secret Service or sound server: the runner has none.
+      - name: Packages
+        run: >
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          cmake pkg-config libasound2-dev libfontconfig-dev libfreetype-dev
+          libxcb1-dev libxcb-xkb-dev libxkbcommon-dev libxkbcommon-x11-dev
 
-      # In the workspace, xtask turns the server's test-support on, so the gates never see the
-      # server as the image builds it.
-      - name: Clippy (the image's build)
-        run: cargo clippy -p lobby-server -- -D warnings
-
-      - name: Tests
-        run: cargo nextest run -p lobby-server -p lobby-protocol
+      - name: Gates
+        run: cargo xtask gates
