@@ -12,7 +12,8 @@ is no separate spec, and the Rust types in `lobby-protocol` are the wire contrac
   simplicity over hardening.
 - Use the domain language: Lobby, Member, owner, Vouch, Ask to Join, Voice, Screen Share, Watch,
   Issue, Magic Code. The Lobbies a person has added on this device are "Lobbies", never
-  "Known Lobbies".
+  "Known Lobbies". `README.md` is the exception: it is for people who do not know Lobby yet, so it
+  stays short and says voice, screen share, member and code in plain lowercase.
 - Make the desktop app delightful, and keep it usable in the small window (480×400). Build UI from
   `lobby-desktop/src/components` and the controls in `lobby-desktop/src/ui` before writing new
   ones. `ui` draws Lobby's look on gpui-kit's unstyled `base` layer, and a control enters it once
