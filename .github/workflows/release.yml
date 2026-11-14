@@ -1,8 +1,9 @@
 # A `v<version>` tag, pushed by `cargo xtask release <version>`, becomes a GitHub Release with the
 # Windows and Linux apps, which every installed Lobby updates to, and a server image on ghcr.io.
 # CI, the apps, their notices and the image build side by side; nothing is published unless CI
-# passes. A Linux build that fails or is skipped does not hold the Release back: it goes out with
-# the Windows app alone.
+# passes, its Linux job included. The Linux app's own build is the one job that does not hold the
+# Release back: if it fails, the Release goes out with the Windows app alone, and re-running the
+# failed jobs adds the Linux files to it.
 name: Release
 
 on:
@@ -52,6 +53,8 @@ jobs:
     # The oldest system the app is promised to start on: xtask's glibc ceiling is this runner's,
     # and `dist` fails a build that needs more.
     runs-on: ubuntu-24.04
+    # `publish` waits for this job: one that hangs must not hold the Windows release for hours.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
 
@@ -136,19 +139,30 @@ jobs:
       # gh uploads the files before it publishes, so no app sees a Release without its files.
       # install.sh is what a person on Linux downloads to install: its link stays the same.
       # The Linux files go up only when the Linux job left them: an artifact exists only after
-      # that job's last step.
+      # that job's last step. A Release that is already out is one that went without them: a
+      # re-run of the failed Linux job ends here again, and adds them.
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
           LINUX_RESULT: ${{ needs.linux-app.result }}
         run: |
-          files=(dist/LobbySetup.exe dist/latest.json dist/THIRD-PARTY-NOTICES.html)
+          linux=()
           if [ -f dist/lobby-linux-x86_64 ] && [ -f dist/latest-linux.json ] && [ -f dist/install.sh ]; then
-            files+=(dist/lobby-linux-x86_64 dist/latest-linux.json dist/install.sh)
-          else
+            linux=(dist/lobby-linux-x86_64 dist/latest-linux.json dist/install.sh)
+          fi
+          if gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if [ ${#linux[@]} -eq 0 ]; then
+              echo "::error::The Release is out without the Linux app, and the Linux job left none (the Linux job: $LINUX_RESULT)"
+              exit 1
+            fi
+            gh release upload "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" "${linux[@]}" --clobber
+            exit 0
+          fi
+          if [ ${#linux[@]} -eq 0 ]; then
             echo "::warning::The Linux app was not built (the Linux job: $LINUX_RESULT): publishing the Release without it"
           fi
-          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" "${files[@]}" \
+          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" \
+            dist/LobbySetup.exe dist/latest.json dist/THIRD-PARTY-NOTICES.html "${linux[@]}" \
             --title "Lobby ${GITHUB_REF_NAME#v}" --notes-file dist/release-notes.md --verify-tag
 
   image:

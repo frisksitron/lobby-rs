@@ -31,7 +31,11 @@ else
 fi
 command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is needed to check the download"
 
-work=$(mktemp -d) || fail "cannot make a temporary folder"
+# Under the cache folder, not /tmp: the download is run from here, and some systems mount /tmp
+# noexec.
+cache=${XDG_CACHE_HOME:-$HOME/.cache}
+mkdir -p "$cache" || fail "cannot make $cache"
+work=$(mktemp -d "$cache/lobby-install.XXXXXX") || fail "cannot make a temporary folder"
 trap 'rm -rf "$work"' EXIT HUP INT TERM
 
 echo "Looking for the newest Lobby..."
