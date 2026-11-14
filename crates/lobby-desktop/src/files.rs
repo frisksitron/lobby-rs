@@ -101,7 +101,8 @@ pub fn save_path(suggested: &str, cx: &mut App) -> oneshot::Receiver<Answer<Path
 
 /// What a paste means when it is nothing but `file://` URIs, one per line, as a file manager's
 /// copy writes them (`text/uri-list`: GPUI hands it over as text on Linux; Windows hands over
-/// paths). `None` when any line is anything else, so such a paste stays text. A list's `#`
+/// paths). `None` when any line is anything else, or a URI of anything but an existing regular
+/// file (a URI typed into a Message, a folder), so such a paste stays text. A list's `#`
 /// comment line counts as anything else: GPUI gives only the text, in which it cannot be told
 /// from a Markdown heading.
 #[cfg(target_os = "linux")]
@@ -112,7 +113,7 @@ pub fn pasted_paths(text: &str) -> Option<Vec<PathBuf>> {
         .filter(|line| !line.is_empty())
         .map(|line| {
             let uri = url::Url::parse(line).ok()?;
-            uri.to_file_path().ok()
+            uri.to_file_path().ok().filter(|path| path.is_file())
         })
         .collect::<Option<Vec<_>>>()?;
     (!paths.is_empty()).then_some(paths)
