@@ -3,7 +3,7 @@
 # its SHA-256 against the Release's manifest and runs it. The app installs itself into
 # ~/.local/share/lobby, adds its launcher entry and starts, and updates itself from then on.
 #
-#   sh install.sh
+#   curl -fsSL https://github.com/frisksitron/lobby-rs/releases/latest/download/install.sh | sh
 #
 # LOBBY_RELEASE_BASE points it at another server laid out like GitHub Releases, for trying a
 # release before it is published. Remove Lobby with `~/.local/share/lobby/lobby --uninstall`.

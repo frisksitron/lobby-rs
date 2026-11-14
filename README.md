@@ -15,29 +15,33 @@ Everyone in a Lobby sees everything in it. There are no channels and no roles be
 
 ## Install the app
 
-The app runs on Windows 10 and 11, and on Linux (see [Linux](#linux) below).
+### Windows
 
-1. Download `LobbySetup.exe` from the [latest release](../../releases/latest).
-2. Run it. It installs Lobby for your Windows user into `%LOCALAPPDATA%\Programs\Lobby`, with no
-   administrator prompt, and adds it to the Start menu and the desktop. The exe is not code-signed
-   yet, so Windows SmartScreen may ask first: choose **More info**, then **Run anyway**.
-3. Enter the address of your group's Lobby, then your email.
+Windows 10 and 11. Download `LobbySetup.exe` from the [latest release](../../releases/latest)
+and run it. It installs Lobby for your Windows user, with no administrator prompt. The exe is not
+code-signed yet, so Windows SmartScreen may ask first: choose **More info**, then **Run anyway**.
 
-Lobby updates itself. When a new release is out, the title bar shows its download, then
-**Restart to update**. If you quit instead, the update is in place the next time you start Lobby.
-To uninstall, use **Installed apps** in Windows Settings. Your Lobbies and settings stay.
+To uninstall, use **Installed apps** in Windows Settings.
 
 ### Linux
 
-The app runs on 64-bit (x86_64) Linux with glibc 2.39 or newer (Ubuntu 24.04 and later) and a
-Wayland desktop session (GNOME, KDE, sway and the others; X11 is not supported). Ubuntu is the
-tested system. Chat and Voice work as on Windows. Sharing your screen and watching a Screen Share
-are not available on Linux yet. Download
-`install.sh` from the
-[latest release](../../releases/latest) and run it with `sh install.sh`. It downloads the app,
-checks it, and the app installs itself for your user into `~/.local/share/lobby`, adds Lobby to
-your launcher and opens `lobby://` links. Updating works as on Windows. To uninstall, run
-`~/.local/share/lobby/lobby --uninstall`. Your Lobbies and settings stay.
+```sh
+curl -fsSL https://github.com/frisksitron/lobby-rs/releases/latest/download/install.sh | sh
+```
+
+It installs Lobby for your user into `~/.local/share/lobby` and adds it to your launcher. Lobby
+needs x86_64 Linux as new as Ubuntu 24.04 (glibc 2.39) and a Wayland session; Ubuntu is the tested
+system. Screen Share and watching one are not available on Linux yet.
+
+To uninstall, run `~/.local/share/lobby/lobby --uninstall`.
+
+### After installing
+
+Enter the address of your group's Lobby, then your email.
+
+Lobby updates itself. When a new release is out, the title bar shows its download, then
+**Restart to update**. If you quit instead, the update is in place the next time you start Lobby.
+Uninstalling keeps your Lobbies and settings.
 
 ## Host a Lobby
 
@@ -61,8 +65,8 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 ## Release
 
 `cargo xtask release <version>` bumps the version, commits, tags `v<version>` and pushes. The tag's
-[release workflow](.github/workflows/release.yml) builds `LobbySetup.exe` and the server image and
-publishes the GitHub Release. Every installed app sees it within the hour.
+[release workflow](.github/workflows/release.yml) builds the Windows and Linux apps and the server
+image and publishes the GitHub Release. Every installed app sees it within the hour.
 
 ## Develop
 
