@@ -26,14 +26,9 @@ jobs:
       - name: Toolchain
         run: rustup show active-toolchain
 
-      # Debug builds optimise lobby-client so Screen Share keeps up when run by hand; the tests
-      # need none of it, and it is the biggest compile of the run.
-      - name: Unoptimised lobby-client
-        shell: bash
-        run: |
-          printf '[profile.dev.package.lobby-client]\nopt-level = 0\n' \
-            >> "${CARGO_HOME:-$HOME/.cargo}/config.toml"
-
+      # lobby-client builds at the workspace's opt-level 3, as on a developer's machine: the
+      # DPDFNet test in media::dsp takes over 30 s at opt-level 0 (the nextest timeout) and under
+      # a second at 3.
       - uses: Swatinem/rust-cache@v2
         with:
           # Only main's runs refresh the cache, so a pull request or a Release does not wait
@@ -63,9 +58,6 @@ jobs:
       - name: Toolchain
         run: rustup show active-toolchain
 
-      # No "Unoptimised lobby-client" step, unlike Windows: the DPDFNet test in media::dsp runs
-      # 800 frames and takes over 30 s at opt-level 0 (the nextest timeout) and under a second at
-      # the workspace's 3. The optimised crate builds in about a minute.
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
