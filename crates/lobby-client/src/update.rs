@@ -27,11 +27,17 @@ use tokio_util::task::AbortOnDropHandle;
 use tracing::{info, warn};
 use url::Url;
 
-pub use names::{ASSET, EXE, MANIFEST, OLD, SETUP_COPY};
+#[cfg(not(target_os = "linux"))]
+pub use names::OLD;
+pub use names::{ASSET, EXE, MANIFEST, SETUP_COPY};
 use names::{PARTIAL, STAGED};
 
 /// Every file an install or an update makes in the app's folder, for uninstall.
+#[cfg(not(target_os = "linux"))]
 pub const APP_FILES: [&str; 5] = [EXE, OLD, STAGED, PARTIAL, SETUP_COPY];
+/// Every file an install or an update makes in the app's folder, for uninstall.
+#[cfg(target_os = "linux")]
+pub const APP_FILES: [&str; 4] = [EXE, STAGED, PARTIAL, SETUP_COPY];
 
 /// What each system calls the app's files. Windows keeps the names its installed apps and
 /// released feeds already use.
@@ -58,7 +64,6 @@ mod names {
     pub const EXE: &str = "lobby";
     pub const PARTIAL: &str = "lobby.download";
     pub const STAGED: &str = "lobby.update";
-    pub const OLD: &str = "lobby.old";
     pub const SETUP_COPY: &str = "lobby.setup";
 }
 
@@ -505,13 +510,13 @@ fn swap_names(exe: &Path, new: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Deletes what an earlier update or install left beside `exe`: the app it replaced, and setup's
-/// copy. Whatever is still in use stays for the next start. A cut-off download is the updater's:
-/// it starts over in the same file.
+/// Deletes what an earlier update or install left beside `exe`: the app it replaced (Linux
+/// replaces it in place), and setup's copy. Whatever is still in use stays for the next start. A
+/// cut-off download is the updater's: it starts over in the same file.
 pub fn clean_up(exe: &Path) {
-    for leftover in [OLD, SETUP_COPY] {
-        let _ = fs::remove_file(exe.with_file_name(leftover));
-    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = fs::remove_file(exe.with_file_name(OLD));
+    let _ = fs::remove_file(exe.with_file_name(SETUP_COPY));
 }
 
 #[cfg(test)]
@@ -529,20 +534,25 @@ mod tests {
         fs::write(&new, b"new").unwrap();
         // A process running `old` holds this open: it keeps the replaced inode.
         let running = fs::File::open(&exe).unwrap();
+        let files = || {
+            fs::read_dir(dir.path())
+                .unwrap()
+                .map(|entry| entry.unwrap().file_name())
+                .collect::<Vec<_>>()
+        };
         swap_in(&exe, &new).unwrap();
         assert_eq!(fs::read(&exe).unwrap(), b"new");
         assert_eq!(
             fs::metadata(&exe).unwrap().permissions().mode() & 0o777,
             0o755
         );
-        assert!(!dir.path().join(OLD).exists());
-        assert!(!new.exists());
+        assert_eq!(files(), [EXE]);
         assert_eq!(io::read_to_string(running).unwrap(), "old");
         // A second update while the first one still runs lands on the same name.
         fs::write(&new, b"newer").unwrap();
         swap_in(&exe, &new).unwrap();
         assert_eq!(fs::read(&exe).unwrap(), b"newer");
-        assert!(!dir.path().join(OLD).exists());
+        assert_eq!(files(), [EXE]);
     }
 
     #[cfg(not(target_os = "linux"))]

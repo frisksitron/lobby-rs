@@ -17,7 +17,7 @@ use std::{
 
 use lobby_client::{
     DEEP_LINK_SCHEME,
-    update::{APP_FILES, EXE, OLD, SETUP_COPY, Version, clean_up, swap_in},
+    update::{APP_FILES, EXE, SETUP_COPY, Version, clean_up, swap_in},
 };
 use tokio::runtime::Handle;
 use tracing::{debug, info, warn};
@@ -412,18 +412,12 @@ fn running_exe() -> Option<PathBuf> {
 }
 
 /// Linux appends " (deleted)" to the path of a binary that was replaced while it runs, such as
-/// the one an update swapped in. An earlier version moved the running app aside to `lobby.old`
-/// before replacing it, so a process from then reports `lobby.old (deleted)`: the app it stands
-/// for is the `lobby` beside it.
+/// the one an update swapped in.
 fn installed_name(exe: PathBuf) -> PathBuf {
-    let plain = match exe.to_str().and_then(|s| s.strip_suffix(" (deleted)")) {
+    match exe.to_str().and_then(|s| s.strip_suffix(" (deleted)")) {
         Some(plain) => PathBuf::from(plain),
         None => exe,
-    };
-    if plain.file_name().is_some_and(|name| name == OLD) {
-        return plain.with_file_name(EXE);
     }
-    plain
 }
 
 fn same_path(a: &Path, b: &Path) -> bool {
