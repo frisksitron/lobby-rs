@@ -650,8 +650,6 @@ impl ComposerView {
         self.focus(window, cx);
     }
 
-    /// A paste into the composer: a URL over selected words links them. `false`: paste as
-    /// usual.
     /// Pasted text. On Linux, file URIs are files copied in a file manager: they attach, as
     /// Windows' copied files do. `false`: the field pastes it as it is.
     fn paste_text(&mut self, pasted: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
@@ -663,6 +661,8 @@ impl ComposerView {
         self.paste_url(pasted, window, cx)
     }
 
+    /// A paste into the composer: a URL over selected words links them. `false`: paste as
+    /// usual.
     pub fn paste_url(&mut self, pasted: &str, window: &mut Window, cx: &mut Context<Self>) -> bool {
         let (text, selection) = {
             let c = self.input.read(cx);
