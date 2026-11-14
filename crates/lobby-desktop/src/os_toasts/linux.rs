@@ -9,7 +9,7 @@ use tracing::debug;
 use super::OsToast;
 use crate::{
     Shell,
-    host::notify::{Click, Event, MAX_TRACKED, Notifier, Ticket, Toast, with_activation_token},
+    host::notify::{Click, Event, MAX_TRACKED, Notifier, Ticket, Toast},
 };
 
 type OnClick = Rc<dyn Fn(&mut Window, &mut App)>;
@@ -125,21 +125,16 @@ fn desktop<'a>(cx: &'a mut Context<Shell>) -> &'a mut Desktop {
     cx.global_mut::<Desktop>()
 }
 
-/// A click: the toast's own handler runs, with the desktop's activation token readable for the
-/// length of it. Most daemons close a clicked notification and say so (`Event::Gone`); one that
-/// keeps it may be clicked again.
+/// A click: the toast's own handler runs. Most daemons close a clicked notification and say so
+/// (`Event::Gone`); one that keeps it may be clicked again.
 fn clicked(shown: &Shown, click: Click, window: &mut Window, cx: &mut App) {
     let handler = shown.0.borrow().get(&click.ticket.tag).cloned();
     let Some(handler) = handler else {
         debug!("a click on a notification that is already taken back");
         return;
     };
-    debug!(
-        tag = click.ticket.tag,
-        activation_token = click.token.is_some(),
-        "notification clicked"
-    );
-    with_activation_token(click.token, cx, |cx| handler(window, cx));
+    debug!(tag = click.ticket.tag, "notification clicked");
+    handler(window, cx);
 }
 
 pub(super) fn post(toast: OsToast, on_click: OnClick, cx: &mut Context<Shell>) {

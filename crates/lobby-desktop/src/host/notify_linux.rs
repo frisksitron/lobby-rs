@@ -5,12 +5,12 @@
 //!
 //! What a notification says is [`crate::os_toasts`]'s; this decides how the spec carries it: one
 //! notification per tag (a newer one has the older one's id as `replaces_id`), `CloseNotification`
-//! when its thing is gone, a `default` action only where the daemon has `actions`, markup only
-//! where it has `body-markup`, and the activation token a click arrives with.
+//! when its thing is gone, a `default` action only where the daemon has `actions`, and markup only
+//! where it has `body-markup`.
 
 use std::{
     collections::{HashMap, VecDeque},
-    fmt, fs,
+    fs,
     future::Future,
     path::PathBuf,
     sync::{Arc, Mutex, MutexGuard},
@@ -19,7 +19,6 @@ use std::{
 };
 
 use futures_lite::{StreamExt as _, future::or};
-use gpui_kit::{App, Global};
 use tokio::sync::{
     Notify as Wake,
     mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
@@ -57,50 +56,6 @@ const MAX_PENDING: usize = 64;
 /// Lobby plays no sound of its own for a Message or an Ask to Join, and the Windows toast is
 /// silent: so the daemon is asked to be too, and a Member in Voice is not rung over.
 const SUPPRESS_SOUND: bool = true;
-
-/// What the desktop hands a click so the app may be raised: the `ActivationToken` signal's
-/// string, for `xdg-activation-v1`. Treat it like a secret and never log it.
-#[derive(Clone, PartialEq, Eq)]
-pub struct ActivationToken(String);
-
-impl ActivationToken {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Debug for ActivationToken {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("ActivationToken(***)")
-    }
-}
-
-/// The token of the click being handled, kept for the length of that click's handler. Show
-/// reads it with [`take_activation_token`], synchronously: it is gone when the handler returns.
-#[derive(Default)]
-struct ClickToken(Option<ActivationToken>);
-
-impl Global for ClickToken {}
-
-/// The token the click that is being handled came with, if the desktop sent one. This is the
-/// seam for Show: the Shell's `show_window` runs inside the click's handler, so it can call this
-/// before it spawns anything, and hand the token to `xdg-activation-v1`.
-pub fn take_activation_token(cx: &mut App) -> Option<ActivationToken> {
-    cx.default_global::<ClickToken>().0.take()
-}
-
-/// Runs `handler` with the click's token readable through [`take_activation_token`], and drops
-/// what the handler left unread: a token is good for one raise, now.
-pub(crate) fn with_activation_token<R>(
-    token: Option<ActivationToken>,
-    cx: &mut App,
-    handler: impl FnOnce(&mut App) -> R,
-) -> R {
-    cx.set_global(ClickToken(token));
-    let result = handler(cx);
-    cx.set_global(ClickToken(None));
-    result
-}
 
 /// One post of a tag. A tag is posted again and again as its author writes on, so an event
 /// about an earlier post (it expired, it was dismissed) must not be taken for one about the
@@ -207,7 +162,6 @@ pub fn compose(toast: &Toast, caps: Capabilities, replaces_id: u32, icon: &str) 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Click {
     pub ticket: Ticket,
-    pub token: Option<ActivationToken>,
 }
 
 /// A notification the daemon shows: the id it gave, and the bus name that gave it. Ids are
@@ -224,15 +178,6 @@ struct Shown {
 #[derive(Debug, Default)]
 pub struct Desk {
     shown: VecDeque<Shown>,
-    token: Option<Token>,
-}
-
-/// An `ActivationToken` signal: who sent it, and for which of its ids.
-#[derive(Debug)]
-struct Token {
-    owner: String,
-    id: u32,
-    token: ActivationToken,
 }
 
 impl Desk {
@@ -272,9 +217,6 @@ impl Desk {
         let (gone, kept): (VecDeque<_>, VecDeque<_>) =
             self.shown.drain(..).partition(|s| s.owner == departed);
         self.shown = kept;
-        if self.token.as_ref().is_some_and(|t| t.owner == departed) {
-            self.token = None;
-        }
         gone.into_iter().map(|s| s.ticket).collect()
     }
 
@@ -301,13 +243,6 @@ impl Desk {
     /// The daemon `owner` closed its `id` (a click, the Member's dismissal, a timeout, or our
     /// own close).
     pub fn closed(&mut self, owner: &str, id: u32) -> Option<Ticket> {
-        if self
-            .token
-            .as_ref()
-            .is_some_and(|t| t.owner == owner && t.id == id)
-        {
-            self.token = None;
-        }
         let at = self.shown.iter().position(|s| s.is(owner, id))?;
         self.shown.remove(at).map(|s| s.ticket)
     }
@@ -315,33 +250,16 @@ impl Desk {
     /// The bus or the daemon went away: its ids mean nothing now. What was forgotten, oldest
     /// first.
     pub fn forget_all(&mut self) -> Vec<Ticket> {
-        self.token = None;
         self.shown.drain(..).map(|s| s.ticket).collect()
     }
 
-    /// `ActivationToken(id, token)` from the daemon `owner`, which sends it just before
-    /// `ActionInvoked`.
-    pub fn token(&mut self, owner: &str, id: u32, token: String) {
-        self.token = Some(Token {
-            owner: owner.to_owned(),
-            id,
-            token: ActivationToken(token),
-        });
-    }
-
-    /// `ActionInvoked(id, action)` from the daemon `owner`: a click on one of ours, with the
-    /// token that came before it.
-    pub fn invoked(&mut self, owner: &str, id: u32, action: &str) -> Option<Click> {
-        let token = self
-            .token
-            .take()
-            .filter(|t| t.owner == owner && t.id == id)
-            .map(|t| t.token);
+    /// `ActionInvoked(id, action)` from the daemon `owner`: a click on one of ours.
+    pub fn invoked(&self, owner: &str, id: u32, action: &str) -> Option<Click> {
         if action != DEFAULT_ACTION {
             return None;
         }
         let ticket = self.shown.iter().find(|s| s.is(owner, id))?.ticket.clone();
-        Some(Click { ticket, token })
+        Some(Click { ticket })
     }
 }
 
@@ -754,11 +672,6 @@ fn signal(message: &Message, desk: &mut Desk, events: &UnboundedSender<Event>) {
     let owner = sender_of(message);
     let body = message.body();
     match member.as_str() {
-        "ActivationToken" => {
-            if let Ok((id, token)) = body.deserialize::<(u32, String)>() {
-                desk.token(&owner, id, token);
-            }
-        }
         "ActionInvoked" => {
             if let Ok((id, action)) = body.deserialize::<(u32, String)>()
                 && let Some(click) = desk.invoked(&owner, id, &action)
@@ -1141,7 +1054,6 @@ mod tests {
         desk.posted(ticket("m/old", 1), 3, ":1.5");
         // The old daemon went and a new one answered a Notify before either change was told.
         desk.posted(ticket("m/new", 2), 4, ":1.9");
-        desk.token(":1.9", 4, "tok".into());
         // Told late: the name was free, then the new daemon took it.
         assert_eq!(desk.departed(":1.5"), [ticket("m/old", 1)]);
         assert_eq!(desk.departed(""), []);
@@ -1151,10 +1063,7 @@ mod tests {
             "the new daemon's entry survives"
         );
         assert_eq!(desk.replaces("m/old", ":1.5"), 0);
-        assert!(
-            desk.invoked(":1.9", 4, "default")
-                .is_some_and(|c| c.token.is_some())
-        );
+        assert!(desk.invoked(":1.9", 4, "default").is_some());
 
         // The new daemon goes away too: nothing it showed can be replaced or closed any more.
         desk.posted(ticket("m/new", 2), 4, ":1.9");
@@ -1177,7 +1086,6 @@ mod tests {
         let (events, mut rx) = unbounded_channel();
         // Queued by the old daemon before it went.
         let old = [
-            from(":1.5", "ActivationToken").build(&(1u32, "old")),
             from(":1.5", "ActionInvoked").build(&(1u32, "default")),
             from(":1.5", "NotificationClosed").build(&(1u32, 2u32)),
         ];
@@ -1187,12 +1095,11 @@ mod tests {
         assert!(rx.try_recv().is_err(), "nothing reaches the UI");
         assert_eq!(desk.replaces("m/new", ":1.9"), 1);
 
-        // The new daemon's own click has no token: the old one's was not for it.
+        // The new daemon's own click does.
         let click = from(":1.9", "ActionInvoked").build(&(1u32, "default"));
         signal(&click.expect("a signal"), &mut desk, &events);
         let click = Click {
             ticket: ticket("m/new", 2),
-            token: None,
         };
         assert_eq!(rx.try_recv(), Ok(Event::Clicked(click)));
         let closed = from(":1.9", "NotificationClosed").build(&(1u32, 2u32));
@@ -1201,32 +1108,14 @@ mod tests {
     }
 
     #[test]
-    fn a_click_carries_the_token_that_came_before_it() {
+    fn a_click_is_on_ours_and_on_the_default_action() {
         let mut desk = Desk::default();
         desk.posted(ticket("m/alice", 1), 7, DAEMON);
-        desk.posted(ticket("m/bob", 2), 8, DAEMON);
 
-        desk.token(DAEMON, 7, "tok".into());
         let click = desk.invoked(DAEMON, 7, "default").expect("a click on ours");
         assert_eq!(click.ticket, ticket("m/alice", 1));
-        assert_eq!(
-            click.token.as_ref().map(ActivationToken::as_str),
-            Some("tok")
-        );
-
-        let token_of = |desk: &mut Desk, id| desk.invoked(DAEMON, id, "default").map(|c| c.token);
-        // No token before it: a daemon without activation tokens.
-        assert_eq!(token_of(&mut desk, 8), Some(None));
-        // A token of another notification does not pass to this click.
-        desk.token(DAEMON, 7, "other".into());
-        assert_eq!(token_of(&mut desk, 8), Some(None));
-        // Not ours, not the default action, and a token for a notification closed unclicked.
         assert_eq!(desk.invoked(DAEMON, 99, "default"), None);
         assert_eq!(desk.invoked(DAEMON, 7, "something-else"), None);
-        desk.token(DAEMON, 8, "late".into());
-        desk.closed(DAEMON, 8);
-        desk.posted(ticket("m/bob", 3), 8, DAEMON);
-        assert_eq!(token_of(&mut desk, 8), Some(None));
     }
 
     /// One call as the daemon's side of the socket saw it: to whom, which, and its `replaces_id`.

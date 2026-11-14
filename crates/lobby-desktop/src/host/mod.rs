@@ -17,8 +17,6 @@ pub use linux::IdleWatch;
 #[path = "notify_linux.rs"]
 pub mod notify;
 #[cfg(target_os = "linux")]
-pub use notify::{ActivationToken, take_activation_token};
-#[cfg(target_os = "linux")]
 mod session_linux;
 #[cfg(target_os = "linux")]
 pub use session_linux::{exit_unless_wayland_session, note_launch_token};
