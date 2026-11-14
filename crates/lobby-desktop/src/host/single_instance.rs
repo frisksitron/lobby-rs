@@ -230,7 +230,7 @@ mod unix_socket {
         time::{sleep, timeout},
     };
     use tokio_util::task::AbortOnDropHandle;
-    use tracing::{info, warn};
+    use tracing::{debug, info, warn};
 
     use super::Instance;
     use crate::host::HostEvent;
@@ -244,6 +244,8 @@ mod unix_socket {
     const CONNECT_RETRY: Duration = Duration::from_millis(50);
     /// A client that connects and says nothing must not hold the socket.
     const MESSAGE_BUDGET: Duration = Duration::from_secs(2);
+    /// An accept error can last (EMFILE: no file descriptor left), so the next try waits.
+    const ACCEPT_RETRY: Duration = Duration::from_millis(500);
     /// A launch that does not hold the lock may find the holder not yet bound, or a stale socket
     /// that the holder is about to replace; it asks again this many times.
     const ROUNDS: u32 = 10;
@@ -431,8 +433,13 @@ mod unix_socket {
 
     async fn serve(listener: UnixListener, events: UnboundedSender<HostEvent>) {
         loop {
-            let Ok((stream, _)) = listener.accept().await else {
-                continue;
+            let stream = match listener.accept().await {
+                Ok((stream, _)) => stream,
+                Err(e) => {
+                    debug!(error = %e, "a second launch could not be accepted");
+                    sleep(ACCEPT_RETRY).await;
+                    continue;
+                }
             };
             let mut lines = BufReader::new(stream).lines();
             if let Ok(Ok(Some(line))) = timeout(MESSAGE_BUDGET, lines.next_line()).await {
