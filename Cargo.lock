@@ -4910,7 +4910,7 @@ checksum = "4744e383959f0db86ede514b809b1c53251889093803c05267acc7d4e7030d70"
 
 [[package]]
 name = "lobby-client"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "chrono",
  "cpal",
@@ -4953,7 +4953,7 @@ dependencies = [
 
 [[package]]
 name = "lobby-desktop"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4988,7 +4988,7 @@ dependencies = [
 
 [[package]]
 name = "lobby-protocol"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "insta",
  "lobby-protocol",
@@ -5001,7 +5001,7 @@ dependencies = [
 
 [[package]]
 name = "lobby-server"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -10960,7 +10960,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.1.5"
+version = "0.1.6"
 dependencies = [
  "keyring",
  "lobby-server",

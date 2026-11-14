@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.6 (2026-11-14)
+
+### New
+
+- Add a Strong setting to Reduce background noise, and call the old Strong Standard
+- Call the gentler setting of Even out loud and quiet speech Standard
+- Hold the speaking ring steady instead of pulsing
+- Install and update Lobby on Linux desktops that run Wayland
+
+### Fixed
+
+- Keep a Screen Share's picture square where bars sit beside it
+- Show a Lobby's kept feed as soon as you switch back to it, not an empty feed until it connects
+- Keep what you were reading in sight after Load Older Messages, and count a new Message that arrives with the older page
+
 ## 0.1.5 (2026-11-12)
 
 ### New
